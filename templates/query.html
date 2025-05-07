@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block scripts %}
+    <script src="{{ url_for('static', path='query_script.js') }}"></script>
+{% endblock %}
+{% block title %}Query · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar" style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Litmus MCP Server 🧠</h1>
+    <div class="action-buttons">
+        {% if has_history %}
+        <form method="post" action="{{ url_for('clear_history') }}" style="display: inline;" id="clear-history-form">
+            <button type="submit" class="side-button" title="Clear History">🧹 Clear History</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" action="{{ url_for('query_handler') }}" id="query-form">
+    <label>
+        <textarea id="query" name="query" placeholder="Enter your query..." required></textarea>
+        <small style="opacity: 0.6; font-size: 12px;">Press <strong><kbd>Enter</kbd></strong> to send,
+            <strong><kbd>Shift</kbd>+<kbd>Enter</kbd></strong> for newline</small>
+    </label>
+    <div class="form-actions">
+        <button type="submit">Submit</button>
+        <div id="loading" class="loading">
+            <div class="dot-pulse"><div></div><div></div><div></div></div>
+            <span>Processing query...</span>
+        </div>
+    </div>
+</form>
+
+{% if chat_log %}
+<div class="chat-log">
+    {% for exchange in chat_log |  reverse %} {# Reverse chat #}
+    <div class="chat-message user">
+        <div class="label">You:</div>
+        <div class="message">{{ exchange.user | markdown_to_html | safe }}</div>
+    </div>
+    <div class="chat-message mcp">
+        <div class="label">MCP Server: (Model: {{ exchange.model |  safe }})</div>
+        <div class="message">{{ exchange.assistant | markdown_to_html | safe }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

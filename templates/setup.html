@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Setup · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<h1>Setup Litmus MCP Server 🔑</h1>
+<p>Please enter either your Anthropic API key, and/or OPEN AI API Key to start/update the server.</p>
+<hr style="margin-bottom: 20px">
+
+<form method="post" action="{{ url_for('setup') }}">
+    <label for="value_of_anthropic_api_key">Anthropic API Key:</label>
+    <input type="text" name="value_of_anthropic_api_key" id="value_of_anthropic_api_key">
+
+    <label for="value_of_openai_api_key">OPEN AI API Key:</label>
+    <input type="text" name="value_of_openai_api_key" id="value_of_openai_api_key">
+
+    <button type="submit">Load MCP Server</button>
+    {% if error %}
+      <p style="color: red;">{{ error }}</p>
+    {% endif %}
+</form>
+
+{% endblock %}
+<script>
+  document.querySelector("form").addEventListener("submit", function (e) {
+    const anthropic = document.getElementById("value_of_anthropic_api_key").value.trim();
+    const openai = document.getElementById("value_of_openai_api_key").value.trim();
+    if (!anthropic && !openai) {
+      e.preventDefault();
+      alert("Please provide at least one API key.");
+    }
+  });
+</script>
