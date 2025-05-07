@@ -1,0 +1,47 @@
+[project]
+name = "litmus-mcp-server"
+version = "0.1.0"
+description = "Litmus MCP Server and client combo"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.12",
+    "jinja2>=3.1.6",
+    "litmussdk",
+    "mcp[cli]>=1.6.0",
+    "nats-py>=2.10.0",
+    "numpy>=2.2.5",
+    "python-multipart>=0.0.20",
+]
+
+[dependency-groups]
+lint = [
+    "black>=25.1.0",
+    "radon>=6.0.1",
+    "ruff>=0.11.4",
+]
+llm-sdks = [
+    "anthropic>=0.49.0",
+    "openai-agents>=0.0.13",
+]
+test = []
+
+[tool.uv.sources]
+litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/1.0.0/litmussdk-1.0.0-py3-none-any.whl" }
+
+[tool.ruff]
+exclude = [
+    ".venv",
+    "venv",
+    "site-packages",
+    "build",
+    "dist",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__init__.py",
+    "tester"
+]
+line-length = 88
+indent-width = 4
+[tool.ruff.lint.pydocstyle]
+convention = "google"

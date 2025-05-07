@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Litmus MCP Server 🧠{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    {% block scripts %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <div class="top-nav">
+            <a href={{ url_for('query_handler') }}          >🧠 Home</a>
+            <a href={{ url_for('update_env_form') }}        >⚙️ Config</a>
+            <a href={{ url_for('health') }}                 >🩺 Health</a>
+            <a href={{ url_for('setup') }}                  >🔑 API Keys</a>
+            <a href={{ url_for('streaming_query_handler') }}>📡 Streaming<sup>(beta)</sup></a>
+        </div>
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

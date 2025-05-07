@@ -1,0 +1,12 @@
+.venv
+.env
+.git
+.gitlab-ci.yml
+.gitignore
+__pycache__
+gl-sast-report.json
+
+Dockerfile
+README.md
+dev_tests
+data/
