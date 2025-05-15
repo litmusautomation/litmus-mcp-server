@@ -52,7 +52,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 Run the server in Docker:
 
 ```bash
-docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server/mcp:latest
+docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
 ```
 
 ### Cursor IDE Setup
