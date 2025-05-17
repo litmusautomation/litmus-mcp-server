@@ -193,6 +193,16 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 [Windsurf MCP Docs](https://docs.windsurf.com/windsurf/mcp)
 
+### MCP server registries
+
+- [Glama](https://glama.ai/mcp/servers/@litmusautomation/litmus-mcp-server)
+
+ <a href="https://glama.ai/mcp/servers/@litmusautomation/litmus-mcp-server">
+ <img width="380" height="200" src="https://glama.ai/mcp/servers/@litmusautomation/litmus-mcp-server/badge" alt="Litmus MCP server" />
+ </a>
+
+- [MCP.so](https://mcp.so/server/litmus-mcp-server/litmusautomation)
+
 ---
 
 © 2025 Litmus Automation, Inc. All rights reserved.
