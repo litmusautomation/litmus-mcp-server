@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/litmusautomation-litmus-mcp-server-badge.png)](https://mseep.ai/app/litmusautomation-litmus-mcp-server)
+
 <p align="center">
   <a href="https://litmus.io">
     <picture>
