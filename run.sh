@@ -1,13 +1,6 @@
 #!/bin/bash
 set -e
 
-# Start server
-mcp run src/server.py --transport=sse &
-SERVER_PID=$!
-
-# Start web client
-python src/web_client.py src/server.py &
-CLIENT_PID=$!
-
-# Wait for both
-wait $SERVER_PID $CLIENT_PID
+# Start the MCP server directly with Python
+# The server uses uvicorn internally and runs on port 8000 by default
+python src/server.py
