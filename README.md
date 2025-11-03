@@ -33,7 +33,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 - [Getting Started](#getting-started)
   - [Quick Launch (Docker)](#quick-launch-docker)
   - [Cursor IDE Setup](#cursor-ide-setup)
-- [API](#api)
+- [Tools](#available-tools)
 - [Usage](#usage)
   - [Server-Sent Events (SSE)](#server-sent-events-sse)
 - [Litmus Central](#litmus-central)
@@ -52,7 +52,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 Run the server in Docker:
 
 ```bash
-docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
+docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
 ```
 
 ### Cursor IDE Setup
@@ -63,36 +63,79 @@ Example `mcp.json` configuration:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<IP Address>:8000/sse"
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
     }
   }
 }
 ```
 
+**Header Configuration Guide:**
+- `EDGE_URL`: Litmus Edge base URL (include https://)
+- `EDGE_API_CLIENT_ID` / `EDGE_API_CLIENT_SECRET`: OAuth2 credentials from Litmus Edge
+- `NATS_SOURCE`: Litmus Edge IP (no http/https)
+- `NATS_USER` / `NATS_PASSWORD`: Access token credentials from **System → Access Control → Tokens**
+- `INFLUX_HOST`: Litmus Edge IP (no http/https)
+- `INFLUX_USERNAME` / `INFLUX_PASSWORD`: DataHub user credentials
+
 See the [Cursor docs](https://docs.cursor.com/context/model-context-protocol) for more info.
 
 ---
 
-## API
+## Available Tools
 
 | Category                  | Function Name                         | Description |
 |---------------------------|----------------------------------------|-------------|
-| **Edge System Config**    | `get_current_environment_config`       | Get current environment configuration used for Litmus Edge connectivity. |
-|                           | `update_environment_config`            | Update environment variable config for connecting to Litmus Edge. |
-|                           | `get_current_config`                   | Retrieve current Litmus Edge instance configuration. |
-|                           | `update_config`                        | Update configuration of the device or container running Litmus Edge. |
-| **DeviceHub**             | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers. |
-|                           | `get_devicehub_devices`                | List devices configured in DeviceHub. |
-|                           | `get_devicehub_device_tags`           | Retrieve tags for a specific DeviceHub device. |
-|                           | `get_current_value_of_devicehub_tag`   | Get current value of a specific device tag. |
-|                           | `create_devicehub_device`              | Register a new DeviceHub device. Supports various protocols and templates for register-based data polling. |
-| **Device Identity**       | `get_litmusedge_friendly_name`         | Retrieve the user-friendly name of the device. |
-|                           | `set_litmusedge_friendly_name`         | Assign or update the friendly name. |
-| **LEM Integration**       | `get_cloud_activation_status`          | Check cloud activation and Litmus Edge Manager (LEM) connection status. |
-| **Docker Management**     | `get_all_containers_on_litmusedge`     | List all containers on Litmus Edge. |
-|                           | `run_docker_container_on_litmusedge`   | Launch a Docker container via Litmus Edge Marketplace (not the MCP host). |
-| **Topic Subscription**    | `get_current_value_on_topic`           | Subscribe to current values on a Litmus Edge topic. Use global `NATS_STATUS = False` to unsubscribe. |
-|                           | `get_multiple_values_from_topic`       | Retrieve multiple values from a topic for plotting or batch access. |
+| **DeviceHub**             | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers (e.g., ModbusTCP, OPCUA, BACnet). |
+|                           | `get_devicehub_devices`                | List all configured DeviceHub devices with connection settings and status. |
+|                           | `create_devicehub_device`              | Create a new device with specified driver and default configuration. |
+|                           | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
+|                           | `get_current_value_of_devicehub_tag`   | Read the current real-time value of a specific device tag. |
+| **Device Identity**       | `get_litmusedge_friendly_name`         | Get the human-readable name assigned to the Litmus Edge device. |
+|                           | `set_litmusedge_friendly_name`         | Update the friendly name of the Litmus Edge device. |
+| **LEM Integration**       | `get_cloud_activation_status`          | Check cloud registration and Litmus Edge Manager (LEM) connection status. |
+| **Docker Management**     | `get_all_containers_on_litmusedge`     | List all Docker containers running on Litmus Edge Marketplace. |
+|                           | `run_docker_container_on_litmusedge`   | Deploy and run a new Docker container on Litmus Edge Marketplace. |
+| **NATS Topics** *         | `get_current_value_from_topic`         | Subscribe to a NATS topic and return the next published message. |
+|                           | `get_multiple_values_from_topic`       | Collect multiple sequential values from a NATS topic for trend analysis. |
+| **InfluxDB** **           | `get_historical_data_from_influxdb`    | Query historical time-series data from InfluxDB by measurement and time range. |
+| **Digital Twins**         | `list_digital_twin_models`             | List all Digital Twin models with ID, name, description, and version. |
+|                           | `list_digital_twin_instances`          | List all Digital Twin instances or filter by model ID. |
+|                           | `create_digital_twin_instance`         | Create a new Digital Twin instance from an existing model. |
+|                           | `list_static_attributes`               | List static attributes (fixed key-value pairs) for a model or instance. |
+|                           | `list_dynamic_attributes`              | List dynamic attributes (real-time data points) for a model or instance. |
+|                           | `list_transformations`                 | List data transformation rules configured for a Digital Twin model. |
+|                           | `get_digital_twin_hierarchy`           | Get the hierarchy configuration for a Digital Twin model. |
+|                           | `save_digital_twin_hierarchy`          | Save a new hierarchy configuration to a Digital Twin model. |
+
+### Configuration Notes
+
+**\* NATS Topic Tools Requirements:**
+To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you must configure access control on Litmus Edge:
+1. Navigate to: **Litmus Edge → System → Access Control → Tokens**
+2. Create or configure an access token with appropriate permissions
+3. Provide the token in your MCP client configuration headers
+
+**\*\* InfluxDB Tools Requirements:**
+To use `get_historical_data_from_influxdb`, you must allow InfluxDB port access:
+1. Navigate to: **Litmus Edge → System → Network → Firewall**
+2. Add a firewall rule to allow port **8086** on **TCP**
+3. Ensure InfluxDB is accessible from the MCP server host
 
 ---
 
@@ -126,7 +169,21 @@ Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<IP Address>:8000/sse"
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
     }
   }
 }
@@ -144,7 +201,21 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<IP Address>:8000/sse"
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
     }
   }
 }
@@ -158,14 +229,28 @@ Add to `claude_desktop_config.json`:
 
 #### Manual Configuration
 
-In VS Code:  
+In VS Code:
 Open User Settings (JSON) → Add:
 
 ```json
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<IP Address>:8000/sse"
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
     }
   }
 }
@@ -185,7 +270,21 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<IP Address>:8000/sse"
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
     }
   }
 }
