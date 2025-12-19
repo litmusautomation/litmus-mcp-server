@@ -55,6 +55,12 @@ Run the server in Docker:
 docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
 ```
 
+The Litmus MCP Server is built for linux/AMD64 platforms. If running on an ARM64 OS, specify the AMD64 platform type by including the --platform argument:
+
+```bash
+docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
+```
+
 ### Cursor IDE Setup
 
 Example `mcp.json` configuration:

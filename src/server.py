@@ -10,7 +10,7 @@ from mcp.types import ErrorData, INTERNAL_ERROR
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 
 from config import MCP_PORT
 from tools.devicehub_tools import (
@@ -676,6 +676,26 @@ class ContextCapturingMiddleware:
         await self.app(scope, receive, send)
 
 
+# OAuth discovery endpoint handlers
+# These return JSON responses indicating OAuth is not supported
+# This prevents MCP clients from getting 404 plain text errors when attempting OAuth discovery
+
+async def oauth_not_supported(request: Request):
+    """Return JSON error indicating OAuth is not supported by this server."""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "unsupported_oauth",
+            "error_description": "This MCP server does not support OAuth authentication. "
+                               "Please use SSE transport with header-based authentication "
+                               "(EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET)."
+        }
+    )
+
+async def health_check(request: Request):
+    """Basic health check endpoint."""
+    return JSONResponse({"status": "ok", "service": "litmus-mcp-server"})
+
 # Wrap the SSE POST handler with our context-capturing middleware
 wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
 
@@ -684,6 +704,17 @@ app = Starlette(
     routes=[
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=wrapped_post_handler),
+        # OAuth discovery endpoints - return proper JSON errors
+        Route("/.well-known/oauth-authorization-server", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-authorization-server/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/openid-configuration/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/sse/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
+        # Health check endpoint
+        Route("/health", endpoint=health_check, methods=["GET"]),
     ]
 )
 
