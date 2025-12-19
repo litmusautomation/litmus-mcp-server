@@ -39,6 +39,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 - [Litmus Central](#litmus-central)
 - [Integrations](#integrations)
   - [Cursor IDE](#cursor-ide)
+  - [Claude Code] (#claude-code)
   - [Claude Desktop](#claude-desktop)
   - [VS Code / Copilot](#vs-code--copilot)
   - [Windsurf](#windsurf)
@@ -59,6 +60,34 @@ The Litmus MCP Server is built for linux/AMD64 platforms. If running on an ARM64
 
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
+```
+
+### Claude Code Setup
+Example `./mcp.json` configuration:
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse",
+      "headers": {
+        "EDGE_URL": "${EDGE_URL}",
+        "EDGE_API_CLIENT_ID": "${EDGE_API_CLIENT_ID}",
+        "EDGE_API_CLIENT_SECRET": "${EDGE_API_CLIENT_SECRET}",
+        "NATS_SOURCE": "${NATS_SOURCE}",
+        "NATS_PORT": "${NATS_PORT:-4222}",
+        "NATS_USER": "${NATS_USER}",
+        "NATS_PASSWORD": "${NATS_PASSWORD}",
+        "INFLUX_HOST": "${INFLUX_HOST}",
+        "INFLUX_PORT": "${INFLUX_PORT:-8086}",
+        "INFLUX_DB_NAME": "${INFLUX_DB_NAME:-tsdata}",
+        "INFLUX_USERNAME": "${INFLUX_USERNAME}",
+        "INFLUX_PASSWORD": "${INFLUX_PASSWORD}"
+      }
+    }
+  }
+}
 ```
 
 ### Cursor IDE Setup

@@ -4,18 +4,18 @@
       "type": "sse",
       "url": "http://localhost:8000/sse",
       "headers": {
-        "EDGE_URL": "${EDGE_URL}",
-        "EDGE_API_CLIENT_ID": "${EDGE_API_CLIENT_ID}",
-        "EDGE_API_CLIENT_SECRET": "${EDGE_API_CLIENT_SECRET}",
-        "NATS_SOURCE": "${NATS_SOURCE}",
-        "NATS_PORT": "${NATS_PORT:-4222}",
-        "NATS_USER": "${NATS_USER}",
-        "NATS_PASSWORD": "${NATS_PASSWORD}",
-        "INFLUX_HOST": "${INFLUX_HOST}",
-        "INFLUX_PORT": "${INFLUX_PORT:-8086}",
-        "INFLUX_DB_NAME": "${INFLUX_DB_NAME:-tsdata}",
-        "INFLUX_USERNAME": "${INFLUX_USERNAME}",
-        "INFLUX_PASSWORD": "${INFLUX_PASSWORD}"
+        "EDGE_URL": "https://192.168.64.11",
+        "EDGE_API_CLIENT_ID": "ceefa242-48ae-4a4e-9b21-9b840354b119",
+        "EDGE_API_CLIENT_SECRET": "J4u4YyKbLcGwEunfz1w58vBm",
+        "NATS_SOURCE": "192.168.64.11",
+        "NATS_PORT": "4222",
+        "NATS_USER": "mcp",
+        "NATS_PASSWORD": "ocm20mlrh4qj2wi5wh222yosopc1ky5x",
+        "INFLUX_HOST": "192.168.64.11",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "admin",
+        "INFLUX_PASSWORD": "Litmus400!!!!"
       }
     }
   }

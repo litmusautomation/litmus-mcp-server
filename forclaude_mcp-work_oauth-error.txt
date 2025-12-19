@@ -1,380 +1,10 @@
 No.     Time           Source                Destination           Protocol Length Info
-      1 0.000000       ::1                   ::1                   HTTP     484    GET /api/status HTTP/1.1 
+     37 6.026813       ::1                   ::1                   HTTP     288    GET /.well-known/oauth-protected-resource HTTP/1.1 
 
-Frame 1: Packet, 484 bytes on wire (3872 bits), 484 bytes captured (3872 bits) on interface lo0, id 0
+Frame 37: Packet, 288 bytes on wire (2304 bits), 288 bytes captured (2304 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55115, Dst Port: 5000, Seq: 1, Ack: 1, Len: 408
-Hypertext Transfer Protocol
-    GET /api/status HTTP/1.1\r\n
-        Request Method: GET
-        Request URI: /api/status
-        Request Version: HTTP/1.1
-    Host: localhost:5000\r\n
-    Sec-Fetch-Dest: empty\r\n
-    User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15\r\n
-    Accept: */*\r\n
-    Referer: http://localhost:5000/\r\n
-    Sec-Fetch-Site: same-origin\r\n
-    Sec-Fetch-Mode: cors\r\n
-    Accept-Language: en-US,en;q=0.9\r\n
-    Priority: u=3, i\r\n
-    Accept-Encoding: gzip, deflate\r\n
-    Connection: keep-alive\r\n
-    \r\n
-    [Response in frame: 3]
-    [Full request URI: http://localhost:5000/api/status]
-
-No.     Time           Source                Destination           Protocol Length Info
-      2 0.000077       ::1                   ::1                   TCP      76     5000 → 55115 [ACK] Seq=1 Ack=409 Win=6186 Len=0 TSval=1251363474 TSecr=4177173470
-
-Frame 2: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 5000, Dst Port: 55115, Seq: 1, Ack: 409, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      3 0.000171       ::1                   ::1                   HTTP     218    HTTP/1.1 403 Forbidden 
-
-Frame 3: Packet, 218 bytes on wire (1744 bits), 218 bytes captured (1744 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 5000, Dst Port: 55115, Seq: 1, Ack: 409, Len: 142
-Hypertext Transfer Protocol
-    HTTP/1.1 403 Forbidden\r\n
-        Response Version: HTTP/1.1
-        Status Code: 403
-        [Status Code Description: Forbidden]
-        Response Phrase: Forbidden
-    Content-Length: 0\r\n
-    Server: AirTunes/860.7.1\r\n
-    X-Apple-ProcessingTime: 0\r\n
-    X-Apple-RequestReceivedTimestamp: 24602909\r\n
-    \r\n
-    [Request in frame: 1]
-    [Time since request: 171.000 microseconds]
-    [Request URI: /api/status]
-    [Full request URI: http://localhost:5000/api/status]
-
-No.     Time           Source                Destination           Protocol Length Info
-      4 0.000187       ::1                   ::1                   TCP      76     55115 → 5000 [ACK] Seq=409 Ack=143 Win=6310 Len=0 TSval=4177173470 TSecr=1251363474
-
-Frame 4: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55115, Dst Port: 5000, Seq: 409, Ack: 143, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      5 2.403329       ::1                   ::1                   TCP      88     55519 → 8000 [SYN] Seq=0 Win=65535 Len=0 MSS=16324 WS=64 TSval=4018596513 TSecr=0 SACK_PERM
-
-Frame 5: Packet, 88 bytes on wire (704 bits), 88 bytes captured (704 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 0, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      6 2.403359       127.0.0.1             127.0.0.1             TCP      68     55520 → 8000 [SYN] Seq=0 Win=65535 Len=0 MSS=16344 WS=64 TSval=4167512090 TSecr=0 SACK_PERM
-
-Frame 6: Packet, 68 bytes on wire (544 bits), 68 bytes captured (544 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 4, Src: 127.0.0.1, Dst: 127.0.0.1
-Transmission Control Protocol, Src Port: 55520, Dst Port: 8000, Seq: 0, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      7 2.403404       ::1                   ::1                   TCP      88     8000 → 55519 [SYN, ACK] Seq=0 Ack=1 Win=65535 Len=0 MSS=16324 WS=64 TSval=195211011 TSecr=4018596513 SACK_PERM
-
-Frame 7: Packet, 88 bytes on wire (704 bits), 88 bytes captured (704 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 0, Ack: 1, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      8 2.403454       127.0.0.1             127.0.0.1             TCP      68     8000 → 55520 [SYN, ACK] Seq=0 Ack=1 Win=65535 Len=0 MSS=16344 WS=64 TSval=1417030587 TSecr=4167512090 SACK_PERM
-
-Frame 8: Packet, 68 bytes on wire (544 bits), 68 bytes captured (544 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 4, Src: 127.0.0.1, Dst: 127.0.0.1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55520, Seq: 0, Ack: 1, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-      9 2.403475       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=1 Ack=1 Win=407808 Len=0 TSval=4018596513 TSecr=195211011
-
-Frame 9: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1, Ack: 1, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     10 2.403497       ::1                   ::1                   HTTP     307    GET /.well-known/oauth-authorization-server/sse HTTP/1.1 
-
-Frame 10: Packet, 307 bytes on wire (2456 bits), 307 bytes captured (2456 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1, Ack: 1, Len: 231
-Hypertext Transfer Protocol
-    GET /.well-known/oauth-authorization-server/sse HTTP/1.1\r\n
-        Request Method: GET
-        Request URI: /.well-known/oauth-authorization-server/sse
-        Request Version: HTTP/1.1
-    accept: application/json\r\n
-    mcp-protocol-version: 2025-11-25\r\n
-    Connection: keep-alive\r\n
-    User-Agent: Bun/1.3.5\r\n
-    Host: localhost:8000\r\n
-    Accept-Encoding: gzip, deflate, br, zstd\r\n
-    \r\n
-    [Response in frame: 13]
-    [Full request URI: http://localhost:8000/.well-known/oauth-authorization-server/sse]
-
-No.     Time           Source                Destination           Protocol Length Info
-     11 2.403503       ::1                   ::1                   TCP      76     [TCP Window Update] 8000 → 55519 [ACK] Seq=1 Ack=1 Win=407808 Len=0 TSval=195211011 TSecr=4018596513
-
-Frame 11: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 1, Ack: 1, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     12 2.403514       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=1 Ack=232 Win=407616 Len=0 TSval=195211011 TSecr=4018596513
-
-Frame 12: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 1, Ack: 232, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     13 2.405928       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
-
-Frame 13: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 1, Ack: 232, Len: 149
-Hypertext Transfer Protocol
-    HTTP/1.1 404 Not Found\r\n
-        Response Version: HTTP/1.1
-        Status Code: 404
-        [Status Code Description: Not Found]
-        Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
-    server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
-    \r\n
-    [Request in frame: 10]
-    [Time since request: 2.431000 milliseconds]
-    [Request URI: /.well-known/oauth-authorization-server/sse]
-    [Full request URI: http://localhost:8000/.well-known/oauth-authorization-server/sse]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
-
-No.     Time           Source                Destination           Protocol Length Info
-     14 2.405949       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=232 Ack=150 Win=407680 Len=0 TSval=4018596516 TSecr=195211014
-
-Frame 14: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 232, Ack: 150, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     15 2.406057       ::1                   ::1                   HTTP     301    GET /.well-known/openid-configuration/sse HTTP/1.1 
-
-Frame 15: Packet, 301 bytes on wire (2408 bits), 301 bytes captured (2408 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 232, Ack: 150, Len: 225
-Hypertext Transfer Protocol
-    GET /.well-known/openid-configuration/sse HTTP/1.1\r\n
-        Request Method: GET
-        Request URI: /.well-known/openid-configuration/sse
-        Request Version: HTTP/1.1
-    accept: application/json\r\n
-    mcp-protocol-version: 2025-11-25\r\n
-    Connection: keep-alive\r\n
-    User-Agent: Bun/1.3.5\r\n
-    Host: localhost:8000\r\n
-    Accept-Encoding: gzip, deflate, br, zstd\r\n
-    \r\n
-    [Response in frame: 17]
-    [Full request URI: http://localhost:8000/.well-known/openid-configuration/sse]
-
-No.     Time           Source                Destination           Protocol Length Info
-     16 2.406077       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=150 Ack=457 Win=407424 Len=0 TSval=195211014 TSecr=4018596516
-
-Frame 16: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 150, Ack: 457, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     17 2.407192       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
-
-Frame 17: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 150, Ack: 457, Len: 149
-Hypertext Transfer Protocol
-    HTTP/1.1 404 Not Found\r\n
-        Response Version: HTTP/1.1
-        Status Code: 404
-        [Status Code Description: Not Found]
-        Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
-    server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
-    \r\n
-    [Request in frame: 15]
-    [Time since request: 1.135000 milliseconds]
-    [Request URI: /.well-known/openid-configuration/sse]
-    [Full request URI: http://localhost:8000/.well-known/openid-configuration/sse]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
-
-No.     Time           Source                Destination           Protocol Length Info
-     18 2.407214       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=457 Ack=299 Win=407552 Len=0 TSval=4018596517 TSecr=195211015
-
-Frame 18: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 457, Ack: 299, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     19 2.407312       ::1                   ::1                   HTTP     301    GET /sse/.well-known/openid-configuration HTTP/1.1 
-
-Frame 19: Packet, 301 bytes on wire (2408 bits), 301 bytes captured (2408 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 457, Ack: 299, Len: 225
-Hypertext Transfer Protocol
-    GET /sse/.well-known/openid-configuration HTTP/1.1\r\n
-        Request Method: GET
-        Request URI: /sse/.well-known/openid-configuration
-        Request Version: HTTP/1.1
-    accept: application/json\r\n
-    mcp-protocol-version: 2025-11-25\r\n
-    Connection: keep-alive\r\n
-    User-Agent: Bun/1.3.5\r\n
-    Host: localhost:8000\r\n
-    Accept-Encoding: gzip, deflate, br, zstd\r\n
-    \r\n
-    [Response in frame: 21]
-    [Full request URI: http://localhost:8000/sse/.well-known/openid-configuration]
-
-No.     Time           Source                Destination           Protocol Length Info
-     20 2.407334       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=299 Ack=682 Win=407232 Len=0 TSval=195211015 TSecr=4018596517
-
-Frame 20: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 299, Ack: 682, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     21 2.408777       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
-
-Frame 21: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 299, Ack: 682, Len: 149
-Hypertext Transfer Protocol
-    HTTP/1.1 404 Not Found\r\n
-        Response Version: HTTP/1.1
-        Status Code: 404
-        [Status Code Description: Not Found]
-        Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
-    server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
-    \r\n
-    [Request in frame: 19]
-    [Time since request: 1.465000 milliseconds]
-    [Request URI: /sse/.well-known/openid-configuration]
-    [Full request URI: http://localhost:8000/sse/.well-known/openid-configuration]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
-
-No.     Time           Source                Destination           Protocol Length Info
-     22 2.408801       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=682 Ack=448 Win=407424 Len=0 TSval=4018596519 TSecr=195211017
-
-Frame 22: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 682, Ack: 448, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     23 2.413139       ::1                   ::1                   HTTP     292    GET /.well-known/oauth-protected-resource/sse HTTP/1.1 
-
-Frame 23: Packet, 292 bytes on wire (2336 bits), 292 bytes captured (2336 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 682, Ack: 448, Len: 216
-Hypertext Transfer Protocol
-    GET /.well-known/oauth-protected-resource/sse HTTP/1.1\r\n
-        Request Method: GET
-        Request URI: /.well-known/oauth-protected-resource/sse
-        Request Version: HTTP/1.1
-    mcp-protocol-version: 2025-11-25\r\n
-    Connection: keep-alive\r\n
-    User-Agent: Bun/1.3.5\r\n
-    Accept: */*\r\n
-    Host: localhost:8000\r\n
-    Accept-Encoding: gzip, deflate, br, zstd\r\n
-    \r\n
-    [Response in frame: 25]
-    [Full request URI: http://localhost:8000/.well-known/oauth-protected-resource/sse]
-
-No.     Time           Source                Destination           Protocol Length Info
-     24 2.413185       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=448 Ack=898 Win=407040 Len=0 TSval=195211021 TSecr=4018596523
-
-Frame 24: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 448, Ack: 898, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     25 2.414489       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
-
-Frame 25: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 448, Ack: 898, Len: 149
-Hypertext Transfer Protocol
-    HTTP/1.1 404 Not Found\r\n
-        Response Version: HTTP/1.1
-        Status Code: 404
-        [Status Code Description: Not Found]
-        Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
-    server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
-    \r\n
-    [Request in frame: 23]
-    [Time since request: 1.350000 milliseconds]
-    [Request URI: /.well-known/oauth-protected-resource/sse]
-    [Full request URI: http://localhost:8000/.well-known/oauth-protected-resource/sse]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
-
-No.     Time           Source                Destination           Protocol Length Info
-     26 2.414508       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=898 Ack=597 Win=407296 Len=0 TSval=4018596524 TSecr=195211022
-
-Frame 26: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 898, Ack: 597, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     27 2.414614       ::1                   ::1                   HTTP     288    GET /.well-known/oauth-protected-resource HTTP/1.1 
-
-Frame 27: Packet, 288 bytes on wire (2304 bits), 288 bytes captured (2304 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 898, Ack: 597, Len: 212
+Transmission Control Protocol, Src Port: 60639, Dst Port: 8000, Seq: 1, Ack: 1, Len: 212
 Hypertext Transfer Protocol
     GET /.well-known/oauth-protected-resource HTTP/1.1\r\n
         Request Method: GET
@@ -387,58 +17,78 @@ Hypertext Transfer Protocol
     Host: localhost:8000\r\n
     Accept-Encoding: gzip, deflate, br, zstd\r\n
     \r\n
-    [Response in frame: 29]
+    [Response in frame: 40]
     [Full request URI: http://localhost:8000/.well-known/oauth-protected-resource]
 
 No.     Time           Source                Destination           Protocol Length Info
-     28 2.414629       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=597 Ack=1110 Win=406848 Len=0 TSval=195211022 TSecr=4018596524
+     38 6.026825       127.0.0.1             127.0.0.1             TCP      44     60640 → 8000 [RST] Seq=1 Win=0 Len=0
 
-Frame 28: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 38: Packet, 44 bytes on wire (352 bits), 44 bytes captured (352 bits) on interface lo0, id 0
 Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 597, Ack: 1110, Len: 0
+Internet Protocol Version 4, Src: 127.0.0.1, Dst: 127.0.0.1
+Transmission Control Protocol, Src Port: 60640, Dst Port: 8000, Seq: 1, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     29 2.415569       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
+     39 6.026830       ::1                   ::1                   TCP      76     8000 → 60639 [ACK] Seq=1 Ack=213 Win=407616 Len=0 TSval=3487054910 TSecr=952903978
 
-Frame 29: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
+Frame 39: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 597, Ack: 1110, Len: 149
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60639, Seq: 1, Ack: 213, Len: 0
+
+No.     Time           Source                Destination           Protocol Length Info
+     40 6.028339       ::1                   ::1                   HTTP/JSON 422    HTTP/1.1 404 Not Found , JSON (application/json)
+
+Frame 40: Packet, 422 bytes on wire (3376 bits), 422 bytes captured (3376 bits) on interface lo0, id 0
+Null/Loopback
+Internet Protocol Version 6, Src: ::1, Dst: ::1
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60639, Seq: 1, Ack: 213, Len: 346
 Hypertext Transfer Protocol
     HTTP/1.1 404 Not Found\r\n
         Response Version: HTTP/1.1
         Status Code: 404
         [Status Code Description: Not Found]
         Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
+    date: Fri, 19 Dec 2025 21:24:52 GMT\r\n
     server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
+    content-length: 213\r\n
+    content-type: application/json\r\n
     \r\n
-    [Request in frame: 27]
-    [Time since request: 955.000 microseconds]
+    [Request in frame: 37]
+    [Time since request: 1.526000 milliseconds]
     [Request URI: /.well-known/oauth-protected-resource]
     [Full request URI: http://localhost:8000/.well-known/oauth-protected-resource]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
+    File Data: 213 bytes
+JavaScript Object Notation: application/json
+    Object
+        Member: error
+            [Path with value: /error:unsupported_oauth]
+            [Member with value: error:unsupported_oauth]
+            String value: unsupported_oauth
+            Key: error
+            [Path: /error]
+        Member: error_description
+            [Path with value: /error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            [Member with value: error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            String value: This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).
+            Key: error_description
+            [Path: /error_description]
 
 No.     Time           Source                Destination           Protocol Length Info
-     30 2.415593       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=1110 Ack=746 Win=407168 Len=0 TSval=4018596525 TSecr=195211023
+     41 6.028359       ::1                   ::1                   TCP      76     60639 → 8000 [ACK] Seq=213 Ack=347 Win=407488 Len=0 TSval=952903979 TSecr=3487054911
 
-Frame 30: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 41: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1110, Ack: 746, Len: 0
+Transmission Control Protocol, Src Port: 60639, Dst Port: 8000, Seq: 213, Ack: 347, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     31 2.415717       ::1                   ::1                   HTTP     303    GET /.well-known/oauth-authorization-server HTTP/1.1 
+     42 6.028490       ::1                   ::1                   HTTP     303    GET /.well-known/oauth-authorization-server HTTP/1.1 
 
-Frame 31: Packet, 303 bytes on wire (2424 bits), 303 bytes captured (2424 bits) on interface lo0, id 0
+Frame 42: Packet, 303 bytes on wire (2424 bits), 303 bytes captured (2424 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1110, Ack: 746, Len: 227
+Transmission Control Protocol, Src Port: 60637, Dst Port: 8000, Seq: 898, Ack: 1385, Len: 227
 Hypertext Transfer Protocol
     GET /.well-known/oauth-authorization-server HTTP/1.1\r\n
         Request Method: GET
@@ -451,58 +101,70 @@ Hypertext Transfer Protocol
     Host: localhost:8000\r\n
     Accept-Encoding: gzip, deflate, br, zstd\r\n
     \r\n
-    [Response in frame: 33]
+    [Response in frame: 44]
     [Full request URI: http://localhost:8000/.well-known/oauth-authorization-server]
 
 No.     Time           Source                Destination           Protocol Length Info
-     32 2.415733       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=746 Ack=1337 Win=406656 Len=0 TSval=195211023 TSecr=4018596525
+     43 6.028507       ::1                   ::1                   TCP      76     8000 → 60637 [ACK] Seq=1385 Ack=1125 Win=406848 Len=0 TSval=237860667 TSecr=2340082746
 
-Frame 32: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 43: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 746, Ack: 1337, Len: 0
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 1385, Ack: 1125, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     33 2.416674       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
+     44 6.029273       ::1                   ::1                   HTTP/JSON 422    HTTP/1.1 404 Not Found , JSON (application/json)
 
-Frame 33: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
+Frame 44: Packet, 422 bytes on wire (3376 bits), 422 bytes captured (3376 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 746, Ack: 1337, Len: 149
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 1385, Ack: 1125, Len: 346
 Hypertext Transfer Protocol
     HTTP/1.1 404 Not Found\r\n
         Response Version: HTTP/1.1
         Status Code: 404
         [Status Code Description: Not Found]
         Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
+    date: Fri, 19 Dec 2025 21:24:52 GMT\r\n
     server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
+    content-length: 213\r\n
+    content-type: application/json\r\n
     \r\n
-    [Request in frame: 31]
-    [Time since request: 957.000 microseconds]
+    [Request in frame: 42]
+    [Time since request: 783.000 microseconds]
     [Request URI: /.well-known/oauth-authorization-server]
     [Full request URI: http://localhost:8000/.well-known/oauth-authorization-server]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
+    File Data: 213 bytes
+JavaScript Object Notation: application/json
+    Object
+        Member: error
+            [Path with value: /error:unsupported_oauth]
+            [Member with value: error:unsupported_oauth]
+            String value: unsupported_oauth
+            Key: error
+            [Path: /error]
+        Member: error_description
+            [Path with value: /error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            [Member with value: error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            String value: This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).
+            Key: error_description
+            [Path: /error_description]
 
 No.     Time           Source                Destination           Protocol Length Info
-     34 2.416696       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=1337 Ack=895 Win=407040 Len=0 TSval=4018596527 TSecr=195211025
+     45 6.029314       ::1                   ::1                   TCP      76     60637 → 8000 [ACK] Seq=1125 Ack=1731 Win=406208 Len=0 TSval=2340082746 TSecr=237860667
 
-Frame 34: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 45: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1337, Ack: 895, Len: 0
+Transmission Control Protocol, Src Port: 60637, Dst Port: 8000, Seq: 1125, Ack: 1731, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     35 2.416776       ::1                   ::1                   HTTP     297    GET /.well-known/openid-configuration HTTP/1.1 
+     46 6.029369       ::1                   ::1                   HTTP     297    GET /.well-known/openid-configuration HTTP/1.1 
 
-Frame 35: Packet, 297 bytes on wire (2376 bits), 297 bytes captured (2376 bits) on interface lo0, id 0
+Frame 46: Packet, 297 bytes on wire (2376 bits), 297 bytes captured (2376 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1337, Ack: 895, Len: 221
+Transmission Control Protocol, Src Port: 60637, Dst Port: 8000, Seq: 1125, Ack: 1731, Len: 221
 Hypertext Transfer Protocol
     GET /.well-known/openid-configuration HTTP/1.1\r\n
         Request Method: GET
@@ -515,58 +177,70 @@ Hypertext Transfer Protocol
     Host: localhost:8000\r\n
     Accept-Encoding: gzip, deflate, br, zstd\r\n
     \r\n
-    [Response in frame: 37]
+    [Response in frame: 48]
     [Full request URI: http://localhost:8000/.well-known/openid-configuration]
 
 No.     Time           Source                Destination           Protocol Length Info
-     36 2.416792       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=895 Ack=1558 Win=406464 Len=0 TSval=195211025 TSecr=4018596527
+     47 6.029398       ::1                   ::1                   TCP      76     8000 → 60637 [ACK] Seq=1731 Ack=1346 Win=406656 Len=0 TSval=237860668 TSecr=2340082747
 
-Frame 36: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 47: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 895, Ack: 1558, Len: 0
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 1731, Ack: 1346, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     37 2.417868       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
+     48 6.030218       ::1                   ::1                   HTTP/JSON 422    HTTP/1.1 404 Not Found , JSON (application/json)
 
-Frame 37: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
+Frame 48: Packet, 422 bytes on wire (3376 bits), 422 bytes captured (3376 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 895, Ack: 1558, Len: 149
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 1731, Ack: 1346, Len: 346
 Hypertext Transfer Protocol
     HTTP/1.1 404 Not Found\r\n
         Response Version: HTTP/1.1
         Status Code: 404
         [Status Code Description: Not Found]
         Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
+    date: Fri, 19 Dec 2025 21:24:52 GMT\r\n
     server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
+    content-length: 213\r\n
+    content-type: application/json\r\n
     \r\n
-    [Request in frame: 35]
-    [Time since request: 1.092000 milliseconds]
+    [Request in frame: 46]
+    [Time since request: 849.000 microseconds]
     [Request URI: /.well-known/openid-configuration]
     [Full request URI: http://localhost:8000/.well-known/openid-configuration]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
+    File Data: 213 bytes
+JavaScript Object Notation: application/json
+    Object
+        Member: error
+            [Path with value: /error:unsupported_oauth]
+            [Member with value: error:unsupported_oauth]
+            String value: unsupported_oauth
+            Key: error
+            [Path: /error]
+        Member: error_description
+            [Path with value: /error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            [Member with value: error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            String value: This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).
+            Key: error_description
+            [Path: /error_description]
 
 No.     Time           Source                Destination           Protocol Length Info
-     38 2.417888       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=1558 Ack=1044 Win=406912 Len=0 TSval=4018596528 TSecr=195211026
+     49 6.030281       ::1                   ::1                   TCP      76     60637 → 8000 [ACK] Seq=1346 Ack=2077 Win=405888 Len=0 TSval=2340082747 TSecr=237860668
 
-Frame 38: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 49: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1558, Ack: 1044, Len: 0
+Transmission Control Protocol, Src Port: 60637, Dst Port: 8000, Seq: 1346, Ack: 2077, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     39 2.437451       ::1                   ::1                   HTTP/JSON 496    POST /register HTTP/1.1 , JSON (application/json)
+     50 6.046818       ::1                   ::1                   HTTP/JSON 496    POST /register HTTP/1.1 , JSON (application/json)
 
-Frame 39: Packet, 496 bytes on wire (3968 bits), 496 bytes captured (3968 bits) on interface lo0, id 0
+Frame 50: Packet, 496 bytes on wire (3968 bits), 496 bytes captured (3968 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1558, Ack: 1044, Len: 420
+Transmission Control Protocol, Src Port: 60637, Dst Port: 8000, Seq: 1346, Ack: 2077, Len: 420
 Hypertext Transfer Protocol
     POST /register HTTP/1.1\r\n
         Request Method: POST
@@ -580,7 +254,7 @@ Hypertext Transfer Protocol
     Accept-Encoding: gzip, deflate, br, zstd\r\n
     Content-Length: 216\r\n
     \r\n
-    [Response in frame: 41]
+    [Response in frame: 52]
     [Full request URI: http://localhost:8000/register]
     File Data: 216 bytes
 JavaScript Object Notation: application/json
@@ -593,9 +267,9 @@ JavaScript Object Notation: application/json
             [Path: /client_name]
         Member: redirect_uris
             Array
-                [Path with value: /redirect_uris/[]:http://localhost:52514/callback]
-                [Member with value: []:http://localhost:52514/callback]
-                String value: http://localhost:52514/callback
+                [Path with value: /redirect_uris/[]:http://localhost:50060/callback]
+                [Member with value: []:http://localhost:50060/callback]
+                String value: http://localhost:50060/callback
             Key: redirect_uris
             [Path: /redirect_uris]
         Member: grant_types
@@ -623,59 +297,47 @@ JavaScript Object Notation: application/json
             [Path: /token_endpoint_auth_method]
 
 No.     Time           Source                Destination           Protocol Length Info
-     40 2.437483       ::1                   ::1                   TCP      76     8000 → 55519 [ACK] Seq=1044 Ack=1978 Win=406080 Len=0 TSval=195211045 TSecr=4018596547
+     51 6.046865       ::1                   ::1                   TCP      76     8000 → 60637 [ACK] Seq=2077 Ack=1766 Win=406272 Len=0 TSval=237860685 TSecr=2340082764
 
-Frame 40: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
+Frame 51: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 1044, Ack: 1978, Len: 0
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 2077, Ack: 1766, Len: 0
 
 No.     Time           Source                Destination           Protocol Length Info
-     41 2.439770       ::1                   ::1                   HTTP     225    HTTP/1.1 404 Not Found  (text/plain)
+     52 6.047924       ::1                   ::1                   HTTP/JSON 422    HTTP/1.1 404 Not Found , JSON (application/json)
 
-Frame 41: Packet, 225 bytes on wire (1800 bits), 225 bytes captured (1800 bits) on interface lo0, id 0
+Frame 52: Packet, 422 bytes on wire (3376 bits), 422 bytes captured (3376 bits) on interface lo0, id 0
 Null/Loopback
 Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55519, Seq: 1044, Ack: 1978, Len: 149
+Transmission Control Protocol, Src Port: 8000, Dst Port: 60637, Seq: 2077, Ack: 1766, Len: 346
 Hypertext Transfer Protocol
     HTTP/1.1 404 Not Found\r\n
         Response Version: HTTP/1.1
         Status Code: 404
         [Status Code Description: Not Found]
         Response Phrase: Not Found
-    date: Fri, 19 Dec 2025 20:52:29 GMT\r\n
+    date: Fri, 19 Dec 2025 21:24:52 GMT\r\n
     server: uvicorn\r\n
-    content-length: 9\r\n
-    content-type: text/plain; charset=utf-8\r\n
+    content-length: 213\r\n
+    content-type: application/json\r\n
     \r\n
-    [Request in frame: 39]
-    [Time since request: 2.319000 milliseconds]
+    [Request in frame: 50]
+    [Time since request: 1.106000 milliseconds]
     [Request URI: /register]
     [Full request URI: http://localhost:8000/register]
-    File Data: 9 bytes
-Line-based text data: text/plain (1 lines)
-    Not Found
-
-No.     Time           Source                Destination           Protocol Length Info
-     42 2.439809       ::1                   ::1                   TCP      76     55519 → 8000 [ACK] Seq=1978 Ack=1193 Win=406784 Len=0 TSval=4018596549 TSecr=195211047
-
-Frame 42: Packet, 76 bytes on wire (608 bits), 76 bytes captured (608 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 6, Src: ::1, Dst: ::1
-Transmission Control Protocol, Src Port: 55519, Dst Port: 8000, Seq: 1978, Ack: 1193, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     43 2.484636       127.0.0.1             127.0.0.1             TCP      68     [TCP Retransmission] 8000 → 55520 [SYN, ACK] Seq=0 Ack=1 Win=65535 Len=0 MSS=16344 WS=64 TSval=1417030668 TSecr=4167512090 SACK_PERM
-
-Frame 43: Packet, 68 bytes on wire (544 bits), 68 bytes captured (544 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 4, Src: 127.0.0.1, Dst: 127.0.0.1
-Transmission Control Protocol, Src Port: 8000, Dst Port: 55520, Seq: 0, Ack: 1, Len: 0
-
-No.     Time           Source                Destination           Protocol Length Info
-     44 2.484665       127.0.0.1             127.0.0.1             TCP      44     55520 → 8000 [RST] Seq=1 Win=0 Len=0
-
-Frame 44: Packet, 44 bytes on wire (352 bits), 44 bytes captured (352 bits) on interface lo0, id 0
-Null/Loopback
-Internet Protocol Version 4, Src: 127.0.0.1, Dst: 127.0.0.1
-Transmission Control Protocol, Src Port: 55520, Dst Port: 8000, Seq: 1, Len: 0
+    File Data: 213 bytes
+JavaScript Object Notation: application/json
+    Object
+        Member: error
+            [Path with value: /error:unsupported_oauth]
+            [Member with value: error:unsupported_oauth]
+            String value: unsupported_oauth
+            Key: error
+            [Path: /error]
+        Member: error_description
+            [Path with value: /error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            [Member with value: error_description:This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).]
+            String value: This MCP server does not support OAuth authentication. Please use SSE transport with header-based authentication (EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).
+            Key: error_description
+            [Path: /error_description]
