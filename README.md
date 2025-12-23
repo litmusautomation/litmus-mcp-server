@@ -43,7 +43,6 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 - [Integrations](#integrations)
   - [Cursor IDE](#cursor-ide)
   - [Claude Code](#claude-code)
-  - [Claude Desktop](#claude-desktop)
   - [VS Code / Copilot](#vs-code--copilot)
   - [Windsurf](#windsurf)
 
@@ -64,6 +63,8 @@ The Litmus MCP Server is built for linux/AMD64 platforms. If running on an ARM64
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
 ```
+
+---
 
 ### Claude Code Setup
 Example `./mcp.json` configuration:
@@ -92,10 +93,13 @@ Example `./mcp.json` configuration:
   }
 }
 ```
+[Anthropic Docs](https://docs.anthropic.com/en/docs/agents-and-tools/mcp)
 
-### Cursor IDE Setup
+---
 
-Example `mcp.json` configuration:
+### Cursor IDE
+
+Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 
 ```json
 {
@@ -106,12 +110,10 @@ Example `mcp.json` configuration:
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
-
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
         "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
-
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",
         "INFLUX_DB_NAME": "tsdata",
@@ -122,6 +124,132 @@ Example `mcp.json` configuration:
   }
 }
 ```
+[Cursor docs](https://docs.cursor.com/context/model-context-protocol)
+
+---
+
+### VS Code / GitHub Copilot
+
+#### Manual Configuration
+
+In VS Code:
+Open User Settings (JSON) → Add:
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
+    }
+  }
+}
+```
+
+Or use `.vscode/mcp.json` in your project.
+
+[VS Code MCP Docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)
+
+---
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
+    }
+  }
+}
+```
+
+[Windsurf MCP Docs](https://docs.windsurf.com/windsurf/mcp)
+
+---
+### FOR INTERNAL DEVELOPMENT ONLY - Claude Desktop
+
+**Requirements:**
+- Access to development branch of Litmus MCP Server
+- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
+- Install Python dependencies: `uv sync` or `pip install -e .`
+
+**Configuration:**
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "command": "/path/to/.venv/bin/python3",
+      "args": [
+        "/absolute/path/to/litmus-mcp-server/src/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
+    }
+  }
+}
+```
+
+For development, use Python **Virtual environments**, for example to bridge mcp lib version diffs between dev clients like 'npx @modelcontextprotocol/inspector' & litmus-mcp-server
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "command": "/absolute/path/to/litmus-mcp-server/.venv/bin/python",
+      "args": ["/absolute/path/to/litmus-mcp-server/src/server.py"],
+      "env": { /* same as above */ }
+    }
+  }
+}
+```
+
+See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example.json) for the complete template.
 
 **Header Configuration Guide:**
 - `EDGE_URL`: Litmus Edge base URL (include https://)
@@ -200,7 +328,7 @@ HTTP-based transport using [MCP SSE](https://modelcontextprotocol.io/docs/concep
 - Server → Client: SSE stream
 - Client → Server: HTTP POST
 
-### STDIO
+### DEV ONLY - STDIO
 
 Process-based transport using stdin/stdout communication.
 
@@ -221,169 +349,6 @@ EDGE_API_CLIENT_ID=<id> EDGE_API_CLIENT_SECRET=<secret> python3 src/server.py
 Download or try Litmus Edge via [Litmus Central](https://central.litmus.io).
 
 ---
-
-## Integrations
-
-### Cursor IDE
-
-Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
-      "headers": {
-        "EDGE_URL": "https://<LITMUSEDGE_IP>",
-        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
-        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
-        "NATS_SOURCE": "<LITMUSEDGE_IP>",
-        "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
-        "NATS_PASSWORD": "<access_token_from_litmusedge>",
-        "INFLUX_HOST": "<LITMUSEDGE_IP>",
-        "INFLUX_PORT": "8086",
-        "INFLUX_DB_NAME": "tsdata",
-        "INFLUX_USERNAME": "<datahub_username>",
-        "INFLUX_PASSWORD": "<datahub_password>"
-      }
-    }
-  }
-}
-```
-
-[Cursor docs](https://docs.cursor.com/context/model-context-protocol)
-
----
-
-### Claude Desktop
-
-**Requirements:**
-- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
-- Install Python dependencies: `uv sync` or `pip install -e .`
-
-**Configuration:**
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
-
-```json
-{
-  "mcpServers": {
-    "litmus-mcp-server": {
-      "command": "python3",
-      "args": [
-        "/absolute/path/to/litmus-mcp-server/src/server.py"
-      ],
-      "env": {
-        "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
-        "EDGE_URL": "https://<LITMUSEDGE_IP>",
-        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
-        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
-        "NATS_SOURCE": "<LITMUSEDGE_IP>",
-        "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
-        "NATS_PASSWORD": "<access_token_from_litmusedge>",
-        "INFLUX_HOST": "<LITMUSEDGE_IP>",
-        "INFLUX_PORT": "8086",
-        "INFLUX_DB_NAME": "tsdata",
-        "INFLUX_USERNAME": "<datahub_username>",
-        "INFLUX_PASSWORD": "<datahub_password>"
-      }
-    }
-  }
-}
-```
-
-See [claude_desktop_config.example.json](claude_desktop_config.example.json) for a complete template.
-
-**Virtual Environment:**
-
-For production use with virtual environment:
-
-```json
-{
-  "mcpServers": {
-    "litmus-mcp-server": {
-      "command": "/absolute/path/to/litmus-mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/litmus-mcp-server/src/server.py"],
-      "env": { /* same as above */ }
-    }
-  }
-}
-```
-
-See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example.json) for the complete template.
-
-[Anthropic Docs](https://docs.anthropic.com/en/docs/agents-and-tools/mcp)
-
----
-
-### VS Code / GitHub Copilot
-
-#### Manual Configuration
-
-In VS Code:
-Open User Settings (JSON) → Add:
-
-```json
-{
-  "mcpServers": {
-    "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
-      "headers": {
-        "EDGE_URL": "https://<LITMUSEDGE_IP>",
-        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
-        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
-        "NATS_SOURCE": "<LITMUSEDGE_IP>",
-        "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
-        "NATS_PASSWORD": "<access_token_from_litmusedge>",
-        "INFLUX_HOST": "<LITMUSEDGE_IP>",
-        "INFLUX_PORT": "8086",
-        "INFLUX_DB_NAME": "tsdata",
-        "INFLUX_USERNAME": "<datahub_username>",
-        "INFLUX_PASSWORD": "<datahub_password>"
-      }
-    }
-  }
-}
-```
-
-Or use `.vscode/mcp.json` in your project.
-
-[VS Code MCP Docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)
-
----
-
-### Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
-      "headers": {
-        "EDGE_URL": "https://<LITMUSEDGE_IP>",
-        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
-        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
-        "NATS_SOURCE": "<LITMUSEDGE_IP>",
-        "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
-        "NATS_PASSWORD": "<access_token_from_litmusedge>",
-        "INFLUX_HOST": "<LITMUSEDGE_IP>",
-        "INFLUX_PORT": "8086",
-        "INFLUX_DB_NAME": "tsdata",
-        "INFLUX_USERNAME": "<datahub_username>",
-        "INFLUX_PASSWORD": "<datahub_password>"
-      }
-    }
-  }
-}
-```
-
-[Windsurf MCP Docs](https://docs.windsurf.com/windsurf/mcp)
 
 ### MCP server registries
 
