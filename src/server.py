@@ -1,9 +1,12 @@
 import logging
+import asyncio
+import os
 
 from contextvars import ContextVar
 from mcp.server import Server
 
 from mcp.server.sse import SseServerTransport
+from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR
@@ -609,6 +612,21 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         ) from e
 
 
+async def run_stdio_server():
+    """Run the MCP server using stdio transport."""
+    # Create stdio-compatible request context with env-based auth
+    stdio_request = StdioRequestContext()
+    current_request.set(stdio_request)
+
+    # Log startup
+    logger.info("Starting Litmus MCP Server in STDIO mode")
+    logger.info("Configuration from environment variables: EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, NATS_*, INFLUX_*")
+
+    # Run with stdio transport
+    async with stdio_server() as (read_stream, write_stream):
+        await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
+
+
 # SSE endpoint handler
 sse = SseServerTransport("/messages")
 
@@ -652,6 +670,27 @@ class HeaderOnlyRequest:
         for header_name, header_value in scope.get("headers", []):
             headers_dict[header_name.decode("latin-1")] = header_value.decode("latin-1")
         self.headers = HeaderDict(headers_dict)
+
+
+class StdioRequestContext:
+    """Mock request for stdio mode with environment variable-based authentication."""
+
+    def __init__(self):
+        self.headers = HeaderDict({
+            "edge-api-client-id": os.getenv("EDGE_API_CLIENT_ID", ""),
+            "edge-api-client-secret": os.getenv("EDGE_API_CLIENT_SECRET", ""),
+            "edge-url": os.getenv("EDGE_URL", ""),
+            "nats-source": os.getenv("NATS_SOURCE", ""),
+            "nats-port": os.getenv("NATS_PORT", ""),
+            "nats-user": os.getenv("NATS_USER", ""),
+            "nats-password": os.getenv("NATS_PASSWORD", ""),
+            "influx-host": os.getenv("INFLUX_HOST", ""),
+            "influx-port": os.getenv("INFLUX_PORT", ""),
+            "influx-db-name": os.getenv("INFLUX_DB_NAME", ""),
+            "influx-username": os.getenv("INFLUX_USERNAME", ""),
+            "influx-password": os.getenv("INFLUX_PASSWORD", "")
+        })
+        self.scope = {}  # Empty scope for compatibility
 
 
 class ContextCapturingMiddleware:
@@ -720,8 +759,14 @@ app = Starlette(
 
 if __name__ == "__main__":
     import uvicorn
+    from config import ENABLE_STDIO
 
-    logger.info(f"Starting Litmus MCP Server on port {MCP_PORT}")
-    logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
-
-    uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)
+    if ENABLE_STDIO:
+        # STDIO mode - runs on stdin/stdout
+        logger.info("STDIO mode enabled")
+        asyncio.run(run_stdio_server())
+    else:
+        # SSE mode - runs HTTP server (current behavior)
+        logger.info(f"SSE mode enabled - Starting on port {MCP_PORT}")
+        logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
+        uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)

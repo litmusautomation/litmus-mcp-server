@@ -32,14 +32,17 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 - [Getting Started](#getting-started)
   - [Quick Launch (Docker)](#quick-launch-docker)
+  - [Claude Code Setup](#claude-code-setup)
   - [Cursor IDE Setup](#cursor-ide-setup)
 - [Tools](#available-tools)
 - [Usage](#usage)
+  - [Transport Modes](#transport-modes)
   - [Server-Sent Events (SSE)](#server-sent-events-sse)
+  - [STDIO](#stdio)
 - [Litmus Central](#litmus-central)
 - [Integrations](#integrations)
   - [Cursor IDE](#cursor-ide)
-  - [Claude Code] (#claude-code)
+  - [Claude Code](#claude-code)
   - [Claude Desktop](#claude-desktop)
   - [VS Code / Copilot](#vs-code--copilot)
   - [Windsurf](#windsurf)
@@ -176,15 +179,40 @@ To use `get_historical_data_from_influxdb`, you must allow InfluxDB port access:
 
 ## Usage
 
+### Transport Modes
+
+The server supports two transport modes configured via `ENABLE_STDIO` in [src/config.py](src/config.py):
+
+- **SSE Mode** (`ENABLE_STDIO = False`): HTTP-based transport for Cursor, VS Code, Claude Code, Windsurf
+- **STDIO Mode** (`ENABLE_STDIO = True`): Process-based transport for Claude Desktop
+
 ### Server-Sent Events (SSE)
 
-This server supports the [MCP SSE transport](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse) for real-time communication.
+HTTP-based transport using [MCP SSE](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse).
 
-- **Client endpoint:** `http://<server-ip>:8000/sse`
-- **Default binding:** `0.0.0.0:8000/sse`
-- **Communication:**
-  - Server → Client: Streamed via SSE
-  - Client → Server: HTTP POST
+**Configuration:**
+- Set `ENABLE_STDIO = False` in [src/config.py](src/config.py)
+- Start server: `python3 src/server.py` or Docker
+- Client endpoint: `http://<server-ip>:8000/sse`
+- Authentication: HTTP headers
+
+**Communication:**
+- Server → Client: SSE stream
+- Client → Server: HTTP POST
+
+### STDIO
+
+Process-based transport using stdin/stdout communication.
+
+**Configuration:**
+- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
+- Client spawns server process directly
+- Authentication: Environment variables (`EDGE_API_CLIENT_ID`, `EDGE_API_CLIENT_SECRET`)
+
+**Usage:**
+```bash
+EDGE_API_CLIENT_ID=<id> EDGE_API_CLIENT_SECRET=<secret> python3 src/server.py
+```
 
 ---
 
@@ -230,14 +258,24 @@ Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json`:
+**Requirements:**
+- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
+- Install Python dependencies: `uv sync` or `pip install -e .`
+
+**Configuration:**
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
-      "headers": {
+      "command": "python3",
+      "args": [
+        "/absolute/path/to/litmus-mcp-server/src/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
@@ -255,6 +293,26 @@ Add to `claude_desktop_config.json`:
   }
 }
 ```
+
+See [claude_desktop_config.example.json](claude_desktop_config.example.json) for a complete template.
+
+**Virtual Environment:**
+
+For production use with virtual environment:
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "command": "/absolute/path/to/litmus-mcp-server/.venv/bin/python",
+      "args": ["/absolute/path/to/litmus-mcp-server/src/server.py"],
+      "env": { /* same as above */ }
+    }
+  }
+}
+```
+
+See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example.json) for the complete template.
 
 [Anthropic Docs](https://docs.anthropic.com/en/docs/agents-and-tools/mcp)
 
