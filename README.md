@@ -34,18 +34,14 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
   - [Quick Launch (Docker)](#quick-launch-docker)
   - [Claude Code Setup](#claude-code-setup)
   - [Cursor IDE Setup](#cursor-ide-setup)
+  - [VS Code / Copilot](#vs-code--copilot)
+  - [Windsurf](#windsurf)
 - [Tools](#available-tools)
 - [Usage](#usage)
   - [Transport Modes](#transport-modes)
   - [Server-Sent Events (SSE)](#server-sent-events-sse)
   - [STDIO](#stdio)
 - [Litmus Central](#litmus-central)
-- [Integrations](#integrations)
-  - [Cursor IDE](#cursor-ide)
-  - [Claude Code](#claude-code)
-  - [VS Code / Copilot](#vs-code--copilot)
-  - [Windsurf](#windsurf)
-
 ---
 
 ## Getting Started
