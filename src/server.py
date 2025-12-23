@@ -677,18 +677,19 @@ class StdioRequestContext:
 
     def __init__(self):
         self.headers = HeaderDict({
-            "edge-api-client-id": os.getenv("EDGE_API_CLIENT_ID", ""),
-            "edge-api-client-secret": os.getenv("EDGE_API_CLIENT_SECRET", ""),
-            "edge-url": os.getenv("EDGE_URL", ""),
-            "nats-source": os.getenv("NATS_SOURCE", ""),
-            "nats-port": os.getenv("NATS_PORT", ""),
-            "nats-user": os.getenv("NATS_USER", ""),
-            "nats-password": os.getenv("NATS_PASSWORD", ""),
-            "influx-host": os.getenv("INFLUX_HOST", ""),
-            "influx-port": os.getenv("INFLUX_PORT", ""),
-            "influx-db-name": os.getenv("INFLUX_DB_NAME", ""),
-            "influx-username": os.getenv("INFLUX_USERNAME", ""),
-            "influx-password": os.getenv("INFLUX_PASSWORD", "")
+            "EDGE_API_CLIENT_ID": os.getenv("EDGE_API_CLIENT_ID", ""),
+            "EDGE_API_CLIENT_SECRET": os.getenv("EDGE_API_CLIENT_SECRET", ""),
+            "EDGE_URL": os.getenv("EDGE_URL", ""),
+            "NATS_SOURCE": os.getenv("NATS_SOURCE", ""),
+            "NATS_PORT": os.getenv("NATS_PORT", ""),
+            "NATS_USER": os.getenv("NATS_USER", ""),
+            "NATS_PASSWORD": os.getenv("NATS_PASSWORD", ""),
+            "NATS_TLS": os.getenv("NATS_TLS", "true"),
+            "INFLUX_HOST": os.getenv("INFLUX_HOST", ""),
+            "INFLUX_PORT": os.getenv("INFLUX_PORT", ""),
+            "INFLUX_DB_NAME": os.getenv("INFLUX_DB_NAME", ""),
+            "INFLUX_USERNAME": os.getenv("INFLUX_USERNAME", ""),
+            "INFLUX_PASSWORD": os.getenv("INFLUX_PASSWORD", "")
         })
         self.scope = {}  # Empty scope for compatibility
 

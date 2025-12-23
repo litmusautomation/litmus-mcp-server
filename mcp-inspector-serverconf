@@ -1,0 +1,13 @@
+{
+    "command": "python3 /Users/samelsner/Documents/GitHub/litmus-mcp-server/src/server.py",
+    "args": [],
+    "env": {
+        "EDGE_URL": "https://192.168.64.15",
+        "EDGE_API_CLIENT_ID": "60114dde-44c2-4b29-8b72-e60c8dd9e64c",
+        "EDGE_API_CLIENT_SECRET": "6UFWwpy3tJv1GPirGl6rTiBF",
+        "NATS_SOURCE": "192.168.64.15",
+        "NATS_PORT": "4222",
+        "NATS_USER": "litmus-mcp-server",
+        "NATS_PASSWORD": "1fdeu3apvh2awczbn83ylotvkbwauzg7"
+    }
+}
