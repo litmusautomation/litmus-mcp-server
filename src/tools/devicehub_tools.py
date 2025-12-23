@@ -161,11 +161,8 @@ async def create_devicehub_device(
 
         created_device = devices.create_device(device, le_connection=connection)
 
-        device_dict = (
-            created_device.__dict__
-            if hasattr(created_device, "__dict__")
-            else {"id": str(created_device)}
-        )
+        # Build JSON-serializable device info
+        device_dict = _build_device_info(created_device)
 
         logger.info(f"Created device '{name}' with driver '{selected_driver}'")
 
@@ -366,10 +363,17 @@ def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
 
 def _build_device_info(device: Any) -> dict:
     """Build device information dictionary."""
+    # Extract driver ID if driver is an object, otherwise use as-is
+    driver_value = getattr(device, "driver", None)
+    if driver_value and hasattr(driver_value, "id"):
+        driver_value = driver_value.id
+    elif driver_value and hasattr(driver_value, "name"):
+        driver_value = driver_value.name
+
     device_info = {
         "name": device.name,
         "id": getattr(device, "id", None),
-        "driver": getattr(device, "driver", None),
+        "driver": driver_value,
         "metadata": getattr(device, "metadata", "unknown"),
         "description": getattr(device, "description", None),
         "properties": getattr(device, "properties", None),
