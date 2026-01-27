@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "command": "/absolute/path/to/litmus-mcp-server/.venv/bin/python",
+      "args": [
+        "/absolute/path/to/litmus-mcp-server/src/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
+        "EDGE_URL": "https://<LITMUSEDGE_IP>",
+        "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
+        "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
+        "NATS_SOURCE": "<LITMUSEDGE_IP>",
+        "NATS_PORT": "4222",
+        "NATS_USER": "<access_token_username>",
+        "NATS_PASSWORD": "<access_token_from_litmusedge>",
+        "INFLUX_HOST": "<LITMUSEDGE_IP>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "<datahub_username>",
+        "INFLUX_PASSWORD": "<datahub_password>"
+      }
+    }
+  }
+}

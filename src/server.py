@@ -1,16 +1,19 @@
 import logging
+import asyncio
+import os
 
 from contextvars import ContextVar
 from mcp.server import Server
 
 from mcp.server.sse import SseServerTransport
+from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
 
 from config import MCP_PORT
 from tools.devicehub_tools import (
@@ -609,6 +612,21 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         ) from e
 
 
+async def run_stdio_server():
+    """Run the MCP server using stdio transport."""
+    # Create stdio-compatible request context with env-based auth
+    stdio_request = StdioRequestContext()
+    current_request.set(stdio_request)
+
+    # Log startup
+    logger.info("Starting Litmus MCP Server in STDIO mode")
+    logger.info("Configuration from environment variables: EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, NATS_*, INFLUX_*")
+
+    # Run with stdio transport
+    async with stdio_server() as (read_stream, write_stream):
+        await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
+
+
 # SSE endpoint handler
 sse = SseServerTransport("/messages")
 
@@ -654,6 +672,28 @@ class HeaderOnlyRequest:
         self.headers = HeaderDict(headers_dict)
 
 
+class StdioRequestContext:
+    """Request context for STDIO mode that reads credentials from environment variables."""
+
+    def __init__(self):
+        self.headers = HeaderDict({
+            "EDGE_API_CLIENT_ID": os.getenv("EDGE_API_CLIENT_ID", ""),
+            "EDGE_API_CLIENT_SECRET": os.getenv("EDGE_API_CLIENT_SECRET", ""),
+            "EDGE_URL": os.getenv("EDGE_URL", ""),
+            "NATS_SOURCE": os.getenv("NATS_SOURCE", ""),
+            "NATS_PORT": os.getenv("NATS_PORT", ""),
+            "NATS_USER": os.getenv("NATS_USER", ""),
+            "NATS_PASSWORD": os.getenv("NATS_PASSWORD", ""),
+            "NATS_TLS": os.getenv("NATS_TLS", "true"),
+            "INFLUX_HOST": os.getenv("INFLUX_HOST", ""),
+            "INFLUX_PORT": os.getenv("INFLUX_PORT", ""),
+            "INFLUX_DB_NAME": os.getenv("INFLUX_DB_NAME", ""),
+            "INFLUX_USERNAME": os.getenv("INFLUX_USERNAME", ""),
+            "INFLUX_PASSWORD": os.getenv("INFLUX_PASSWORD", "")
+        })
+        self.scope = {}  # Empty scope for compatibility
+
+
 class ContextCapturingMiddleware:
     """ASGI middleware that captures request headers and sets them in context."""
 
@@ -676,6 +716,26 @@ class ContextCapturingMiddleware:
         await self.app(scope, receive, send)
 
 
+# OAuth discovery endpoint handlers
+# These return JSON responses indicating OAuth is not supported
+# This prevents MCP clients from getting 404 plain text errors when attempting OAuth discovery
+
+async def oauth_not_supported(request: Request):
+    """Return JSON error indicating OAuth is not supported by this server."""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "unsupported_oauth",
+            "error_description": "This MCP server does not support OAuth authentication. "
+                               "Please use SSE transport with header-based authentication "
+                               "(EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET)."
+        }
+    )
+
+async def health_check(request: Request):
+    """Basic health check endpoint."""
+    return JSONResponse({"status": "ok", "service": "litmus-mcp-server"})
+
 # Wrap the SSE POST handler with our context-capturing middleware
 wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
 
@@ -684,13 +744,30 @@ app = Starlette(
     routes=[
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=wrapped_post_handler),
+        # OAuth discovery endpoints - return proper JSON errors
+        Route("/.well-known/oauth-authorization-server", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-authorization-server/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/openid-configuration/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/sse/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/.well-known/oauth-protected-resource/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
+        # Health check endpoint
+        Route("/health", endpoint=health_check, methods=["GET"]),
     ]
 )
 
 if __name__ == "__main__":
     import uvicorn
+    from config import ENABLE_STDIO
 
-    logger.info(f"Starting Litmus MCP Server on port {MCP_PORT}")
-    logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
-
-    uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)
+    if ENABLE_STDIO:
+        # STDIO mode - runs on stdin/stdout
+        logger.info("STDIO mode enabled")
+        asyncio.run(run_stdio_server())
+    else:
+        # SSE mode - runs HTTP server (current behavior)
+        logger.info(f"SSE mode enabled - Starting on port {MCP_PORT}")
+        logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
+        uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)

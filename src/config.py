@@ -1,12 +1,13 @@
 import logging
+import os
 import ssl
 
 logger = logging.getLogger(__name__)
 
-NATS_SOURCE = "10.30.50.1"
 NATS_PORT = "4222"
 MCP_PORT = 8000
 DEFAULT_TIMEOUT = 600
+ENABLE_STDIO = os.getenv("ENABLE_STDIO", "true").lower() in ("true", "1", "yes")
 
 
 def ssl_config():

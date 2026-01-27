@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse",
+      "headers": {
+        "EDGE_URL": "https://litmusIp",
+        "EDGE_API_CLIENT_ID": "<litmusOauthClientId>",
+        "EDGE_API_CLIENT_SECRET": "<litmusOauthClenJ4u4YyKbLcGwEunfz1w58vBm",
+        "NATS_SOURCE": "litmusIp",
+        "NATS_PORT": "4222",
+        "NATS_USER": "mcp",
+        "NATS_PASSWORD": "ocm20mlrh4qj2wi5wh222yosopc1ky5x",
+        "INFLUX_HOST": "<litmusIp>",
+        "INFLUX_PORT": "8086",
+        "INFLUX_DB_NAME": "tsdata",
+        "INFLUX_USERNAME": "admin",
+        "INFLUX_PASSWORD": "<pw>"
+      }
+    }
+  }
+}

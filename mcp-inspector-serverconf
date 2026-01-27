@@ -1,0 +1,12 @@
+{
+    "command": "python3 /path/to/server.py",
+    "args": [],
+    "env": {
+        "EDGE_URL": "https://<le_ip>",
+        "EDGE_API_CLIENT_ID": "",
+        "EDGE_API_CLIENT_SECRET": "",
+        "NATS_PORT": "4222",
+        "NATS_USER": "litmus-mcp-server",
+        "NATS_PASSWORD": ""
+    }
+}
