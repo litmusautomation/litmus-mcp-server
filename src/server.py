@@ -673,7 +673,7 @@ class HeaderOnlyRequest:
 
 
 class StdioRequestContext:
-    """Mock request for stdio mode with environment variable-based authentication."""
+    """Request context for STDIO mode that reads credentials from environment variables."""
 
     def __init__(self):
         self.headers = HeaderDict({
