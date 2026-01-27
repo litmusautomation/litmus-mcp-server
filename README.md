@@ -30,56 +30,35 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 ## Table of Contents
 
-- [Getting Started](#getting-started)
-  - [Quick Launch](#quick-launch-docker)
-  - [Claude Code CLI](#claude-code-setup)
+- [Quick Launch](#quick-launch)
+  - [Claude Code CLI](#claude-code-cli)
   - [Cursor IDE](#cursor-ide)
   - [VS Code / Copilot](#vs-code--github-copilot)
   - [Windsurf](#windsurf)
-  - [Claude Desktop (STDIO)](#claude-desktop-stdio)
+- [STDIO - Claude Desktop](#stdio-with-claude-desktop)
+- [Tips](#Tips)
 - [Tools](#available-tools)
-- [Usage](#usage)
-  - [Transport Modes](#transport-modes)
-  - [Server-Sent Events (SSE)](#server-sent-events-sse)
 - [Litmus Central](#litmus-central)
 ---
 
-## Getting Started
+## Quick Launch
 
-### Quick Launch
+### Start an HTTP SSE MCP Server using Docker
 
-Clone and run as a local process:
-
-```bash
-# Clone and install
-git clone https://github.com/litmusautomation/litmus-mcp-server.git
-cd litmus-mcp-server
-
-# Using uv 
-uv sync
-uv run python3 src/server.py
-
-# Otherwise
-pip install -e .
-python3 src/server.py
-```
-
-Or run the server in Docker:
+Run the server in Docker (HTTP SSE only)
 
 ```bash
 docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
 ```
 
-The Litmus MCP Server is built for linux/AMD64 platforms. If running in Docker on ARM64, specify the AMD64 platform type by including the --platform argument:
+NOTE: The Litmus MCP Server is built for linux/AMD64 platforms. If running in Docker on ARM64, specify the AMD64 platform type by including the --platform argument:
 
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
 ```
 
----
-
-### Claude Code Setup
-Example `./mcp.json` configuration:
+### Claude Code CLI
+Run Claude from a directory that includes a configuration file at `~/.claude/mcp.json`:
 
 ```json
 {
@@ -109,7 +88,7 @@ Example `./mcp.json` configuration:
 
 ---
 
-### Cursor IDE
+### Cursor IDE 
 
 Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 
@@ -207,14 +186,37 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 [Windsurf MCP Docs](https://docs.windsurf.com/windsurf/mcp)
 
----
-### Claude Desktop (local-only STDIO)
+## STDIO with Claude Desktop
 
-This MCP server supports local connections with ClaudezClaude Desktop requires STDIO transport (stdin/stdout communication).
+This MCP server supports local connections with Claude Desktop and other applications via Standard file Input/Output (STDIO): https://modelcontextprotocol.io/legacy/concepts/transports
 
-**Configuration:**
+To use STDIO: Clone, edit config.py to enable STDIO, run the server as a local process, and update Claude Desktop MCP server configuration file to use the server:
 
-Add to your Claude Desktop config file:
+### Clone
+```bash
+# Clone 
+git clone https://github.com/litmusautomation/litmus-mcp-server.git
+```
+
+### Set ENABLE_STDIO to 'true' in /src/config.py:
+```python
+ENABLE_STDIO = os.getenv("ENABLE_STDIO", "true").lower() in ("true", "1", "yes")
+```
+
+### Run the server
+```bash
+# Run using uv 
+uv sync
+cd /path/to/litmus-mcp-server
+uv run python3 src/server.py
+
+# Otherwise
+cd litmus-mcp-server
+pip install -e .
+python3 src/server.py
+```
+
+### Add json server definision to your Claude Desktop config file:
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 - Linux: `~/.config/Claude/claude_desktop_config.json`
@@ -246,6 +248,8 @@ Add to your Claude Desktop config file:
   }
 }
 ```
+
+## Tips
 
 For development, use Python **Virtual environments**, for example to bridge mcp lib version diffs between dev clients like 'npx @modelcontextprotocol/inspector' & litmus-mcp-server
 
@@ -299,7 +303,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `get_digital_twin_hierarchy`           | Get the hierarchy configuration for a Digital Twin model. |
 |                           | `save_digital_twin_hierarchy`          | Save a new hierarchy configuration to a Digital Twin model. |
 
-### Configuration Notes
+### Tool Use Notes
 
 **\* NATS Topic Tools Requirements:**
 To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you must configure access control on Litmus Edge:
@@ -312,30 +316,6 @@ To use `get_historical_data_from_influxdb`, you must allow InfluxDB port access:
 1. Navigate to: **Litmus Edge → System → Network → Firewall**
 2. Add a firewall rule to allow port **8086** on **TCP**
 3. Ensure InfluxDB is accessible from the MCP server host
-
----
-
-## Usage
-
-### Transport Modes
-
-The server supports two transport modes controlled by the `ENABLE_STDIO` environment variable (defaults to `true`):
-
-- **STDIO Mode** (`ENABLE_STDIO=true`): Process-based transport for Claude Desktop
-- **SSE Mode** (`ENABLE_STDIO=false`): HTTP-based transport for Cursor, VS Code, Claude Code, Windsurf
-
-### Server-Sent Events (SSE)
-
-HTTP-based transport using [MCP SSE](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse).
-
-**Configuration:**
-- Start server: `ENABLE_STDIO=false python3 src/server.py` or use Docker
-- Client endpoint: `http://<server-ip>:8000/sse`
-- Authentication: HTTP headers
-
-**Communication:**
-- Server → Client: SSE stream
-- Client → Server: HTTP POST
 
 ---
 
