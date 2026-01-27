@@ -31,30 +31,46 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 ## Table of Contents
 
 - [Getting Started](#getting-started)
-  - [Quick Launch (Docker)](#quick-launch-docker)
-  - [Claude Code Setup](#claude-code-setup)
-  - [Cursor IDE Setup](#cursor-ide-setup)
-  - [VS Code / Copilot](#vs-code--copilot)
+  - [Quick Launch](#quick-launch-docker)
+  - [Claude Code CLI](#claude-code-setup)
+  - [Cursor IDE](#cursor-ide)
+  - [VS Code / Copilot](#vs-code--github-copilot)
   - [Windsurf](#windsurf)
+  - [Claude Desktop (STDIO)](#claude-desktop-stdio)
 - [Tools](#available-tools)
 - [Usage](#usage)
   - [Transport Modes](#transport-modes)
   - [Server-Sent Events (SSE)](#server-sent-events-sse)
-  - [STDIO](#stdio)
 - [Litmus Central](#litmus-central)
 ---
 
 ## Getting Started
 
-### Quick Launch (Docker)
+### Quick Launch
 
-Run the server in Docker:
+Clone and run as a local process:
+
+```bash
+# Clone and install
+git clone https://github.com/litmusautomation/litmus-mcp-server.git
+cd litmus-mcp-server
+
+# Using uv 
+uv sync
+uv run python3 src/server.py
+
+# Otherwise
+pip install -e .
+python3 src/server.py
+```
+
+Or run the server in Docker:
 
 ```bash
 docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
 ```
 
-The Litmus MCP Server is built for linux/AMD64 platforms. If running on an ARM64 OS, specify the AMD64 platform type by including the --platform argument:
+The Litmus MCP Server is built for linux/AMD64 platforms. If running in Docker on ARM64, specify the AMD64 platform type by including the --platform argument:
 
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
@@ -192,16 +208,16 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 [Windsurf MCP Docs](https://docs.windsurf.com/windsurf/mcp)
 
 ---
-### FOR INTERNAL DEVELOPMENT ONLY - Claude Desktop
+### Claude Desktop (local-only STDIO)
 
-**Requirements:**
-- Access to development branch of Litmus MCP Server
-- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
-- Install Python dependencies: `uv sync` or `pip install -e .`
+This MCP server supports local connections with ClaudezClaude Desktop requires STDIO transport (stdin/stdout communication).
 
 **Configuration:**
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Add to your Claude Desktop config file:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -255,8 +271,6 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 - `INFLUX_HOST`: Litmus Edge IP (no http/https)
 - `INFLUX_USERNAME` / `INFLUX_PASSWORD`: DataHub user credentials
 
-See the [Cursor docs](https://docs.cursor.com/context/model-context-protocol) for more info.
-
 ---
 
 ## Available Tools
@@ -305,38 +319,23 @@ To use `get_historical_data_from_influxdb`, you must allow InfluxDB port access:
 
 ### Transport Modes
 
-The server supports two transport modes configured via `ENABLE_STDIO` in [src/config.py](src/config.py):
+The server supports two transport modes controlled by the `ENABLE_STDIO` environment variable (defaults to `true`):
 
-- **SSE Mode** (`ENABLE_STDIO = False`): HTTP-based transport for Cursor, VS Code, Claude Code, Windsurf
-- **STDIO Mode** (`ENABLE_STDIO = True`): Process-based transport for Claude Desktop
+- **STDIO Mode** (`ENABLE_STDIO=true`): Process-based transport for Claude Desktop
+- **SSE Mode** (`ENABLE_STDIO=false`): HTTP-based transport for Cursor, VS Code, Claude Code, Windsurf
 
 ### Server-Sent Events (SSE)
 
 HTTP-based transport using [MCP SSE](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse).
 
 **Configuration:**
-- Set `ENABLE_STDIO = False` in [src/config.py](src/config.py)
-- Start server: `python3 src/server.py` or Docker
+- Start server: `ENABLE_STDIO=false python3 src/server.py` or use Docker
 - Client endpoint: `http://<server-ip>:8000/sse`
 - Authentication: HTTP headers
 
 **Communication:**
 - Server → Client: SSE stream
 - Client → Server: HTTP POST
-
-### DEV ONLY - STDIO
-
-Process-based transport using stdin/stdout communication.
-
-**Configuration:**
-- Set `ENABLE_STDIO = True` in [src/config.py](src/config.py)
-- Client spawns server process directly
-- Authentication: Environment variables (`EDGE_API_CLIENT_ID`, `EDGE_API_CLIENT_SECRET`)
-
-**Usage:**
-```bash
-EDGE_API_CLIENT_ID=<id> EDGE_API_CLIENT_SECRET=<secret> python3 src/server.py
-```
 
 ---
 
@@ -358,4 +357,4 @@ Download or try Litmus Edge via [Litmus Central](https://central.litmus.io).
 
 ---
 
-© 2025 Litmus Automation, Inc. All rights reserved.
+© 2026 Litmus Automation, Inc. All rights reserved.
