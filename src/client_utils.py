@@ -1,13 +1,14 @@
 import os
 from typing import Optional, Iterable, cast
 from contextlib import AsyncExitStack
-from mcp import ClientSession, StdioServerParameters, stdio_client
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ToolParam
 
 from agents import Agent, Runner, gen_trace_id, trace
-from agents.mcp import MCPServerStdio
+from agents.mcp import MCPServerSse
 from agents import ModelSettings
 
 _anthropic_display_name = "Claude Sonnet 4.6"
@@ -34,56 +35,25 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
         self.anthropic: Optional[AsyncAnthropic] = None
         self._anthropic_key: str = ""
-        self.stdio = None
+        self.read = None
         self.write = None
-        self.server_params = None
+        self._sse_url: str = ""
+        self._sse_headers: dict = {}
         self.model_used = None
 
-    async def connect_to_server(self, server_script_path: str):
-        if self.server_params is None:
-            self.server_params = {}
-
-        is_python = server_script_path.endswith(".py")
-        is_js = server_script_path.endswith(".js")
-        if not (is_python or is_js):
-            raise ValueError("Server script must be a .py or .js file")
-
-        command = "python" if is_python else "node"
-        # Pass only the keys the MCP subprocess needs — avoids leaking unrelated
-        # shell vars while ensuring credentials written by mcp_env_loader() /
-        # activate_edge_instance() are forwarded to the subprocess.
-        _MCP_ENV_KEYS = (
-            "EDGE_URL", "EDGE_API_CLIENT_ID", "EDGE_API_CLIENT_SECRET",
-            "VALIDATE_CERTIFICATE",
-            "NATS_SOURCE", "NATS_PORT", "NATS_USER", "NATS_PASSWORD",
-            "INFLUX_HOST", "INFLUX_PORT", "INFLUX_DB_NAME",
-            "INFLUX_USERNAME", "INFLUX_PASSWORD",
-            "PATH", "HOME", "PYTHONPATH",  # needed to locate python + packages
+    async def connect_to_sse_server(self, url: str, headers: dict):
+        sse_transport = await self.exit_stack.enter_async_context(
+            sse_client(url=url, headers=headers)
         )
-        current_env = {
-            k: v for k, v in os.environ.items()
-            if k in _MCP_ENV_KEYS or k.startswith("EDGE_INSTANCE_")
-        }
-        self.server_params["command"] = command
-        self.server_params["args"] = [server_script_path, "--stdio"]
-        self.server_params["env"] = current_env
-
-        server_params = StdioServerParameters(
-            command=command, args=[server_script_path, "--stdio"], env=current_env
-        )
-
-        stdio_transport = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
-        )
-        self.stdio, self.write = stdio_transport
+        self.read, self.write = sse_transport
         self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.stdio, self.write)
+            ClientSession(self.read, self.write)
         )
-
         await self.session.initialize()
-
         response = await self.session.list_tools()
-        print("\nConnected to server with tools:", [t.name for t in response.tools])
+        print("Connected to SSE server with tools:", [t.name for t in response.tools])
+        self._sse_url = url
+        self._sse_headers = headers
 
     def _ensure_anthropic(self):
         key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -238,12 +208,12 @@ class MCPClient:
         messages = list(conversation_history) if conversation_history else []
         messages.append({"role": "user", "content": query})
 
-        async with MCPServerStdio(
-            name="StdioServer",
-            params=self.server_params,
+        async with MCPServerSse(
+            name="SseServer",
+            params={"url": self._sse_url, "headers": self._sse_headers},
         ) as server:
             trace_id = gen_trace_id()
-            with trace(workflow_name="StdioServer", trace_id=trace_id):
+            with trace(workflow_name="SseServer", trace_id=trace_id):
                 agent = Agent(
                     name="Assistant",
                     instructions=_system_prompt,

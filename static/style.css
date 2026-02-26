@@ -972,7 +972,6 @@ body.chat-page {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    scroll-behavior: smooth;
 }
 
 .chat-empty {
@@ -990,7 +989,7 @@ body.chat-page {
 .msg-row {
     display: flex;
     flex-direction: column;
-    max-width: 78%;
+    max-width: clamp(280px, 75%, 660px);
     margin-bottom: 8px;
 }
 
@@ -1010,7 +1009,7 @@ body.chat-page {
 .msg-bubble {
     padding: 12px 16px;
     border-radius: 16px;
-    font-size: 15px;
+    font-size: clamp(13.5px, 0.5vw + 10px, 15px);
     line-height: 1.65;
     word-break: break-word;
 }

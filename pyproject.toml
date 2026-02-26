@@ -38,7 +38,7 @@ test = [
 
 
 [tool.uv.sources]
-litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.0.1/litmussdk-2.0.1-py3-none-any.whl" }
+litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.5.1/litmussdk-2.5.1-py3-none-any.whl" }
 
 [tool.ruff]
 exclude = [

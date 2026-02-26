@@ -331,10 +331,16 @@
     }
     textarea.addEventListener("input", resize);
 
-    // Scroll messages to bottom
+    // Scroll to bottom (instant — no smooth animation during streaming)
     function scrollToBottom() {
         messages.scrollTop = messages.scrollHeight;
     }
+
+    // True if the user is close enough to the bottom that auto-scroll makes sense
+    function isNearBottom() {
+        return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120;
+    }
+
     scrollToBottom();
 
     // Remove empty-state placeholder once a message is added
@@ -412,12 +418,13 @@
             xhr.open("POST", "/chat", true);
 
             xhr.onprogress = () => {
+                const near = isNearBottom();
                 const newChunk = xhr.responseText.slice(lastLen);
                 lastLen = xhr.responseText.length;
                 if (newChunk) {
                     accumulated += newChunk;
                     bubble.innerHTML = renderMarkdown(accumulated);
-                    scrollToBottom();
+                    if (near) scrollToBottom();
                 }
             };
 
@@ -429,8 +436,6 @@
                     accumulated += tail;
                     bubble.innerHTML = renderMarkdown(accumulated);
                 }
-                // Remove the blinking cursor artifact if any
-                scrollToBottom();
                 done();
             };
 

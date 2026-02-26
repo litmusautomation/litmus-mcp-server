@@ -1,5 +1,4 @@
 import os
-import sys
 import secrets
 import asyncio
 import logging
@@ -7,7 +6,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    StreamingResponse,
+    JSONResponse,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +19,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.status import HTTP_303_SEE_OTHER
 import uvicorn
 from anthropic import AsyncAnthropic
+import subprocess
+import sys
 
 from env_config import (
     mcp_env_loader,
@@ -51,15 +57,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger("web_client")
 
-SERVER_SCRIPT = sys.argv[1] if len(sys.argv) > 1 else "server.py"
 mcp_env_loader()
+
+_CREDENTIAL_KEYS = (
+    "EDGE_URL",
+    "EDGE_API_CLIENT_ID",
+    "EDGE_API_CLIENT_SECRET",
+    "VALIDATE_CERTIFICATE",
+    "NATS_SOURCE",
+    "NATS_PORT",
+    "NATS_USER",
+    "NATS_PASSWORD",
+    "INFLUX_HOST",
+    "INFLUX_PORT",
+    "INFLUX_DB_NAME",
+    "INFLUX_USERNAME",
+    "INFLUX_PASSWORD",
+)
+
+
+def _build_sse_headers() -> dict:
+    return {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting MCP client connection")
-    client = MCPClient()
-    await client.connect_to_server(SERVER_SCRIPT)
+    sse_url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
+    headers = _build_sse_headers()
+
+    client = None
+    max_attempts = 20
+    for attempt in range(1, max_attempts + 1):
+        try:
+            client = MCPClient()
+            await client.connect_to_sse_server(url=sse_url, headers=headers)
+            break
+        except Exception as exc:
+            if attempt == max_attempts:
+                logger.error(
+                    "MCP SSE server unreachable after %d attempts (%s): %s",
+                    max_attempts,
+                    sse_url,
+                    exc,
+                )
+                raise
+            logger.warning(
+                "MCP SSE server not ready (attempt %d/%d), retrying in 1s...",
+                attempt,
+                max_attempts,
+            )
+            await asyncio.sleep(1)
+
     app.state.client = client
     yield
     logger.info("Cleaning up MCP client")
@@ -91,6 +140,7 @@ def _get_session_id(request: Request) -> str:
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _get_client(request: Request) -> MCPClient:
     client = getattr(request.app.state, "client", None)
     if not client:
@@ -105,12 +155,17 @@ async def _reconnect_client(app: FastAPI):
             await old.cleanup()
         except Exception:
             pass
+    mcp_env_loader()
     nc = MCPClient()
-    await nc.connect_to_server(SERVER_SCRIPT)
+    await nc.connect_to_sse_server(
+        url=os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse"),
+        headers=_build_sse_headers(),
+    )
     app.state.client = nc
 
 
 # ── Auth / setup ───────────────────────────────────────────────────────────
+
 
 @app.get("/api/models", name="api_models")
 async def api_models(provider: str):
@@ -118,11 +173,15 @@ async def api_models(provider: str):
     if provider == "anthropic":
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
-            return JSONResponse({"error": "No Anthropic key configured"}, status_code=400)
+            return JSONResponse(
+                {"error": "No Anthropic key configured"}, status_code=400
+            )
         try:
             client = AsyncAnthropic(api_key=key)
             page = await client.models.list(limit=100)
-            return JSONResponse({"models": [{"id": m.id, "name": m.display_name} for m in page.data]})
+            return JSONResponse(
+                {"models": [{"id": m.id, "name": m.display_name} for m in page.data]}
+            )
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     elif provider == "openai":
@@ -131,23 +190,35 @@ async def api_models(provider: str):
             return JSONResponse({"error": "No OpenAI key configured"}, status_code=400)
         try:
             from openai import AsyncOpenAI
+
             oai = AsyncOpenAI(api_key=key)
             page = await oai.models.list()
             chat_prefixes = ("gpt-", "o1-", "o3-", "o4-")
             models = sorted(
-                [m for m in page.data if any(m.id.startswith(p) for p in chat_prefixes)],
-                key=lambda m: m.id, reverse=True
+                [
+                    m
+                    for m in page.data
+                    if any(m.id.startswith(p) for p in chat_prefixes)
+                ],
+                key=lambda m: m.id,
+                reverse=True,
             )
-            return JSONResponse({"models": [{"id": m.id, "name": m.id} for m in models]})
+            return JSONResponse(
+                {"models": [{"id": m.id, "name": m.id} for m in models]}
+            )
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"error": "Unknown provider"}, status_code=400)
 
 
-@app.api_route("/setup", methods=["GET", "POST"], response_class=HTMLResponse, name="setup")
+@app.api_route(
+    "/setup", methods=["GET", "POST"], response_class=HTMLResponse, name="setup"
+)
 async def setup(request: Request):
     if request.method == "GET":
-        return templates.TemplateResponse("setup.html", {"request": request, "active_page": "setup"})
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "active_page": "setup"}
+        )
 
     form = await request.form()
     anthropic_key = form.get("value_of_anthropic_api_key", "").strip()
@@ -192,7 +263,11 @@ async def switch_model(
     switch_model_to: str = Form(...),
     model_id: str = Form(default=""),
 ):
-    preference = MODEL_NAME_ANTHROPIC if switch_model_to.startswith("anthropic") else MODEL_NAME_OPENAI
+    preference = (
+        MODEL_NAME_ANTHROPIC
+        if switch_model_to.startswith("anthropic")
+        else MODEL_NAME_OPENAI
+    )
     mcp_env_updater(MODEL_PREFERENCE, preference)
     if model_id:
         mcp_env_updater(PREFERRED_MODEL_ID, model_id)
@@ -225,7 +300,9 @@ async def update_env_form(request: Request):
 
 
 @app.post("/update-env", response_class=HTMLResponse, name="update_env_submit")
-async def update_env_submit(request: Request, env_key: str = Form(...), env_value: str = Form(...)):
+async def update_env_submit(
+    request: Request, env_key: str = Form(...), env_value: str = Form(...)
+):
     mcp_env_updater(env_key, env_value)
     mcp_env_loader()
     return RedirectResponse("/update-env?updated=true", status_code=HTTP_303_SEE_OTHER)
@@ -246,7 +323,9 @@ async def clear_history(request: Request):
 
 
 @app.post("/api/switch-model", name="api_switch_model")
-async def api_switch_model(request: Request, provider: str = Form(...), model_id: str = Form(...)):
+async def api_switch_model(
+    request: Request, provider: str = Form(...), model_id: str = Form(...)
+):
     preference = MODEL_NAME_ANTHROPIC if provider == "anthropic" else MODEL_NAME_OPENAI
     mcp_env_updater(MODEL_PREFERENCE, preference)
     mcp_env_updater(PREFERRED_MODEL_ID, model_id)
@@ -255,6 +334,7 @@ async def api_switch_model(request: Request, provider: str = Form(...), model_id
 
 
 # ── Edge instance management ────────────────────────────────────────────────
+
 
 @app.get("/api/edge-instances", name="api_edge_instances")
 async def api_edge_instances():
@@ -279,9 +359,13 @@ async def api_add_edge_instance(
         import json as _json
         from litmussdk.utils.conn import new_le_connection
         from litmussdk.utils.api import direct_request
+
         conn = new_le_connection(
-            edge_url=url, client_id=client_id, client_secret=client_secret,
-            validate_certificate=validate_cert, timeout_seconds=10,
+            edge_url=url,
+            client_id=client_id,
+            client_secret=client_secret,
+            validate_certificate=validate_cert,
+            timeout_seconds=10,
         )
         code, raw = direct_request(
             connection=conn, url=f"{url}/dm/host/info", request_type="GET"
@@ -291,8 +375,13 @@ async def api_add_edge_instance(
         except Exception:
             data = {}
         if code == 200 and isinstance(data, dict):
-            return (data.get("description") or data.get("hostname") or
-                    data.get("deviceName") or data.get("name") or "")
+            return (
+                data.get("description")
+                or data.get("hostname")
+                or data.get("deviceName")
+                or data.get("name")
+                or ""
+            )
         return ""
 
     try:
@@ -345,6 +434,7 @@ async def api_switch_edge_instance(request: Request, index: int = Form(...)):
 
 # ── Main chat ──────────────────────────────────────────────────────────────
 
+
 @app.get("/", response_class=HTMLResponse, name="query_handler")
 async def chat_get(request: Request):
     mcp_env_loader()
@@ -360,7 +450,8 @@ async def chat_get(request: Request):
     active_edge_instance = int(os.environ.get(ACTIVE_EDGE_INSTANCE, 0))
     active_instance_name = (
         os.environ.get(f"EDGE_INSTANCE_{active_edge_instance}_NAME", "")
-        if active_edge_instance > 0 else ""
+        if active_edge_instance > 0
+        else ""
     )
 
     response = templates.TemplateResponse(
@@ -412,6 +503,7 @@ async def chat_post(request: Request):
     conversation_history = get_conversation_history(session_id)
 
     if model_type == MODEL_NAME_ANTHROPIC:
+
         async def anthropic_stream():
             full_response = ""
             try:
@@ -435,6 +527,7 @@ async def chat_post(request: Request):
         )
 
     else:  # OpenAI — non-streaming, wrap as single-chunk stream
+
         async def openai_stream():
             full_response = ""
             try:
@@ -459,12 +552,14 @@ async def chat_post(request: Request):
 
 # ── Legacy /streaming redirect ─────────────────────────────────────────────
 
+
 @app.api_route("/streaming", methods=["GET", "POST"], name="streaming_query_handler")
 async def streaming_redirect(request: Request):
     return RedirectResponse("/", status_code=HTTP_303_SEE_OTHER)
 
 
 # ── MCP info ───────────────────────────────────────────────────────────────
+
 
 @app.get("/mcp-info", name="mcp_info")
 async def mcp_info(request: Request):
@@ -474,34 +569,42 @@ async def mcp_info(request: Request):
         resources = await client._list_resources()
     except Exception:
         resources = []
-    return JSONResponse({
-        "tools": [{"name": t["name"], "description": t["description"]} for t in tools],
-        "resources": [
-            {
-                "uri": r["uri"],
-                "name": r["name"],
-                "description": DOCUMENTATION_RESOURCES.get(r["uri"], {}).get("description", ""),
-                "url": DOCUMENTATION_RESOURCES.get(r["uri"], {}).get("uri", ""),
-            }
-            for r in resources
-        ],
-    })
+    return JSONResponse(
+        {
+            "tools": [
+                {"name": t["name"], "description": t["description"]} for t in tools
+            ],
+            "resources": [
+                {
+                    "uri": r["uri"],
+                    "name": r["name"],
+                    "description": DOCUMENTATION_RESOURCES.get(r["uri"], {}).get(
+                        "description", ""
+                    ),
+                    "url": DOCUMENTATION_RESOURCES.get(r["uri"], {}).get("uri", ""),
+                }
+                for r in resources
+            ],
+        }
+    )
 
 
 # ── Utility pages ──────────────────────────────────────────────────────────
+
 
 @app.get("/health", response_class=HTMLResponse, name="health")
 async def health_check(request: Request):
     mcp_env_loader()
     edge_instances = get_edge_instances()
     return templates.TemplateResponse(
-        "health.html", {
+        "health.html",
+        {
             "request": request,
             "status": "ok",
             "version": "1.0",
             "active_page": "health",
             "edge_instances": edge_instances,
-        }
+        },
     )
 
 
@@ -536,7 +639,10 @@ async def api_edge_health(index: int = 0):
         def _get(path):
             try:
                 import json as _json
-                code, raw = direct_request(connection=connection, url=f"{edge_url}{path}", request_type="GET")
+
+                code, raw = direct_request(
+                    connection=connection, url=f"{edge_url}{path}", request_type="GET"
+                )
                 try:
                     data = _json.loads(raw) if raw else None
                 except Exception:
@@ -552,10 +658,21 @@ async def api_edge_health(index: int = 0):
             """Extract (version, git) from a version API response dict."""
             if not isinstance(data, dict):
                 return "", ""
-            version = (data.get("version") or data.get("Version") or
-                       data.get("tag") or data.get("appVersion") or "")
-            git = (data.get("git") or data.get("gitCommit") or data.get("git_commit") or
-                   data.get("commit") or data.get("hash") or "")
+            version = (
+                data.get("version")
+                or data.get("Version")
+                or data.get("tag")
+                or data.get("appVersion")
+                or ""
+            )
+            git = (
+                data.get("git")
+                or data.get("gitCommit")
+                or data.get("git_commit")
+                or data.get("commit")
+                or data.get("hash")
+                or ""
+            )
             if isinstance(git, str) and len(git) > 8:
                 git = git[:8]
             return (str(version) if version else ""), (str(git) if git else "")
@@ -572,24 +689,40 @@ async def api_edge_health(index: int = 0):
         # DeviceHub — version endpoint doubles as health check
         code, data = _getver("/devicehub/version")
         v, g = _ver(data)
-        services["devicehub"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["devicehub"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # Digital Twins
         code, _ = _get("/digital-twins")
         _, vdata = _getver("/digital-twins/version")
         v, g = _ver(vdata)
-        services["digital_twins"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["digital_twins"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # Flows Manager
         code, _ = _get("/flows-manager/flows")
         _, vdata = _getver("/flows-manager/version")
         v, g = _ver(vdata)
-        services["flows_manager"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["flows_manager"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # Analytics — version endpoint doubles as health check
         code, data = _getver("/analytics/v2/version")
         v, g = _ver(data)
-        services["analytics"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["analytics"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # Marketplace
         code, data = _get("/apps/dc/containers/?all=true")
@@ -606,13 +739,21 @@ async def api_edge_health(index: int = 0):
         code, _ = _get("/cc/providers")
         _, vdata = _getver("/cc/version")
         v, g = _ver(vdata)
-        services["integration"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["integration"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # OPC UA
         code, _ = _get("/opcua/service_conf")
         _, vdata = _getver("/opcua/version")
         v, g = _ver(vdata)
-        services["opcua"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+        services["opcua"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
         # System / Device Manager
         code, data = _get("/dm/host/info")
@@ -621,12 +762,26 @@ async def api_edge_health(index: int = 0):
         _, vdata = _getver("/dm/version")
         v, g = _ver(vdata)
         if not v and isinstance(data, dict):
-            v = str(data.get("firmwareVersion") or data.get("osVersion") or
-                    data.get("kernelVersion") or data.get("version") or "")
-        services["system"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+            v = str(
+                data.get("firmwareVersion")
+                or data.get("osVersion")
+                or data.get("kernelVersion")
+                or data.get("version")
+                or ""
+            )
+        services["system"] = {
+            "status": "ok" if _ok(code) else "error",
+            "version": v,
+            "git": g,
+        }
 
-        hostname = (host.get("description") or host.get("hostname") or
-                    host.get("deviceName") or host.get("name") or "")
+        hostname = (
+            host.get("description")
+            or host.get("hostname")
+            or host.get("deviceName")
+            or host.get("name")
+            or ""
+        )
 
         return {
             "status": "connected",
@@ -647,14 +802,24 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
     if exc.status_code == 404:
         return RedirectResponse(url="/")
     if exc.status_code == 500:
-        return templates.TemplateResponse("500.html", {"request": request}, status_code=500)
+        return templates.TemplateResponse(
+            "500.html", {"request": request}, status_code=500
+        )
     return await http_exception_handler(request, exc)
 
 
 if __name__ == "__main__":
+
+    server_script = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "server.py"
+    )
+    server_proc = subprocess.Popen([sys.executable, server_script])
     try:
-        uvicorn.run("web_client:app", host="0.0.0.0", port=9000, reload=True)
+        uvicorn.run("web_client:app", host="0.0.0.0", port=9000, reload=False)
     except KeyboardInterrupt:
         logger.info("Server shutdown requested")
     except Exception as e:
         logger.exception(f"Error running server: {e}")
+    finally:
+        server_proc.terminate()
+        server_proc.wait()

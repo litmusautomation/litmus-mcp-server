@@ -18,16 +18,18 @@ WORKDIR /app
 # Copy project files
 COPY pyproject.toml uv.lock ./
 COPY src ./src
+COPY templates ./templates
+COPY static ./static
 COPY run.sh ./
 
 # Install dependencies using uv
-RUN uv venv && uv sync --frozen
+RUN uv venv && uv sync --frozen --group llm-sdks
 
 # Activate virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Expose the MCP server port (default 8000)
-EXPOSE 8000
+# Expose the MCP server port (default 8000) and the web UI port (default 9000)
+EXPOSE 8000 9000
 
 # Make run script executable
 RUN chmod +x run.sh

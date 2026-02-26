@@ -31,6 +31,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 ## Table of Contents
 
 - [Quick Launch](#quick-launch)
+  - [Web UI](#web-ui)
   - [Claude Code CLI](#claude-code-cli)
   - [Cursor IDE](#cursor-ide)
   - [VS Code / Copilot](#vs-code--github-copilot)
@@ -55,6 +56,30 @@ NOTE: The Litmus MCP Server is built for linux/AMD64 platforms. If running in Do
 
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
+```
+
+---
+
+## Web UI
+
+The Docker image includes a built-in chat interface that lets you interact with Litmus Edge using natural language — no MCP client configuration required.
+
+Start the server with both ports exposed:
+
+```bash
+docker run -d --name litmus-mcp-server \
+  -p 8000:8000 -p 9000:9000 \
+  -e ANTHROPIC_API_KEY=<key> \
+  ghcr.io/litmusautomation/litmus-mcp-server:latest
+```
+
+- **`:9000`** — Web UI (chat interface). Open `http://localhost:9000` in your browser, add a Litmus Edge instance via the config page, and start chatting.
+- **`:8000`** — SSE endpoint for external MCP clients (Claude Desktop, Cursor, VS Code, etc.) — still available as normal.
+
+If you deploy the MCP server and web client on separate hosts, set `MCP_SSE_URL` to point the web client at the server:
+
+```bash
+-e MCP_SSE_URL=http://<mcp-server-host>:8000/sse
 ```
 
 ### Claude Code CLI
