@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Litmus MCP Server{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    {% block scripts %}{% endblock %}
+</head>
+<body>
+    <script src="{{ url_for('static', path='mcp-panels.js') }}"></script>
+    <div class="container">
+        <div class="top-nav">
+            <a href="{{ url_for('query_handler') }}" class="{{ 'active' if active_page == 'home' else '' }}">Home</a>
+            <a href="{{ url_for('update_env_form') }}" class="{{ 'active' if active_page == 'config' else '' }}">Config</a>
+            <a href="{{ url_for('setup') }}" class="{{ 'active' if active_page == 'setup' else '' }}">AI Keys</a>
+            <a href="{{ url_for('health') }}" class="{{ 'active' if active_page == 'health' else '' }}">Health</a>
+        </div>
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

@@ -5,13 +5,18 @@ description = "Litmus MCP Server"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiofiles>=24.1.0",
+    "fastapi>=0.115.12",
+    "httpx>=0.28.0",
     "influxdb>=5.3.2",
+    "jinja2>=3.1.6",
     "litmussdk",
     "mcp[cli]>=1.17.0",
     "nats-py>=2.11.0",
     "numpy>=2.3.4",
     "pandas>=2.3.3",
-    "python-multipart>=0.0.20",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.22",
 ]
 
 [dependency-groups]
@@ -23,13 +28,17 @@ lint = [
     "radon>=6.0.1",
     "ruff>=0.14.0",
 ]
+llm-sdks = [
+    "anthropic>=0.49.0",
+    "openai-agents>=0.0.13",
+]
 test = [
     "pytest>=8.4.2",
     ]
 
 
 [tool.uv.sources]
-litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.0.0/litmussdk-2.0.0-py3-none-any.whl" }
+litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.0.1/litmussdk-2.0.1-py3-none-any.whl" }
 
 [tool.ruff]
 exclude = [

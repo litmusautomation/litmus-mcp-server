@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Streaming · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>Litmus MCP Server</h1>
+    <div class="action-buttons">
+        {% if has_history %}
+        <form method="post" action="{{ url_for('clear_history') }}" style="display: inline;" id="clear-stream-history-form">
+            <button type="submit" class="side-button">Clear history</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="beta-warning">
+    Streaming is currently in beta and only supported with Anthropic models.
+</div>
+
+<form id="query-form">
+    <label for="query">Message</label>
+    <textarea name="query" id="query" placeholder="Ask anything about your Litmus Edge..." required></textarea>
+    <small>Press <kbd>Enter</kbd> to send &nbsp;&middot;&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline</small>
+    <div class="form-actions">
+        <button type="submit">Send</button>
+    </div>
+    <div id="loading" class="loading-bar" style="display: none;">
+        <div class="loading-bar-inner"></div>
+    </div>
+</form>
+
+<div class="chat-log" id="chat-log">
+    {% for exchange in chat_log %}
+    <div class="chat-message user">
+        <div class="label">You</div>
+        <div class="message">{{ exchange.user | safe }}</div>
+    </div>
+    <div class="chat-message mcp">
+        <div class="label">{{ exchange.model | safe }}</div>
+        <div class="message">{{ exchange.assistant | safe }}</div>
+    </div>
+    {% endfor %}
+
+    <div class="chat-message user" id="current-query-container" style="display: none;">
+        <div class="label">You</div>
+        <div class="message" id="user-query"></div>
+    </div>
+    <div class="chat-message mcp" id="current-response-container" style="display: none;">
+        <div class="label">{{ model | safe }}</div>
+        <div class="message" id="response-stream"></div>
+    </div>
+</div>
+
+<div id="status-messages" class="status-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='query_streaming_script.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const chatLog = document.getElementById("chat-log");
+    if (chatLog.lastElementChild) {
+        chatLog.lastElementChild.scrollIntoView({ behavior: "auto" });
+    }
+});
+</script>
+{% endblock %}

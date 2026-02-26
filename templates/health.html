@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Health · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>Health</h1>
+</div>
+
+<hr>
+
+<h2>MCP Server</h2>
+<div class="status-card">
+    <p>
+        <span class="status-label">Status</span>
+        <span class="status-ok">{{ status }}</span>
+    </p>
+    <p>
+        <span class="status-label">Version</span>
+        <span>{{ version }}</span>
+    </p>
+</div>
+
+<div style="margin-top: 28px;">
+{% if edge_instances %}
+  {% for inst in edge_instances %}
+  <div class="health-inst-header"{% if not loop.first %} style="margin-top:28px;"{% endif %}>
+      <h2 style="margin:0;">{{ inst.name }}</h2>
+      <button type="button" class="side-button" id="refresh-btn-{{ inst.index }}"
+              onclick="refreshInstance({{ inst.index }})">Refresh</button>
+  </div>
+  <div class="status-card" id="edge-card-{{ inst.index }}">
+      <p>
+          <span class="status-label">Status</span>
+          <span id="edge-status-{{ inst.index }}" style="color:#9ab8b0;">No data — click Refresh</span>
+      </p>
+  </div>
+  {% endfor %}
+{% else %}
+  <p style="color:#8fa59f; font-size:14px;">No Litmus Edge instances configured.
+      <a href="/update-env" style="color:#1a7a56;">Add one in Config →</a></p>
+{% endif %}
+</div>
+
+<script>
+(function () {
+    const instances = {{ edge_instances | tojson }};
+
+    const SERVICE_LABELS = {
+        devicehub:     'DeviceHub',
+        digital_twins: 'Digital Twins',
+        flows_manager: 'Flows Manager',
+        analytics:     'Analytics',
+        marketplace:   'Marketplace',
+        integration:   'Integration',
+        opcua:         'OPC UA',
+        system:        'System',
+    };
+
+    function extractVersion(v) {
+        if (!v) return '';
+        if (typeof v === 'string') return v;
+        return v.version || v.Version || v.tag || Object.values(v)[0] || '';
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function renderVersion(svc, key) {
+        // Prefer explicit version/git fields; fall back to old data format for cached responses
+        const ver = svc.version || (key === 'devicehub' ? extractVersion(svc.data) : '');
+        const git = svc.git || '';
+        let out = '';
+        if (ver) out += `<span class="svc-version">${escHtml(ver)}</span>`;
+        if (git) out += `<span class="svc-git">${escHtml(git)}</span>`;
+        return out;
+    }
+
+    function getCached(index) {
+        try { return JSON.parse(localStorage.getItem('edge_health_' + index)); }
+        catch (_) { return null; }
+    }
+
+    function setCached(index, data) {
+        localStorage.setItem('edge_health_' + index, JSON.stringify(data));
+    }
+
+    function renderCard(inst, data) {
+        const card     = document.getElementById('edge-card-' + inst.index);
+        const statusEl = document.getElementById('edge-status-' + inst.index);
+
+        if (data.status === 'connected') {
+            let html = `<p><span class="status-label">Status</span><span class="status-ok">Connected</span></p>
+                        <p><span class="status-label">URL</span><span>${escHtml(data.url)}</span></p>`;
+            if (data.hostname) html += `<p><span class="status-label">Hostname</span><span>${escHtml(data.hostname)}</span></p>`;
+
+            if (data.services) {
+                html += '<hr style="margin:14px 0;">';
+                for (const [key, svc] of Object.entries(data.services)) {
+                    const label = SERVICE_LABELS[key] || key;
+                    const okSpan = svc.status === 'ok'
+                        ? '<span class="status-ok">OK</span>'
+                        : '<span class="status-error">Error</span>';
+                    let meta = renderVersion(svc, key);
+                    if (key === 'marketplace' && svc.data != null) {
+                        meta += `<span class="svc-meta">${svc.data} container${svc.data !== 1 ? 's' : ''}</span>`;
+                    }
+                    html += `<div class="svc-row"><span class="svc-label">${escHtml(label)}</span>${okSpan}${meta}</div>`;
+                }
+            }
+            card.innerHTML = html;
+        } else {
+            statusEl.textContent = data.status === 'not_configured' ? 'Not configured' : 'No Litmus Edge connected';
+            statusEl.className = 'status-error';
+        }
+    }
+
+    window.refreshInstance = async function refreshInstance(index) {
+        const inst = instances.find(i => i.index === index);
+        if (!inst) return;
+        const btn = document.getElementById('refresh-btn-' + index);
+        const statusEl = document.getElementById('edge-status-' + index);
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+        if (statusEl) { statusEl.textContent = 'Checking…'; statusEl.className = ''; statusEl.style.color = '#9ab8b0'; }
+
+        let data;
+        try {
+            const resp = await fetch('/api/edge-health?index=' + index);
+            data = await resp.json();
+            setCached(index, data);
+        } catch (_) {
+            data = { status: 'error' };
+        }
+
+        renderCard(inst, data);
+        if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    }
+
+    // On load: show cached state, no API calls
+    instances.forEach(inst => {
+        const cached = getCached(inst.index);
+        if (cached) renderCard(inst, cached);
+    });
+})();
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
 import asyncio
+import re
 import nats
 import json
 import pandas as pd
@@ -14,17 +15,15 @@ from utils.auth import get_nats_connection_params, get_influx_connection_params
 from numpy import zeros
 from starlette.requests import Request
 from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS
+from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 from mcp.types import TextContent
 
 import influxdb
 
 INFLUXDB_AVAILABLE = True
-# except ImportError:
-#     INFLUXDB_AVAILABLE = False
-#     logger.warning(
-#         "influxdb library not available. Historical data queries will not work."
-#     )
+
+# How long to wait for a NATS message before giving up
+NATS_TIMEOUT = 30  # seconds
 
 
 async def get_current_value_on_topic(
@@ -50,6 +49,10 @@ async def get_current_value_on_topic(
             nats_port = nats_port or NATS_PORT
             nats_user = None
             nats_password = None
+            logger.warning(
+                "NATS params missing from request headers, using config defaults: %s:%s",
+                nats_source, nats_port,
+            )
     else:
         # Use provided parameters or config defaults
         nats_source = nats_source or NATS_SOURCE
@@ -139,6 +142,10 @@ async def get_multiple_values_from_topic_tool(
             nats_port = nats_port or NATS_PORT
             nats_user = None
             nats_password = None
+            logger.warning(
+                "NATS params missing from request headers, using config defaults: %s:%s",
+                nats_source, nats_port,
+            )
 
         stop_event = asyncio.Event()
 
@@ -214,9 +221,23 @@ async def _nc_single_topic(
         result_message = message
         stop_event.set()
 
-    await nc.subscribe(nats_subscription_topic, cb=message_handler)
-    await stop_event.wait()
-    await nc.drain()
+    try:
+        await nc.subscribe(nats_subscription_topic, cb=message_handler)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=NATS_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=(
+                        f"Timed out waiting for a message on topic "
+                        f"'{nats_subscription_topic}' after {NATS_TIMEOUT}s. "
+                        "Check that the topic is active and publishing data."
+                    ),
+                )
+            )
+    finally:
+        await nc.drain()
 
     return result_message
 
@@ -266,9 +287,24 @@ async def _collect_multiple_values_from_topic(
         else:
             stop_event.set()
 
-    await nc.subscribe(topic, cb=message_handler)
-    await stop_event.wait()
-    await nc.drain()
+    try:
+        await nc.subscribe(topic, cb=message_handler)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=NATS_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=(
+                        f"Timed out collecting {num_samples} samples from topic "
+                        f"'{topic}' after {NATS_TIMEOUT}s "
+                        f"(received {counter}/{num_samples}). "
+                        "Check that the topic is active and publishing data."
+                    ),
+                )
+            )
+    finally:
+        await nc.drain()
 
     return results
 
@@ -307,6 +343,22 @@ async def get_historical_data_from_influxdb_tool(
                 ErrorData(
                     code=INVALID_PARAMS,
                     message="'measurement' parameter is required",
+                )
+            )
+
+        # Validate inputs before interpolating into the query string
+        if not re.fullmatch(r'[\w][\w\-\.]*', measurement):
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Invalid measurement name '{measurement}'. Only alphanumeric characters, underscores, hyphens, and dots are allowed.",
+                )
+            )
+        if not re.fullmatch(r'\d+(ms|[usmhdw])', time_range):
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Invalid time_range '{time_range}'. Expected InfluxDB duration format, e.g. '1h', '30m', '7d'.",
                 )
             )
 

@@ -27,7 +27,7 @@ async def get_all_containers_on_litmusedge(request: Request) -> list[TextContent
         raise
     except Exception as e:
         logger.error(f"Error retrieving containers: {e}", exc_info=True)
-        return format_error_response("retrieval_failed", str(e), count=0, containers=[])
+        return format_error_response("retrieval_failed", str(e))
 
 
 async def run_docker_container_on_litmusedge(

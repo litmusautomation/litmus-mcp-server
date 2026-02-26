@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Server Error · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>Server Error</h1>
+</div>
+
+<div class="error-card">
+    <h2>500 — Internal Server Error</h2>
+    <p>Something went wrong on our end. This may also be caused by an API call timeout.</p>
+    <a href="/" class="side-button">Back to home</a>
+</div>
+{% endblock %}

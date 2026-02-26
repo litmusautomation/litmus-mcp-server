@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}Config · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>Configuration</h1>
+</div>
+
+<hr>
+
+<h2>Active model</h2>
+
+<div class="model-selector">
+    <div class="provider-pills">
+        <button type="button" class="provider-pill{% if current_model == 'anthropic' %} active{% endif %}"
+                data-provider="anthropic" onclick="switchProvider('anthropic')">Anthropic</button>
+        <button type="button" class="provider-pill{% if current_model == 'openai' %} active{% endif %}"
+                data-provider="openai" onclick="switchProvider('openai')">OpenAI</button>
+    </div>
+
+    <div class="model-list-panel">
+        <div class="model-list" id="model-list">
+            <div class="mcp-panel-loading">Loading…</div>
+        </div>
+        <div class="model-selector-footer">
+            <span class="model-selector-hint" id="model-selector-hint"></span>
+            <button type="button" class="side-button" id="save-model-btn" onclick="saveModel()" disabled>Save model</button>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="{{ url_for('switch_model') }}" id="model-save-form" style="display:none;">
+    <input type="hidden" name="switch_model_to">
+    <input type="hidden" name="model_id">
+</form>
+
+<script>
+const _initProvider = {{ ('"' + current_model + '"') | safe }} || 'anthropic';
+const _initModelId  = {{ ('"' + current_model_id + '"') | safe }} || '';
+let selectedProvider = _initProvider;
+let selectedModelId  = _initModelId;
+
+async function loadModels(provider) {
+    const list = document.getElementById('model-list');
+    list.innerHTML = '<div class="mcp-panel-loading">Loading…</div>';
+    document.getElementById('save-model-btn').disabled = true;
+    document.getElementById('model-selector-hint').textContent = '';
+
+    try {
+        const resp = await fetch('/api/models?provider=' + provider);
+        const data = await resp.json();
+
+        if (data.error) {
+            list.innerHTML = '<div class="model-list-error">Could not load models — check API key</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        if (data.models.length === 0) {
+            list.innerHTML = '<div class="mcp-panel-empty">No models found</div>';
+            return;
+        }
+
+        data.models.forEach(m => {
+            const item = document.createElement('div');
+            const isCurrent = (m.id === selectedModelId && provider === selectedProvider);
+            item.className = 'model-list-item' + (isCurrent ? ' selected' : '');
+            item.dataset.id = m.id;
+            item.innerHTML = '<span class="model-list-dot"></span><span class="model-list-name">' + escHtml(m.name || m.id) + '</span>';
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.model-list-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+                selectedModelId = m.id;
+                document.getElementById('save-model-btn').disabled = false;
+                document.getElementById('model-selector-hint').textContent = '';
+            });
+            list.appendChild(item);
+        });
+
+        // Enable save if something is already selected
+        if (list.querySelector('.model-list-item.selected')) {
+            document.getElementById('save-model-btn').disabled = false;
+        }
+
+    } catch (e) {
+        list.innerHTML = '<div class="model-list-error">Could not load models — check API key</div>';
+    }
+}
+
+function switchProvider(provider) {
+    selectedProvider = provider;
+    document.querySelectorAll('.provider-pill').forEach(p => {
+        p.classList.toggle('active', p.dataset.provider === provider);
+    });
+    // Keep selectedModelId across provider switch so the other side
+    // stays highlighted if we ever switch back, but reset for a clean slate
+    selectedModelId = (provider === _initProvider) ? _initModelId : '';
+    loadModels(provider);
+}
+
+function saveModel() {
+    if (!selectedModelId) {
+        document.getElementById('model-selector-hint').textContent = 'Select a model first';
+        return;
+    }
+    const form = document.getElementById('model-save-form');
+    form.querySelector('[name=switch_model_to]').value = selectedProvider;
+    form.querySelector('[name=model_id]').value = selectedModelId;
+    form.submit();
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Load on page ready
+loadModels(_initProvider);
+</script>
+
+<hr>
+
+<h2>Litmus Edge Instances</h2>
+
+<div class="edge-add-form">
+    <input type="text" id="inst-url" placeholder="URL (https://...)" style="margin-bottom:0;">
+    <input type="text" id="inst-id" placeholder="Client ID" style="margin-bottom:0;">
+    <input type="password" id="inst-secret" placeholder="Client Secret" style="margin-bottom:0;">
+    <button type="button" id="inst-add-btn" onclick="addInstance()">Add instance</button>
+</div>
+<div id="inst-status" style="font-size:13px; margin-bottom:8px; min-height:18px;"></div>
+<div class="inst-list" id="inst-list">
+    <div class="mcp-panel-loading">Loading…</div>
+</div>
+
+<script>
+function escInstHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function loadInstances() {
+    const list = document.getElementById('inst-list');
+    try {
+        const resp = await fetch('/api/edge-instances');
+        const data = await resp.json();
+        renderInstances(data.instances, data.active);
+    } catch (e) {
+        list.innerHTML = '<div class="mcp-panel-empty">Could not load instances.</div>';
+    }
+}
+
+function renderInstances(instances, active) {
+    const list = document.getElementById('inst-list');
+    if (!instances || instances.length === 0) {
+        list.innerHTML = '<div class="mcp-panel-empty">No instances configured yet.</div>';
+        return;
+    }
+    list.innerHTML = instances.map(inst => {
+        const isActive = inst.index === active;
+        const actionBtn = isActive
+            ? '<span style="font-size:12px;color:#5ba89a;font-weight:600;">Active</span>'
+            : `<button type="button" class="side-button" onclick="switchInstance(${inst.index})">Make active</button>`;
+        return `<div class="inst-item${isActive ? ' active-inst' : ''}">
+            <div class="inst-dot${isActive ? ' active' : ''}"></div>
+            <span class="inst-name">${escInstHtml(inst.name)}</span>
+            <span class="inst-url">${escInstHtml(inst.url)}</span>
+            <div class="inst-actions">
+                ${actionBtn}
+                <button type="button" class="md-icon-btn" onclick="removeInstance(${inst.index})" title="Remove">
+                    <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function addInstance() {
+    const url    = document.getElementById('inst-url').value.trim();
+    const cid    = document.getElementById('inst-id').value.trim();
+    const secret = document.getElementById('inst-secret').value.trim();
+    const status = document.getElementById('inst-status');
+    const btn    = document.getElementById('inst-add-btn');
+
+    if (!url || !cid || !secret) {
+        status.textContent = 'All fields are required.';
+        status.style.color = '#c0392b';
+        return;
+    }
+
+    btn.disabled = true;
+    status.textContent = 'Connecting…';
+    status.style.color = '#4d6b65';
+
+    const fd = new FormData();
+    fd.append('url', url);
+    fd.append('client_id', cid);
+    fd.append('client_secret', secret);
+
+    try {
+        const resp = await fetch('/api/add-edge-instance', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.error) {
+            status.textContent = data.error;
+            status.style.color = '#c0392b';
+        } else {
+            status.textContent = `Added: ${data.name}`;
+            status.style.color = '#059669';
+            document.getElementById('inst-url').value    = '';
+            document.getElementById('inst-id').value     = '';
+            document.getElementById('inst-secret').value = '';
+            await loadInstances();
+        }
+    } catch (e) {
+        status.textContent = 'Connection error.';
+        status.style.color = '#c0392b';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function switchInstance(index) {
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/switch-edge-instance', { method: 'POST', body: fd });
+    await loadInstances();
+}
+
+async function removeInstance(index) {
+    if (!confirm('Remove this instance?')) return;
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/remove-edge-instance', { method: 'POST', body: fd });
+    await loadInstances();
+}
+
+loadInstances();
+</script>
+
+<hr>
+
+<h2>Environment variables</h2>
+
+<div class="env-form">
+    <form method="post" action="{{ url_for('update_env_submit') }}" style="display: contents;">
+        <label>
+            <input type="text" name="env_key" placeholder="Key" required>
+        </label>
+        <label>
+            <input type="text" name="env_value" placeholder="Value" required>
+        </label>
+        <button type="submit">Add / update</button>
+    </form>
+</div>
+
+{% if updated %}
+<div id="toast" class="toast">Environment updated.</div>
+<script>
+    setTimeout(() => {
+        const toast = document.getElementById("toast");
+        if (toast) toast.style.opacity = "0";
+    }, 2500);
+</script>
+{% endif %}
+
+<table class="env-table">
+    <colgroup>
+        <col style="width: 36%;">
+        <col style="width: 57%;">
+        <col style="width: 7%;">
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Key</th>
+            <th>Value</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for key, value in env.items() %}
+        {% set is_sensitive = 'KEY' in key or 'SECRET' in key or 'TOKEN' in key or 'PASSWORD' in key %}
+        <tr>
+            <td>{{ key }}</td>
+            <td>
+                {% if is_sensitive %}
+                <div class="env-sensitive">
+                    <span class="env-sensitive-value" data-value="{{ value }}" data-hidden="true">••••••••••••</span>
+                    <button type="button" class="env-reveal-btn" onclick="toggleEnvReveal(this)" title="Show / hide">
+                        <svg class="eye-show" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg class="eye-hide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    </button>
+                </div>
+                {% else %}
+                {{ value }}
+                {% endif %}
+            </td>
+            <td>
+                <form method="post" action="{{ url_for('remove_env') }}" style="margin: 0;">
+                    <input type="hidden" name="env_key" value="{{ key }}">
+                    <button type="submit" class="md-icon-btn" title="Remove">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18">
+                            <path d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+function toggleEnvReveal(btn) {
+    const span    = btn.previousElementSibling;
+    const hidden  = span.dataset.hidden === 'true';
+    span.textContent    = hidden ? span.dataset.value : '••••••••••••';
+    span.dataset.hidden = hidden ? 'false' : 'true';
+    btn.querySelector('.eye-show').style.display = hidden ? 'none' : '';
+    btn.querySelector('.eye-hide').style.display = hidden ? ''     : 'none';
+}
+</script>
+{% endblock %}

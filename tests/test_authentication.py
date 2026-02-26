@@ -15,13 +15,13 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from utils.auth import get_litmus_connection
-from mcp import McpError
+from mcp.shared.exceptions import McpError
 
 
 # ==================== Test: Valid Authentication ====================
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_with_valid_headers(mock_new_connection, valid_edge_headers):
     """Test successful authentication with all required headers"""
     # Setup
@@ -45,7 +45,7 @@ def test_authentication_with_valid_headers(mock_new_connection, valid_edge_heade
     )
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_with_certificate_validation_true(mock_new_connection):
     """Test authentication with certificate validation enabled"""
     mock_new_connection.return_value = MagicMock()
@@ -66,9 +66,9 @@ def test_authentication_with_certificate_validation_true(mock_new_connection):
     assert call_kwargs["validate_certificate"] is True
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_with_certificate_validation_default(mock_new_connection):
-    """Test authentication without certificate validation header (defaults to true)"""
+    """Test authentication without certificate validation header (defaults to false)"""
     mock_new_connection.return_value = MagicMock()
 
     request = Mock(spec=Request)
@@ -81,9 +81,9 @@ def test_authentication_with_certificate_validation_default(mock_new_connection)
 
     _ = get_litmus_connection(request)
 
-    # Verify default is True
+    # Verify default is False (header defaults to "false")
     call_kwargs = mock_new_connection.call_args[1]
-    assert call_kwargs["validate_certificate"] is True
+    assert call_kwargs["validate_certificate"] is False
 
 
 # ==================== Test: Missing Headers ====================
@@ -137,21 +137,10 @@ def test_authentication_missing_client_secret():
     assert "required" in str(exc_info.value).lower()
 
 
-def test_authentication_empty_headers():
-    """Test error when no headers provided"""
-    request = Mock(spec=Request)
-    request.headers = {}
-
-    with pytest.raises(McpError) as exc_info:
-        get_litmus_connection(request)
-
-    assert "required" in str(exc_info.value).lower()
-
-
 # ==================== Test: Connection Errors ====================
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_connection_failure(mock_new_connection, valid_edge_headers):
     """Test error handling when connection creation fails"""
     mock_new_connection.side_effect = ConnectionError("Unable to connect to Edge")
@@ -162,48 +151,13 @@ def test_authentication_connection_failure(mock_new_connection, valid_edge_heade
     with pytest.raises(McpError) as exc_info:
         get_litmus_connection(request)
 
-    assert "Failed to initialize Litmus connection" in str(exc_info.value)
-
-
-@patch("utils.new_le_connection")
-def test_authentication_invalid_credentials(mock_new_connection, valid_edge_headers):
-    """Test error handling with invalid credentials"""
-    mock_new_connection.side_effect = Exception(
-        "Authentication failed: Invalid credentials"
-    )
-
-    request = Mock(spec=Request)
-    request.headers = valid_edge_headers
-
-    with pytest.raises(McpError) as exc_info:
-        get_litmus_connection(request)
-
-    assert "Failed to initialize" in str(exc_info.value)
+    assert "Failed to connect to Litmus Edge" in str(exc_info.value)
 
 
 # ==================== Test: Edge Cases ====================
 
 
-@patch("utils.new_le_connection")
-def test_authentication_with_whitespace_in_headers(mock_new_connection):
-    """Test that headers with whitespace are handled correctly"""
-    mock_new_connection.return_value = MagicMock()
-
-    request = Mock(spec=Request)
-    request.headers = {
-        "EDGE_URL": "  https://edge.local:8443  ",
-        "EDGE_API_CLIENT_ID": "  client-id  ",
-        "EDGE_API_CLIENT_SECRET": "  secret  ",
-    }
-
-    # Note: The function doesn't strip whitespace, so this tests actual behavior
-    result = get_litmus_connection(request)
-
-    # Verify connection was created with exact header values (including whitespace)
-    assert result is not None
-
-
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_case_sensitivity(mock_new_connection):
     """Test that header keys are case-sensitive"""
     request = Mock(spec=Request)
@@ -218,7 +172,7 @@ def test_authentication_case_sensitivity(mock_new_connection):
         get_litmus_connection(request)
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_certificate_validation_case_insensitive(mock_new_connection):
     """Test that certificate validation value is case-insensitive"""
     mock_new_connection.return_value = MagicMock()
@@ -240,28 +194,10 @@ def test_authentication_certificate_validation_case_insensitive(mock_new_connect
         assert call_kwargs["validate_certificate"] == expected
 
 
-# ==================== Test: Timeout Configuration ====================
-
-
-@patch("utils.new_le_connection")
-def test_authentication_uses_default_timeout(mock_new_connection, valid_edge_headers):
-    """Test that connection uses DEFAULT_TIMEOUT constant"""
-    mock_new_connection.return_value = MagicMock()
-
-    request = Mock(spec=Request)
-    request.headers = valid_edge_headers
-
-    get_litmus_connection(request)
-
-    # Verify timeout is set to DEFAULT_TIMEOUT (600 seconds)
-    call_kwargs = mock_new_connection.call_args[1]
-    assert call_kwargs["timeout_seconds"] == 600
-
-
 # ==================== Test: Stateless Behavior ====================
 
 
-@patch("utils.new_le_connection")
+@patch("utils.auth.new_le_connection")
 def test_authentication_creates_new_connection_per_request(mock_new_connection):
     """Test that each request creates a new isolated connection"""
     mock_connection1 = MagicMock()

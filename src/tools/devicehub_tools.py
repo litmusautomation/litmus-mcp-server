@@ -1,3 +1,4 @@
+import time
 from typing import Optional, Any
 from config import logger
 from utils.auth import get_litmus_connection
@@ -10,6 +11,12 @@ from mcp.types import TextContent
 from starlette.requests import Request
 from litmussdk.devicehub import devices, tags
 from litmussdk.devicehub.drivers import list_all_drivers
+
+# Short-lived cache for the device list, keyed by EDGE_URL.
+# Avoids redundant API round-trips when the LLM calls multiple device tools
+# back-to-back within the same conversation turn.
+_device_list_cache: dict[str, tuple[list, float]] = {}
+_DEVICE_LIST_TTL = 10  # seconds
 
 
 async def get_litmusedge_driver_list(request: Request) -> list[TextContent]:
@@ -52,7 +59,7 @@ async def get_litmusedge_driver_list(request: Request) -> list[TextContent]:
         raise
     except Exception as e:
         logger.error(f"Error retrieving driver list: {e}", exc_info=True)
-        return format_error_response("retrieval_failed", str(e), count=0, drivers=[])
+        return format_error_response("retrieval_failed", str(e))
 
 
 async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextContent]:
@@ -100,7 +107,7 @@ async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextC
         raise
     except Exception as e:
         logger.error(f"Error retrieving devices: {e}", exc_info=True)
-        return format_error_response("retrieval_failed", str(e), count=0, devices=[])
+        return format_error_response("retrieval_failed", str(e))
 
 
 async def create_devicehub_device(
@@ -161,8 +168,11 @@ async def create_devicehub_device(
 
         created_device = devices.create_device(device, le_connection=connection)
 
-        # Build JSON-serializable device info
-        device_dict = _build_device_info(created_device)
+        device_dict = (
+            created_device.__dict__
+            if hasattr(created_device, "__dict__")
+            else {"id": str(created_device)}
+        )
 
         logger.info(f"Created device '{name}' with driver '{selected_driver}'")
 
@@ -205,7 +215,7 @@ async def get_devicehub_device_tags(
         connection = get_litmus_connection(request)
 
         # Find the device
-        requested_device = _find_device_by_name(connection, device_name)
+        requested_device = _find_device_by_name(connection, device_name, request)
         if not requested_device:
             raise McpError(
                 ErrorData(
@@ -248,7 +258,7 @@ async def get_devicehub_device_tags(
         raise
     except Exception as e:
         logger.error(f"Error retrieving tags: {e}", exc_info=True)
-        return format_error_response("retrieval_failed", str(e), count=0, tags=[])
+        return format_error_response("retrieval_failed", str(e))
 
 
 async def get_current_value_of_devicehub_tag(
@@ -282,7 +292,7 @@ async def get_current_value_of_devicehub_tag(
         connection = get_litmus_connection(request)
 
         # Find device
-        requested_device = _find_device_by_name(connection, device_name)
+        requested_device = _find_device_by_name(connection, device_name, request)
         if not requested_device:
             raise McpError(
                 ErrorData(
@@ -352,9 +362,25 @@ async def get_current_value_of_devicehub_tag(
         return format_error_response("read_failed", str(e))
 
 
-def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
-    """Find a device by name from the device list."""
-    device_list = devices.list_devices(le_connection=connection)
+def _find_device_by_name(
+    connection: Any, device_name: str, request=None
+) -> Optional[Any]:
+    """Find a device by name, using a short-lived cache to avoid redundant API calls."""
+    cache_key = ""
+    if request is not None:
+        cache_key = request.headers.get("EDGE_URL") or ""
+
+    now = time.monotonic()
+    if cache_key:
+        cached = _device_list_cache.get(cache_key)
+        if cached and now - cached[1] < _DEVICE_LIST_TTL:
+            device_list = cached[0]
+        else:
+            device_list = devices.list_devices(le_connection=connection)
+            _device_list_cache[cache_key] = (device_list, now)
+    else:
+        device_list = devices.list_devices(le_connection=connection)
+
     for device in device_list:
         if device.name == device_name:
             return device
@@ -363,17 +389,10 @@ def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
 
 def _build_device_info(device: Any) -> dict:
     """Build device information dictionary."""
-    # Extract driver ID if driver is an object, otherwise use as-is
-    driver_value = getattr(device, "driver", None)
-    if driver_value and hasattr(driver_value, "id"):
-        driver_value = driver_value.id
-    elif driver_value and hasattr(driver_value, "name"):
-        driver_value = driver_value.name
-
     device_info = {
         "name": device.name,
         "id": getattr(device, "id", None),
-        "driver": driver_value,
+        "driver": getattr(device, "driver", None),
         "metadata": getattr(device, "metadata", "unknown"),
         "description": getattr(device, "description", None),
         "properties": getattr(device, "properties", None),
