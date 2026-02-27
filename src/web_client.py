@@ -30,7 +30,6 @@ from env_config import (
     mcp_env_remover,
     key_of_anthropic_api_key,
     key_of_openai_api_key,
-    get_current_mcp_env,
     check_model_key,
     MODEL_NAME_ANTHROPIC,
     MODEL_NAME_OPENAI,
@@ -859,6 +858,7 @@ if __name__ == "__main__":
     # Wait until the MCP SSE server on port 8000 is accepting connections (max 10 s).
     import socket as _socket
     import time as _time
+
     _mcp_port = int(os.environ.get("MCP_PORT", 8000))
     for _ in range(20):
         try:
