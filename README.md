@@ -32,6 +32,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 - [Quick Launch](#quick-launch)
   - [Web UI](#web-ui)
+  - [Persistent Configuration](#persistent-configuration)
   - [Claude Code CLI](#claude-code-cli)
   - [Cursor IDE](#cursor-ide)
   - [VS Code / Copilot](#vs-code--github-copilot)
@@ -81,6 +82,43 @@ If you deploy the MCP server and web client on separate hosts, set `MCP_SSE_URL`
 ```bash
 -e MCP_SSE_URL=http://<mcp-server-host>:8000/sse
 ```
+
+### Persistent Configuration
+
+By default, configuration saved through the Web UI (API keys, Litmus Edge instances, model preferences, connection settings) is written to `.env` inside the container and is lost when the container is removed.
+
+To retain configuration across container restarts and replacements, mount a host file over `/app/.env`:
+
+```bash
+# One-time setup — the host file must exist before docker run
+mkdir -p /opt/litmus-mcp
+touch /opt/litmus-mcp/.env
+
+# Run with the volume mount
+docker run -d --name litmus-mcp-server \
+  -p 8000:8000 -p 9000:9000 \
+  -v /opt/litmus-mcp/.env:/app/.env \
+  ghcr.io/litmusautomation/litmus-mcp-server:latest
+```
+
+Any configuration you save in the UI is written to `/opt/litmus-mcp/.env` on the host. A new container started with the same `-v` flag will pick it up automatically on startup.
+
+> **Note:** The host-side file must be created with `touch` before running the container. If it does not exist, Docker creates a directory at that path and the application will fail to write configuration.
+
+**Docker Compose equivalent:**
+
+```yaml
+services:
+  litmus-mcp-server:
+    image: ghcr.io/litmusautomation/litmus-mcp-server:latest
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    volumes:
+      - /opt/litmus-mcp/.env:/app/.env
+```
+
+---
 
 ### Claude Code CLI
 Run Claude from a directory that includes a configuration file at `~/.claude/mcp.json`:
