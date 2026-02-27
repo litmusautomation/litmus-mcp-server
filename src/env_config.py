@@ -35,8 +35,10 @@ ANTHROPIC_KEY = ""
 
 key_of_anthropic_api_key = "ANTHROPIC_API_KEY"
 key_of_openai_api_key = "OPENAI_API_KEY"
+key_of_gemini_api_key = "GEMINI_API_KEY"
 MODEL_NAME_OPENAI = "openai"
 MODEL_NAME_ANTHROPIC = "anthropic"
+MODEL_NAME_GEMINI = "gemini"
 MODEL_PREFERENCE = "PREFERRED_MODEL"
 PREFERRED_MODEL_ID = "PREFERRED_MODEL_ID"
 ACTIVE_EDGE_INSTANCE = "ACTIVE_EDGE_INSTANCE"
@@ -159,20 +161,26 @@ def activate_edge_instance(index: int):
 def check_model_key() -> Tuple[bool, str]:
     anthropic_exists = os.environ.get(key_of_anthropic_api_key)
     openai_exists = os.environ.get(key_of_openai_api_key)
+    gemini_exists = os.environ.get(key_of_gemini_api_key)
     preferred_model = os.environ.get(MODEL_PREFERENCE)
 
     if preferred_model is not None and preferred_model in [
         MODEL_NAME_OPENAI,
         MODEL_NAME_ANTHROPIC,
+        MODEL_NAME_GEMINI,
     ]:
         return True, preferred_model
 
-    if anthropic_exists is None and openai_exists is None:
+    if anthropic_exists is None and openai_exists is None and gemini_exists is None:
         return False, ""
+
+    if anthropic_exists:
+        mcp_env_updater(MODEL_PREFERENCE, MODEL_NAME_ANTHROPIC)
+        return True, MODEL_NAME_ANTHROPIC
 
     if openai_exists:
         mcp_env_updater(MODEL_PREFERENCE, MODEL_NAME_OPENAI)
         return True, MODEL_NAME_OPENAI
 
-    mcp_env_updater(MODEL_PREFERENCE, MODEL_NAME_ANTHROPIC)
-    return True, MODEL_NAME_ANTHROPIC
+    mcp_env_updater(MODEL_PREFERENCE, MODEL_NAME_GEMINI)
+    return True, MODEL_NAME_GEMINI

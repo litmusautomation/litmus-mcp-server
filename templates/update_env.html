@@ -26,6 +26,13 @@
             <button type="button" class="reveal-btn" onclick="toggleReveal('openai-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
     </label>
+    <label>Google Gemini API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="gemini-key" value="{{ settings.gemini_key }}"
+                   placeholder="AIza…" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('gemini-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
     <div class="settings-save-row">
         <span class="settings-status" id="api-keys-status"></span>
         <button type="button" class="side-button" onclick="saveApiKeys()">Save keys</button>
@@ -43,6 +50,8 @@
                 data-provider="anthropic" onclick="switchProvider('anthropic')">Anthropic</button>
         <button type="button" class="provider-pill{% if current_model == 'openai' %} active{% endif %}"
                 data-provider="openai" onclick="switchProvider('openai')">OpenAI</button>
+        <button type="button" class="provider-pill{% if current_model == 'gemini' %} active{% endif %}"
+                data-provider="gemini" onclick="switchProvider('gemini')">Gemini</button>
     </div>
 
     <div class="model-list-panel">
@@ -279,6 +288,10 @@ loadInstances();
             <button type="button" class="reveal-btn" onclick="toggleReveal('nats-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
     </label>
+    <label class="settings-checkbox" style="grid-column: 1 / -1;">
+        <input type="checkbox" id="nats-tls" {% if mcp_config.nats_tls == 'true' %}checked{% endif %}>
+        Use TLS
+    </label>
 </div>
 
 <h3>InfluxDB</h3>
@@ -311,8 +324,10 @@ async function saveApiKeys() {
     const data = {};
     const ak = document.getElementById('anthropic-key').value.trim();
     const ok = document.getElementById('openai-key').value.trim();
+    const gk = document.getElementById('gemini-key').value.trim();
     if (ak) data['ANTHROPIC_API_KEY'] = ak;
     if (ok) data['OPENAI_API_KEY'] = ok;
+    if (gk) data['GEMINI_API_KEY'] = gk;
     if (!Object.keys(data).length) {
         document.getElementById('api-keys-status').textContent = 'Enter at least one key.';
         document.getElementById('api-keys-status').className = 'settings-status err';
@@ -328,6 +343,7 @@ async function saveConnSettings() {
         NATS_PORT:            document.getElementById('nats-port').value.trim(),
         NATS_USER:            document.getElementById('nats-user').value.trim(),
         NATS_PASSWORD:        document.getElementById('nats-password').value.trim(),
+        NATS_TLS:             document.getElementById('nats-tls').checked ? 'true' : 'false',
         INFLUX_HOST:          document.getElementById('influx-host').value.trim(),
         INFLUX_PORT:          document.getElementById('influx-port').value.trim(),
         INFLUX_DB_NAME:       document.getElementById('influx-db').value.trim(),

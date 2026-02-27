@@ -30,9 +30,11 @@ from env_config import (
     mcp_env_remover,
     key_of_anthropic_api_key,
     key_of_openai_api_key,
+    key_of_gemini_api_key,
     check_model_key,
     MODEL_NAME_ANTHROPIC,
     MODEL_NAME_OPENAI,
+    MODEL_NAME_GEMINI,
     MODEL_PREFERENCE,
     PREFERRED_MODEL_ID,
     ACTIVE_EDGE_INSTANCE,
@@ -149,6 +151,29 @@ async def api_models(provider: str):
             )
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
+    elif provider == "gemini":
+        key = os.environ.get("GEMINI_API_KEY")
+        if not key:
+            return JSONResponse({"error": "No Gemini key configured"}, status_code=400)
+        try:
+            from google import genai
+
+            def _list_gemini_models():
+                client = genai.Client(api_key=key)
+                return list(client.models.list())
+
+            model_list = await asyncio.to_thread(_list_gemini_models)
+            models = [
+                {
+                    "id": m.name.replace("models/", "") if m.name.startswith("models/") else m.name,
+                    "name": m.display_name or m.name,
+                }
+                for m in model_list
+                if "gemini" in (m.name or "").lower()
+            ]
+            return JSONResponse({"models": models})
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"error": "Unknown provider"}, status_code=400)
 
 
@@ -164,8 +189,9 @@ async def setup(request: Request):
     form = await request.form()
     anthropic_key = form.get("value_of_anthropic_api_key", "").strip()
     openai_key = form.get("value_of_openai_api_key", "").strip()
+    gemini_key = form.get("value_of_gemini_api_key", "").strip()
 
-    if not anthropic_key and not openai_key:
+    if not anthropic_key and not openai_key and not gemini_key:
         return templates.TemplateResponse(
             "setup.html",
             {"request": request, "error": "Please provide at least one API key."},
@@ -175,6 +201,8 @@ async def setup(request: Request):
         mcp_env_updater(key_of_anthropic_api_key, anthropic_key)
     if openai_key:
         mcp_env_updater(key_of_openai_api_key, openai_key)
+    if gemini_key:
+        mcp_env_updater(key_of_gemini_api_key, gemini_key)
 
     return RedirectResponse("/", status_code=HTTP_303_SEE_OTHER)
 
@@ -184,6 +212,7 @@ async def setup_key(request: Request):
     form = await request.form()
     anthropic_key = form.get("value_of_anthropic_api_key", "").strip()
     openai_key = form.get("value_of_openai_api_key", "").strip()
+    gemini_key = form.get("value_of_gemini_api_key", "").strip()
     saved = []
     if anthropic_key:
         mcp_env_updater(key_of_anthropic_api_key, anthropic_key)
@@ -193,6 +222,10 @@ async def setup_key(request: Request):
         mcp_env_updater(key_of_openai_api_key, openai_key)
         mcp_env_loader()
         saved.append("openai")
+    if gemini_key:
+        mcp_env_updater(key_of_gemini_api_key, gemini_key)
+        mcp_env_loader()
+        saved.append("gemini")
     if not saved:
         return JSONResponse({"error": "Provide at least one key"}, status_code=400)
     return JSONResponse({"saved": saved})
@@ -204,11 +237,12 @@ async def switch_model(
     switch_model_to: str = Form(...),
     model_id: str = Form(default=""),
 ):
-    preference = (
-        MODEL_NAME_ANTHROPIC
-        if switch_model_to.startswith("anthropic")
-        else MODEL_NAME_OPENAI
-    )
+    if switch_model_to.startswith("anthropic"):
+        preference = MODEL_NAME_ANTHROPIC
+    elif switch_model_to.startswith("gemini"):
+        preference = MODEL_NAME_GEMINI
+    else:
+        preference = MODEL_NAME_OPENAI
     mcp_env_updater(MODEL_PREFERENCE, preference)
     if model_id:
         mcp_env_updater(PREFERRED_MODEL_ID, model_id)
@@ -252,6 +286,7 @@ async def update_env_form(request: Request):
         "nats_port": os.environ.get("NATS_PORT", "4222"),
         "nats_user": os.environ.get("NATS_USER", ""),
         "nats_password": os.environ.get("NATS_PASSWORD", ""),
+        "nats_tls": os.environ.get("NATS_TLS", "true"),
         "influx_host": os.environ.get("INFLUX_HOST", ""),
         "influx_port": os.environ.get("INFLUX_PORT", "8086"),
         "influx_db_name": os.environ.get("INFLUX_DB_NAME", "tsdata"),
@@ -261,6 +296,7 @@ async def update_env_form(request: Request):
     settings = {
         "anthropic_key": os.environ.get("ANTHROPIC_API_KEY", ""),
         "openai_key": os.environ.get("OPENAI_API_KEY", ""),
+        "gemini_key": os.environ.get("GEMINI_API_KEY", ""),
         "validate_cert": os.environ.get("VALIDATE_CERTIFICATE", "false"),
     }
 
@@ -306,7 +342,12 @@ async def clear_history(request: Request):
 async def api_switch_model(
     request: Request, provider: str = Form(...), model_id: str = Form(...)
 ):
-    preference = MODEL_NAME_ANTHROPIC if provider == "anthropic" else MODEL_NAME_OPENAI
+    if provider == "anthropic":
+        preference = MODEL_NAME_ANTHROPIC
+    elif provider == "gemini":
+        preference = MODEL_NAME_GEMINI
+    else:
+        preference = MODEL_NAME_OPENAI
     mcp_env_updater(MODEL_PREFERENCE, preference)
     mcp_env_updater(PREFERRED_MODEL_ID, model_id)
     mcp_env_loader()
@@ -507,6 +548,30 @@ async def chat_post(request: Request):
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
 
+    elif model_type == MODEL_NAME_GEMINI:
+
+        async def gemini_stream():
+            full_response = ""
+            try:
+                async for chunk in client.process_streaming_query_gemini(
+                    query, conversation_history=conversation_history
+                ):
+                    full_response += chunk
+                    yield chunk
+            except Exception as e:
+                logger.exception(f"Gemini streaming error: {e}")
+                error_msg = f"\n[Error: {e}]"
+                full_response += error_msg
+                yield error_msg
+            finally:
+                update_conversation_history(session_id, query, full_response)
+
+        return StreamingResponse(
+            gemini_stream(),
+            media_type="text/plain",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
     else:  # OpenAI — non-streaming, wrap as single-chunk stream
 
         async def openai_stream():
@@ -591,6 +656,7 @@ async def api_mcp_client_config(request: Request):
             "nats_port": os.environ.get("NATS_PORT", "4222"),
             "nats_user": os.environ.get("NATS_USER", ""),
             "nats_password": os.environ.get("NATS_PASSWORD", ""),
+            "nats_tls": os.environ.get("NATS_TLS", "true"),
             "influx_host": os.environ.get("INFLUX_HOST", ""),
             "influx_port": os.environ.get("INFLUX_PORT", "8086"),
             "influx_db_name": os.environ.get("INFLUX_DB_NAME", "tsdata"),

@@ -13,6 +13,7 @@ from agents import ModelSettings
 
 _anthropic_display_name = "Claude Sonnet 4.6"
 _openai_display_name = "OpenAI GPT-4.1"
+_gemini_display_name = "Google Gemini"
 
 _CREDENTIAL_KEYS = (
     "EDGE_URL",
@@ -35,7 +36,11 @@ def _get_model_id(provider: str) -> str:
     preferred = os.environ.get("PREFERRED_MODEL_ID", "")
     if preferred:
         return preferred
-    return "claude-sonnet-4-6" if provider == "anthropic" else "gpt-4.1"
+    if provider == "anthropic":
+        return "claude-sonnet-4-6"
+    if provider == "gemini":
+        return "gemini-2.0-flash"
+    return "gpt-4.1"
 
 _system_prompt = (
     "You are a helpful assistant for Litmus Edge, an industrial IoT platform. "
@@ -226,6 +231,88 @@ class MCPClient:
 
                 messages.append({"role": "user", "content": tool_results})
                 # Loop: stream the follow-up response after tool results
+
+    async def process_streaming_query_gemini(
+        self, query: str, conversation_history=None, max_tokens: int = 4096
+    ):
+        """
+        Stream a Gemini response, handling tool calls mid-stream.
+
+        Yields plain text chunks and \\n[Tool: <name>]\\n sentinel lines.
+        """
+        from google import genai
+        from google.genai import types
+
+        self.model_used = _gemini_display_name
+
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        client = genai.Client(api_key=api_key)
+
+        contents = []
+        if conversation_history:
+            for msg in conversation_history:
+                role = "model" if msg["role"] == "assistant" else "user"
+                contents.append(
+                    types.Content(role=role, parts=[types.Part(text=msg["content"])])
+                )
+        contents.append(types.Content(role="user", parts=[types.Part(text=query)]))
+
+        async with self._open_session() as session:
+            tools_resp = await session.list_tools()
+            function_declarations = [
+                types.FunctionDeclaration(
+                    name=t.name,
+                    description=t.description or "",
+                    parameters=t.inputSchema,
+                )
+                for t in tools_resp.tools
+            ]
+            gemini_tools = [types.Tool(function_declarations=function_declarations)]
+
+            while True:
+                function_calls = []
+                assistant_parts = []
+
+                async for chunk in await client.aio.models.generate_content_stream(
+                    model=_get_model_id("gemini"),
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=_system_prompt,
+                        tools=gemini_tools,
+                        max_output_tokens=max_tokens,
+                    ),
+                ):
+                    if not chunk.candidates:
+                        continue
+                    for part in chunk.candidates[0].content.parts:
+                        if part.text:
+                            assistant_parts.append(part)
+                            yield part.text
+                        elif part.function_call:
+                            assistant_parts.append(part)
+                            function_calls.append(part.function_call)
+
+                if not function_calls:
+                    break
+
+                contents.append(types.Content(role="model", parts=assistant_parts))
+
+                response_parts = []
+                for fc in function_calls:
+                    yield f"\n[Tool: {fc.name}]\n"
+                    tool_args = dict(fc.args) if fc.args else {}
+                    result = await session.call_tool(fc.name, tool_args)
+                    result_text = "\n".join(
+                        rc.text for rc in result.content if hasattr(rc, "text")
+                    )
+                    response_parts.append(
+                        types.Part.from_function_response(
+                            name=fc.name,
+                            response={"result": result_text},
+                        )
+                    )
+
+                contents.append(types.Content(role="user", parts=response_parts))
 
     async def cleanup(self):
         pass  # No persistent resources; kept for interface compatibility

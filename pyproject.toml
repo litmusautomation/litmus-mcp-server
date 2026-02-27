@@ -30,6 +30,7 @@ lint = [
 ]
 llm-sdks = [
     "anthropic>=0.49.0",
+    "google-genai>=1.0",
     "openai-agents>=0.0.13",
 ]
 test = [
