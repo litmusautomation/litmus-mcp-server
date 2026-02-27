@@ -36,6 +36,7 @@ async def get_current_value_on_topic(
     Subscribes to a NATS topic and retrieves the next published message.
     """
     # Get connection parameters from auth function if request is provided
+    use_tls = True
     if request:
         try:
             params = get_nats_connection_params(request)
@@ -43,6 +44,7 @@ async def get_current_value_on_topic(
             nats_port = params["nats_port"]
             nats_user = params.get("nats_user")
             nats_password = params.get("nats_password")
+            use_tls = params.get("use_tls", True)
         except McpError:
             # Fall back to provided parameters or config defaults
             nats_source = nats_source or NATS_SOURCE
@@ -68,6 +70,7 @@ async def get_current_value_on_topic(
         stop_event,
         nats_user=nats_user,
         nats_password=nats_password,
+        use_tls=use_tls,
     )
     return final_message
 
@@ -130,12 +133,14 @@ async def get_multiple_values_from_topic_tool(
             num_samples = 100
 
         # Get connection parameters from auth function
+        use_tls = True
         try:
             params = get_nats_connection_params(request)
             nats_source = params["nats_source"]
             nats_port = params["nats_port"]
             nats_user = params.get("nats_user")
             nats_password = params.get("nats_password")
+            use_tls = params.get("use_tls", True)
         except McpError:
             # Fall back to provided parameters or config defaults
             nats_source = nats_source or NATS_SOURCE
@@ -157,6 +162,7 @@ async def get_multiple_values_from_topic_tool(
             num_samples,
             nats_user=nats_user,
             nats_password=nats_password,
+            use_tls=use_tls,
         )
 
         logger.info(f"Collected {num_samples} samples from topic: {topic}")
@@ -177,12 +183,14 @@ async def get_multiple_values_from_topic_tool(
         return format_error_response("collection_failed", str(e))
 
 
-def _get_connect_options(nats_source, nats_port, nats_user, nats_password):
+def _get_connect_options(nats_source, nats_port, nats_user, nats_password, use_tls=True):
+    connect_options = {
+        "servers": [f"nats://{nats_source}:{nats_port}"],
+        "allow_reconnect": False,  # per-call connections; no background reconnect loop
+    }
 
-    connect_options = {"servers": [f"nats://{nats_source}:{nats_port}"]}
-
-    ssl_context = ssl_config()
-    connect_options["tls"] = ssl_context
+    if use_tls:
+        connect_options["tls"] = ssl_config()
 
     if nats_user and nats_password:
         connect_options["user"] = nats_user
@@ -198,13 +206,14 @@ async def _nc_single_topic(
     stop_event: asyncio.Event,
     nats_user: Optional[str] = None,
     nats_password: Optional[str] = None,
+    use_tls: bool = True,
 ) -> dict:
     """
     Subscribe to a single topic and return a single message.
     """
 
     connect_options = _get_connect_options(
-        nats_source, nats_port, nats_user, nats_password
+        nats_source, nats_port, nats_user, nats_password, use_tls=use_tls
     )
     nc = await nats.connect(**connect_options)
 
@@ -237,7 +246,10 @@ async def _nc_single_topic(
                 )
             )
     finally:
-        await nc.drain()
+        try:
+            await nc.drain()
+        except Exception:
+            await nc.close()
 
     return result_message
 
@@ -250,12 +262,13 @@ async def _collect_multiple_values_from_topic(
     num_samples: int = 10,
     nats_user: Optional[str] = None,
     nats_password: Optional[str] = None,
+    use_tls: bool = True,
 ) -> dict:
     """
     Collect multiple values from a topic for plotting or analysis.
     """
     connect_options = _get_connect_options(
-        nats_source, nats_port, nats_user, nats_password
+        nats_source, nats_port, nats_user, nats_password, use_tls=use_tls
     )
     nc = await nats.connect(**connect_options)
 
@@ -304,7 +317,10 @@ async def _collect_multiple_values_from_topic(
                 )
             )
     finally:
-        await nc.drain()
+        try:
+            await nc.drain()
+        except Exception:
+            await nc.close()
 
     return results
 

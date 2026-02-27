@@ -139,6 +139,11 @@
                     <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
             </button>
+            <button type="button" id="stop-btn" aria-label="Stop" style="display:none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="4" y="4" width="16" height="16" rx="2"/>
+                </svg>
+            </button>
         </form>
         {% if has_history %}
         <form method="post" action="{{ url_for('clear_history') }}" id="clear-history-form" style="display:none;"></form>
@@ -376,6 +381,7 @@
     const form        = document.getElementById("chat-form");
     const textarea    = document.getElementById("query");
     const sendBtn     = document.getElementById("send-btn");
+    const stopBtn     = document.getElementById("stop-btn");
     const messages    = document.getElementById("chat-messages");
     const loadingBar  = document.getElementById("loading-bar");
     const clearForm   = document.getElementById("clear-history-form");
@@ -487,13 +493,15 @@
     }
 
     let isSubmitting = false;
+    let currentXhr = null;
 
     async function submit() {
         const query = textarea.value.trim();
         if (!query || isSubmitting) return;
 
         isSubmitting = true;
-        sendBtn.disabled = true;
+        sendBtn.style.display = "none";
+        stopBtn.style.display = "";
         textarea.disabled = true;
         loadingBar.style.display = "block";
 
@@ -511,6 +519,7 @@
 
         try {
             const xhr = new XMLHttpRequest();
+            currentXhr = xhr;
             xhr.open("POST", "/chat", true);
 
             xhr.onprogress = () => {
@@ -535,6 +544,10 @@
                 done();
             };
 
+            xhr.onabort = () => {
+                done();
+            };
+
             xhr.onerror = () => {
                 bubble.innerHTML = renderContent("Network error — please try again.");
                 done();
@@ -555,10 +568,13 @@
 
     function done() {
         loadingBar.style.display = "none";
+        stopBtn.style.display = "none";
+        sendBtn.style.display = "";
         sendBtn.disabled = false;
         textarea.disabled = false;
         textarea.focus();
         isSubmitting = false;
+        currentXhr = null;
     }
 
     form.addEventListener("submit", e => { e.preventDefault(); submit(); });
@@ -567,6 +583,16 @@
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();
+        }
+    });
+
+    stopBtn.addEventListener("click", () => {
+        if (currentXhr) currentXhr.abort();
+    });
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && isSubmitting && currentXhr) {
+            currentXhr.abort();
         }
     });
 })();

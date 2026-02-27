@@ -1299,6 +1299,9 @@ body.chat-page {
 
 .chat-input-form button:disabled { background: #c8ddd8; }
 
+#stop-btn { background: #e88080; }
+#stop-btn:hover { background: #d96b6b; }
+
 .input-hint-row {
     display: flex;
     align-items: center;
