@@ -13,7 +13,7 @@ async def get_litmusedge_friendly_name(request: Request) -> list[TextContent]:
     """Gets the human-readable name of this Litmus Edge device."""
     try:
         connection = get_litmus_connection(request)
-        friendly_name = network.get_friendly_name(le_connection=connection)
+        friendly_name = network.get_friendly_name(connection=connection)
 
         logger.info(f"Retrieved friendly name: {friendly_name}")
 
@@ -43,7 +43,7 @@ async def set_litmusedge_friendly_name(
             )
 
         connection = get_litmus_connection(request)
-        network.set_friendly_name(new_friendly_name, le_connection=connection)
+        network.set_friendly_name(new_friendly_name, connection=connection)
 
         logger.info(f"Updated friendly name to: {new_friendly_name}")
 
@@ -65,7 +65,7 @@ async def get_cloud_activation_status(request: Request) -> list[TextContent]:
     try:
         connection = get_litmus_connection(request)
         status = device_management.show_cloud_registration_status(
-            le_connection=connection
+            connection=connection
         )
 
         logger.info("Retrieved cloud activation status")

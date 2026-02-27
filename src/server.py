@@ -11,6 +11,8 @@ from mcp.types import Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
@@ -497,7 +499,7 @@ async def handle_list_tools() -> list[Tool]:
     return get_tool_definitions()
 
 
-@mcp.call_tool()
+@mcp.call_tool(validate_input=False)
 async def handle_call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     """
     Handle tool execution requests and route to appropriate implementations.
@@ -755,7 +757,16 @@ app = Starlette(
         Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
         # Health check endpoint
         Route("/health", endpoint=health_check, methods=["GET"]),
-    ]
+    ],
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=False,
+        ),
+    ],
 )
 
 if __name__ == "__main__":

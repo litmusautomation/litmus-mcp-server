@@ -22,7 +22,7 @@ async def get_litmusedge_driver_list(request: Request) -> list[TextContent]:
     try:
 
         connection = get_litmus_connection(request)
-        driver_list = list_all_drivers(le_connection=connection)
+        driver_list = list_all_drivers(connection=connection)
 
         drivers = []
         for driver in driver_list:
@@ -65,7 +65,7 @@ async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextC
         filter_by_driver = arguments.get("filter_by_driver")
 
         connection = get_litmus_connection(request)
-        device_list = devices.list_devices(le_connection=connection)
+        device_list = devices.list_devices(connection=connection)
         logger.info(f"Retrieved {len(device_list)} devices from Litmus Edge")
 
         device_data = []
@@ -133,7 +133,7 @@ async def create_devicehub_device(
         connection = get_litmus_connection(request)
 
         # Get driver information
-        driver_list = list_all_drivers(le_connection=connection)
+        driver_list = list_all_drivers(connection=connection)
         driver_map = {}
         driver_names = []
 
@@ -159,7 +159,7 @@ async def create_devicehub_device(
             driver=driver_map[selected_driver]["id"],
         )
 
-        created_device = devices.create_device(device, le_connection=connection)
+        created_device = devices.create_device(device, connection=connection)
 
         # Build JSON-serializable device info
         device_dict = _build_device_info(created_device)
@@ -354,7 +354,7 @@ async def get_current_value_of_devicehub_tag(
 
 def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
     """Find a device by name from the device list."""
-    device_list = devices.list_devices(le_connection=connection)
+    device_list = devices.list_devices(connection=connection)
     for device in device_list:
         if device.name == device_name:
             return device
