@@ -47,8 +47,8 @@ ACTIVE_EDGE_INSTANCE = "ACTIVE_EDGE_INSTANCE"
 def mcp_env_loader():
     global EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, VALIDATE_CERTIFICATE, ANTHROPIC_KEY
 
-    dotenv_path = dotenv.find_dotenv()
-    if dotenv_path:
+    dotenv_path = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(dotenv_path):
         dotenv.load_dotenv(dotenv_path, override=True)
     else:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

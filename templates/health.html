@@ -22,19 +22,25 @@
 
 <div style="margin-top: 28px;">
 {% if edge_instances %}
+<div class="edge-grid">
   {% for inst in edge_instances %}
-  <div class="health-inst-header"{% if not loop.first %} style="margin-top:28px;"{% endif %}>
-      <h2 style="margin:0;">{{ inst.name }}</h2>
-      <button type="button" class="side-button" id="refresh-btn-{{ inst.index }}"
-              onclick="refreshInstance({{ inst.index }})">Refresh</button>
-  </div>
-  <div class="status-card" id="edge-card-{{ inst.index }}">
-      <p>
-          <span class="status-label">Status</span>
-          <span id="edge-status-{{ inst.index }}" style="color:#9ab8b0;">No data — click Refresh</span>
-      </p>
+  <div class="edge-grid-item">
+      <div class="status-card edge-grid-card">
+          <div class="edge-card-header">
+              <h2 class="edge-card-title">{{ inst.name }}</h2>
+              <button type="button" class="side-button" id="refresh-btn-{{ inst.index }}"
+                      onclick="refreshInstance({{ inst.index }})">Refresh</button>
+          </div>
+          <div class="edge-card-body" id="edge-card-{{ inst.index }}">
+              <p>
+                  <span class="status-label">Status</span>
+                  <span id="edge-status-{{ inst.index }}" style="color:#9ab8b0;">No data — click Refresh</span>
+              </p>
+          </div>
+      </div>
   </div>
   {% endfor %}
+</div>
 {% else %}
   <p style="color:#8fa59f; font-size:14px;">No Litmus Edge instances configured.
       <a href="/update-env" style="color:#1a7a56;">Add one in Config →</a></p>

@@ -8,6 +8,33 @@
 
 <hr>
 
+
+<!-- API Keys -->
+<h2>API Keys</h2>
+<div class="settings-form">
+    <label>Anthropic API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="anthropic-key" value="{{ settings.anthropic_key }}"
+                   placeholder="sk-ant-…" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('anthropic-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+    <label>OpenAI API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="openai-key" value="{{ settings.openai_key }}"
+                   placeholder="sk-…" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('openai-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+    <div class="settings-save-row">
+        <span class="settings-status" id="api-keys-status"></span>
+        <button type="button" class="side-button" onclick="saveApiKeys()">Save keys</button>
+    </div>
+</div>
+
+<hr>
+
+<!-- Active model -->
 <h2>Active model</h2>
 
 <div class="model-selector">
@@ -77,7 +104,6 @@ async function loadModels(provider) {
             list.appendChild(item);
         });
 
-        // Enable save if something is already selected
         if (list.querySelector('.model-list-item.selected')) {
             document.getElementById('save-model-btn').disabled = false;
         }
@@ -92,8 +118,6 @@ function switchProvider(provider) {
     document.querySelectorAll('.provider-pill').forEach(p => {
         p.classList.toggle('active', p.dataset.provider === provider);
     });
-    // Keep selectedModelId across provider switch so the other side
-    // stays highlighted if we ever switch back, but reset for a clean slate
     selectedModelId = (provider === _initProvider) ? _initModelId : '';
     loadModels(provider);
 }
@@ -113,12 +137,12 @@ function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Load on page ready
 loadModels(_initProvider);
 </script>
 
 <hr>
 
+<!-- Edge Instances -->
 <h2>Litmus Edge Instances</h2>
 
 <div class="edge-add-form">
@@ -240,85 +264,109 @@ loadInstances();
 
 <hr>
 
-<h2>Environment variables</h2>
+<!-- Connection Settings -->
+<h2>Connection Settings</h2>
+<p class="config-section-hint">Required for NATS topic tools and InfluxDB history queries.</p>
 
-<div class="env-form">
-    <form method="post" action="{{ url_for('update_env_submit') }}" style="display: contents;">
-        <label>
-            <input type="text" name="env_key" placeholder="Key" required>
-        </label>
-        <label>
-            <input type="text" name="env_value" placeholder="Value" required>
-        </label>
-        <button type="submit">Add / update</button>
-    </form>
+<h3>NATS</h3>
+<div class="settings-form settings-form-grid">
+    <label>Source (IP)<input type="text" id="nats-source" value="{{ mcp_config.nats_source }}" placeholder="10.0.0.1"></label>
+    <label>Port<input type="text" id="nats-port" value="{{ mcp_config.nats_port }}" placeholder="4222"></label>
+    <label>User<input type="text" id="nats-user" value="{{ mcp_config.nats_user }}"></label>
+    <label>Password
+        <div class="settings-input-wrap">
+            <input type="password" id="nats-password" value="{{ mcp_config.nats_password }}" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('nats-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
 </div>
 
-{% if updated %}
-<div id="toast" class="toast">Environment updated.</div>
-<script>
-    setTimeout(() => {
-        const toast = document.getElementById("toast");
-        if (toast) toast.style.opacity = "0";
-    }, 2500);
-</script>
-{% endif %}
+<h3>InfluxDB</h3>
+<div class="settings-form settings-form-grid">
+    <label>Host<input type="text" id="influx-host" value="{{ mcp_config.influx_host }}" placeholder="10.0.0.1"></label>
+    <label>Port<input type="text" id="influx-port" value="{{ mcp_config.influx_port }}" placeholder="8086"></label>
+    <label>Database<input type="text" id="influx-db" value="{{ mcp_config.influx_db_name }}" placeholder="tsdata"></label>
+    <label>Username<input type="text" id="influx-user" value="{{ mcp_config.influx_username }}"></label>
+    <label>Password
+        <div class="settings-input-wrap">
+            <input type="password" id="influx-password" value="{{ mcp_config.influx_password }}" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('influx-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+</div>
 
-<table class="env-table">
-    <colgroup>
-        <col style="width: 36%;">
-        <col style="width: 57%;">
-        <col style="width: 7%;">
-    </colgroup>
-    <thead>
-        <tr>
-            <th>Key</th>
-            <th>Value</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for key, value in env.items() %}
-        {% set is_sensitive = 'KEY' in key or 'SECRET' in key or 'TOKEN' in key or 'PASSWORD' in key %}
-        <tr>
-            <td>{{ key }}</td>
-            <td>
-                {% if is_sensitive %}
-                <div class="env-sensitive">
-                    <span class="env-sensitive-value" data-value="{{ value }}" data-hidden="true">••••••••••••</span>
-                    <button type="button" class="env-reveal-btn" onclick="toggleEnvReveal(this)" title="Show / hide">
-                        <svg class="eye-show" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        <svg class="eye-hide" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    </button>
-                </div>
-                {% else %}
-                {{ value }}
-                {% endif %}
-            </td>
-            <td>
-                <form method="post" action="{{ url_for('remove_env') }}" style="margin: 0;">
-                    <input type="hidden" name="env_key" value="{{ key }}">
-                    <button type="submit" class="md-icon-btn" title="Remove">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18">
-                            <path d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                    </button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="settings-save-row">
+    <span class="settings-status" id="conn-settings-status"></span>
+    <label class="settings-checkbox">
+        <input type="checkbox" id="validate-cert" {% if settings.validate_cert == 'true' %}checked{% endif %}>
+        Validate TLS certificate
+    </label>
+    <button type="button" class="side-button" onclick="saveConnSettings()">Save settings</button>
+</div>
 
 <script>
-function toggleEnvReveal(btn) {
-    const span    = btn.previousElementSibling;
-    const hidden  = span.dataset.hidden === 'true';
-    span.textContent    = hidden ? span.dataset.value : '••••••••••••';
-    span.dataset.hidden = hidden ? 'false' : 'true';
-    btn.querySelector('.eye-show').style.display = hidden ? 'none' : '';
-    btn.querySelector('.eye-hide').style.display = hidden ? ''     : 'none';
+// ── Settings save helpers ──────────────────────────────────────────────────
+
+async function saveApiKeys() {
+    const data = {};
+    const ak = document.getElementById('anthropic-key').value.trim();
+    const ok = document.getElementById('openai-key').value.trim();
+    if (ak) data['ANTHROPIC_API_KEY'] = ak;
+    if (ok) data['OPENAI_API_KEY'] = ok;
+    if (!Object.keys(data).length) {
+        document.getElementById('api-keys-status').textContent = 'Enter at least one key.';
+        document.getElementById('api-keys-status').className = 'settings-status err';
+        return;
+    }
+    await postSettings(data, 'api-keys-status');
+}
+
+async function saveConnSettings() {
+    const cert = document.getElementById('validate-cert').checked ? 'true' : 'false';
+    const data = {
+        NATS_SOURCE:          document.getElementById('nats-source').value.trim(),
+        NATS_PORT:            document.getElementById('nats-port').value.trim(),
+        NATS_USER:            document.getElementById('nats-user').value.trim(),
+        NATS_PASSWORD:        document.getElementById('nats-password').value.trim(),
+        INFLUX_HOST:          document.getElementById('influx-host').value.trim(),
+        INFLUX_PORT:          document.getElementById('influx-port').value.trim(),
+        INFLUX_DB_NAME:       document.getElementById('influx-db').value.trim(),
+        INFLUX_USERNAME:      document.getElementById('influx-user').value.trim(),
+        INFLUX_PASSWORD:      document.getElementById('influx-password').value.trim(),
+        VALIDATE_CERTIFICATE: cert,
+    };
+    await postSettings(data, 'conn-settings-status');
+}
+
+async function postSettings(data, statusId) {
+    const status = document.getElementById(statusId);
+    status.textContent = 'Saving…';
+    status.className = 'settings-status';
+    try {
+        const resp = await fetch('/api/save-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await resp.json();
+        status.textContent = result.ok ? 'Saved.' : 'Error.';
+        status.className = 'settings-status ' + (result.ok ? 'ok' : 'err');
+        setTimeout(() => { status.textContent = ''; status.className = 'settings-status'; }, 2500);
+    } catch (e) {
+        status.textContent = 'Failed.';
+        status.className = 'settings-status err';
+    }
+}
+
+const _eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const _eyeOff  = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+function toggleReveal(inputId, btn) {
+    const inp = document.getElementById(inputId);
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? _eyeOff : _eyeOpen;
+    btn.setAttribute('aria-label', show ? 'Hide' : 'Show');
 }
 </script>
 {% endblock %}

@@ -91,7 +91,7 @@ async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextC
 
         summary = _create_device_summary(device_data)
 
-        result = {
+        result: dict[str, Any] = {
             "count": len(device_data),
             "devices": device_data,
             "summary": summary,
@@ -347,7 +347,7 @@ async def get_devicehub_device_tags(
         tag_data = _extract_tags(raw_registers)
         logger.info(f"Retrieved {len(tag_data)} tags for {scope}")
 
-        result = {
+        result: dict[str, Any] = {
             "count": len(tag_data),
             "tags": tag_data,
             "tag_names": [t["tag_name"] for t in tag_data],

@@ -217,25 +217,64 @@ async def switch_model(
     return RedirectResponse("/update-env?updated=true", status_code=HTTP_303_SEE_OTHER)
 
 
+@app.post("/api/save-settings", name="api_save_settings")
+async def api_save_settings(request: Request):
+    data = await request.json()
+    for key, value in data.items():
+        if value:  # only write non-empty values
+            mcp_env_updater(key, value)
+    mcp_env_loader()
+    return JSONResponse({"ok": True})
+
+
 @app.get("/update-env", response_class=HTMLResponse, name="update_env_form")
 async def update_env_form(request: Request):
     mcp_env_loader()
-    current_env, _ = get_current_mcp_env()
     _, model_type = check_model_key()
-    updated = request.query_params.get("updated") == "true"
     current_model_id = os.environ.get(PREFERRED_MODEL_ID, "")
     edge_instances = get_edge_instances()
     active_edge_instance = int(os.environ.get(ACTIVE_EDGE_INSTANCE, 0))
+
+    _host = request.headers.get("host", "localhost:9000").split(":")[0]
+    _default_sse = f"http://{_host}:8000/sse"
+    _env_sse = os.environ.get("MCP_SSE_URL", "")
+    mcp_sse_url = (
+        _env_sse
+        if (_env_sse and _env_sse != "http://localhost:8000/sse")
+        else _default_sse
+    )
+
+    mcp_config = {
+        "mcp_sse_url": mcp_sse_url,
+        "edge_url": os.environ.get("EDGE_URL", ""),
+        "client_id": os.environ.get("EDGE_API_CLIENT_ID", ""),
+        "client_secret": os.environ.get("EDGE_API_CLIENT_SECRET", ""),
+        "nats_source": os.environ.get("NATS_SOURCE", ""),
+        "nats_port": os.environ.get("NATS_PORT", "4222"),
+        "nats_user": os.environ.get("NATS_USER", ""),
+        "nats_password": os.environ.get("NATS_PASSWORD", ""),
+        "influx_host": os.environ.get("INFLUX_HOST", ""),
+        "influx_port": os.environ.get("INFLUX_PORT", "8086"),
+        "influx_db_name": os.environ.get("INFLUX_DB_NAME", "tsdata"),
+        "influx_username": os.environ.get("INFLUX_USERNAME", ""),
+        "influx_password": os.environ.get("INFLUX_PASSWORD", ""),
+    }
+    settings = {
+        "anthropic_key": os.environ.get("ANTHROPIC_API_KEY", ""),
+        "openai_key": os.environ.get("OPENAI_API_KEY", ""),
+        "validate_cert": os.environ.get("VALIDATE_CERTIFICATE", "false"),
+    }
+
     return templates.TemplateResponse(
         "update_env.html",
         {
             "request": request,
-            "env": current_env,
-            "updated": updated,
             "current_model": model_type,
             "current_model_id": current_model_id,
             "edge_instances": edge_instances,
             "active_edge_instance": active_edge_instance,
+            "mcp_config": mcp_config,
+            "settings": settings,
             "active_page": "config",
         },
     )
@@ -532,6 +571,36 @@ async def mcp_info(request: Request):
     )
 
 
+@app.get("/api/mcp-client-config", name="api_mcp_client_config")
+async def api_mcp_client_config(request: Request):
+    mcp_env_loader()
+    _host = request.headers.get("host", "localhost:9000").split(":")[0]
+    _default_sse = f"http://{_host}:8000/sse"
+    _env_sse = os.environ.get("MCP_SSE_URL", "")
+    mcp_sse_url = (
+        _env_sse
+        if (_env_sse and _env_sse != "http://localhost:8000/sse")
+        else _default_sse
+    )
+    return JSONResponse(
+        {
+            "mcp_sse_url": mcp_sse_url,
+            "edge_url": os.environ.get("EDGE_URL", ""),
+            "client_id": os.environ.get("EDGE_API_CLIENT_ID", ""),
+            "client_secret": os.environ.get("EDGE_API_CLIENT_SECRET", ""),
+            "nats_source": os.environ.get("NATS_SOURCE", ""),
+            "nats_port": os.environ.get("NATS_PORT", "4222"),
+            "nats_user": os.environ.get("NATS_USER", ""),
+            "nats_password": os.environ.get("NATS_PASSWORD", ""),
+            "influx_host": os.environ.get("INFLUX_HOST", ""),
+            "influx_port": os.environ.get("INFLUX_PORT", "8086"),
+            "influx_db_name": os.environ.get("INFLUX_DB_NAME", "tsdata"),
+            "influx_username": os.environ.get("INFLUX_USERNAME", ""),
+            "influx_password": os.environ.get("INFLUX_PASSWORD", ""),
+        }
+    )
+
+
 # ── Utility pages ──────────────────────────────────────────────────────────
 
 
@@ -630,6 +699,7 @@ async def api_edge_health(index: int = 0):
             """POST a GraphQL query; returns (status_code, parsed_json_or_none)."""
             try:
                 import json as _json
+
                 body = _json.dumps({"query": query_str, "variables": {}})
                 code, raw = direct_request(
                     connection=connection,
@@ -785,6 +855,18 @@ if __name__ == "__main__":
         os.path.dirname(os.path.abspath(__file__)), "server.py"
     )
     server_proc = subprocess.Popen([sys.executable, server_script])
+
+    # Wait until the MCP SSE server on port 8000 is accepting connections (max 10 s).
+    import socket as _socket
+    import time as _time
+    _mcp_port = int(os.environ.get("MCP_PORT", 8000))
+    for _ in range(20):
+        try:
+            with _socket.create_connection(("127.0.0.1", _mcp_port), timeout=0.5):
+                break
+        except OSError:
+            _time.sleep(0.5)
+
     try:
         uvicorn.run("web_client:app", host="0.0.0.0", port=9000, reload=False)
     except KeyboardInterrupt:

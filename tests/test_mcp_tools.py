@@ -202,18 +202,19 @@ def test_create_device_invalid_driver(mock_list_drivers, mock_connection):
 
 @patch("tools.devicehub_tools.get_litmus_connection")
 @patch("tools.devicehub_tools.devices.list_devices")
-@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
-def test_get_device_tags_success(mock_list_tags, mock_list_devices, mock_connection):
+@patch("tools.devicehub_tools.api.gql_query")
+def test_get_device_tags_success(mock_gql_query, mock_list_devices, mock_connection):
     """Returns tags for a known device."""
     mock_connection.return_value = MagicMock()
     dev = MagicMock()
     dev.name = "TestDevice"
+    dev.id = "dev-1"
     mock_list_devices.return_value = [dev]
-    tag = MagicMock()
-    tag.tag_name = "Temperature"
-    tag.id = "t-1"
-    tag.address = tag.data_type = tag.scaling = tag.read_write = tag.unit = tag.description = None
-    mock_list_tags.return_value = [tag]
+    # First call: count query; second call: list query
+    mock_gql_query.side_effect = [
+        {"data": {"ListRegisters": {"TotalCount": 1}}},
+        {"data": {"ListRegisters": {"Registers": [{"TagName": "Temperature"}]}}},
+    ]
 
     result = _run(get_devicehub_device_tags(_make_request(), {"device_name": "TestDevice"}))
     data = _parse(result)
@@ -222,11 +223,21 @@ def test_get_device_tags_success(mock_list_tags, mock_list_devices, mock_connect
     assert data["tag_names"] == ["Temperature"]
 
 
-def test_get_device_tags_missing_device_name():
-    """Missing 'device_name' raises McpError."""
-    with patch("tools.devicehub_tools.get_litmus_connection"):
-        with pytest.raises(McpError):
-            _run(get_devicehub_device_tags(_make_request(), {}))
+@patch("tools.devicehub_tools.get_litmus_connection")
+@patch("tools.devicehub_tools.api.gql_query")
+def test_get_device_tags_missing_device_name(mock_gql_query, mock_connection):
+    """No 'device_name' queries all devices (all-devices path, no McpError)."""
+    mock_connection.return_value = MagicMock()
+    mock_gql_query.side_effect = [
+        {"data": {"ListRegistersFromAllDevices": {"TotalCount": 1}}},
+        {"data": {"ListRegistersFromAllDevices": {"Registers": [{"TagName": "Pressure"}]}}},
+    ]
+
+    result = _run(get_devicehub_device_tags(_make_request(), {}))
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["tag_names"] == ["Pressure"]
 
 
 @patch("tools.devicehub_tools.get_litmus_connection")

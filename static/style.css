@@ -22,6 +22,7 @@ body {
     min-height: 100vh;
     min-width: 600px;
     color: #0d2420;
+    scrollbar-gutter: stable;
 }
 
 hr {
@@ -508,75 +509,108 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     transition: opacity 0.5s;
 }
 
-/* ── Env form / table ─────────────────────────────────────────────────────── */
-.env-form {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-    margin-bottom: 24px;
+/* ── Config page: floating right panel ───────────────────────────────────── */
+.config-right-panel {
+    position: fixed;
+    right: 16px;
+    top: 24px;
+    width: clamp(264px, calc((100vw - 1100px) / 2 - 32px), 400px);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    z-index: 10;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
 }
 
-.env-form label { flex: 1; margin-bottom: 0; }
-.env-form label input { margin-bottom: 0; }
-.env-form button { flex-shrink: 0; }
-
-.env-table {
-    width: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
-    font-size: 14px;
+@media (max-width: 1320px) {
+    .config-right-panel { display: none; }
 }
 
-.env-table th,
-.env-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #edf2ef;
-    text-align: left;
-    vertical-align: middle;
+/* Collapse: hide body, rotate chevron */
+.config-right-panel.collapsed .config-panel-body { display: none; }
+.config-right-panel.collapsed .mcp-panel-chevron { transform: rotate(-90deg); }
+
+/* ── Settings forms (left column) ────────────────────────────────────────── */
+.config-section-hint { font-size: 13px; color: #5a7a72; margin: -8px 0 16px; }
+
+.settings-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.settings-form label { font-size: 13px; font-weight: 500; color: #374b47; display: flex; flex-direction: column; gap: 4px; }
+.settings-form label input { margin-top: 0; margin-bottom: 0; }
+
+.settings-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
 }
 
-.env-table th {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    color: #8fa59f;
-    background: #f8fbf9;
+.settings-input-wrap { position: relative; display: flex; }
+.settings-input-wrap input { flex: 1; padding-right: 40px; margin-bottom: 0; }
+.reveal-btn {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    border: none; background: transparent; color: #9ab8b0;
+    padding: 0 10px; cursor: pointer; line-height: 0;
+    outline: none; appearance: none; -webkit-appearance: none;
 }
+.reveal-btn:hover { color: #4d6b65; background: transparent; }
+.reveal-btn:focus { outline: none; box-shadow: none; }
+.reveal-btn:active { background: transparent; }
 
-.env-table td:first-child { font-weight: 500; color: #374b47; }
-.env-table td:nth-child(2) { font-family: 'Courier New', monospace; font-size: 13px; color: #4d6b65; word-break: break-all; }
-
-.env-sensitive {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+.settings-save-row {
+    display: flex; align-items: center; gap: 12px; justify-content: flex-end;
+    margin-top: 4px;
 }
+.settings-status { font-size: 12px; color: #5a7a72; }
+.settings-status.ok { color: #059669; }
+.settings-status.err { color: #c0392b; }
 
-.env-sensitive-value {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    letter-spacing: 0.05em;
+.settings-checkbox { display: flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 400; color: #4d6b65; margin-right: auto;
+    flex-direction: row; }
+.settings-checkbox input[type=checkbox] { width: auto; margin: 0; }
+
+/* ── Right panel body (used inside .config-right-panel) ──────────────────── */
+.config-panel-body { padding: 16px; }
+
+/* ── JSON editor tabs + textarea ─────────────────────────────────────────── */
+.config-tabs {
+    display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
 }
-
-.env-reveal-btn {
-    flex-shrink: 0;
-    background: transparent;
-    border: none;
-    padding: 3px 4px;
-    border-radius: 5px;
+.config-tab {
+    padding: 5px 12px; border-radius: 7px; border: 1px solid #d4deda;
+    background: transparent; color: #4d6b65; font-size: 12px; font-weight: 500;
     cursor: pointer;
-    color: #b8ccc8;
-    display: inline-flex;
-    align-items: center;
-    transition: color 0.15s;
 }
+.config-tab.active { background: #d6ede5; border-color: #a4ccbe; color: #1a4a3a; }
+.config-tab:hover:not(.active) { background: #f0f8f5; }
 
-.env-reveal-btn:hover { color: #4d6b65; background: #f0f5f3; }
-.env-reveal-btn:focus { outline: none; box-shadow: none; }
+.config-json-wrap {
+    position: relative; background: #f6faf8; border: 1px solid #ddeee8;
+    border-radius: 8px; overflow: hidden;
+}
+.config-json-toolbar {
+    position: absolute; top: 8px; right: 8px;
+    display: flex; gap: 6px; align-items: center; z-index: 1;
+}
+.config-reset-btn {
+    background: transparent; border: 1px solid #d4deda; border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; color: #9ab8b0; cursor: pointer;
+}
+.config-reset-btn:hover { background: #f0f8f5; color: #4d6b65; }
+.config-copy-btn {
+    background: #fff; border: 1px solid #d4deda; border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; color: #4d6b65; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+}
+.config-copy-btn:hover { background: #e8f5f0; border-color: #a4ccbe; }
+
+textarea.config-json {
+    display: block; width: 100%; margin: 0; padding: 40px 12px 12px;
+    font-size: 11.5px; line-height: 1.55; color: #1a3a2a;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    background: transparent; border: none; resize: none; outline: none;
+    box-sizing: border-box; height: clamp(360px, calc(55vh - 120px), 600px); overflow-y: auto;
+}
 
 /* ── Status / Health ──────────────────────────────────────────────────────── */
 .status-card {
@@ -613,7 +647,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 264px;
+    width: clamp(264px, calc((100vw - 1100px) / 2 - 32px), 400px);
     max-height: calc(100vh - 48px);
     overflow: hidden;
     z-index: 10;
@@ -678,7 +712,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 }
 
 .mcp-panel-body {
-    max-height: 180px;
+    max-height: clamp(240px, calc(42vh - 70px), 520px);
     overflow-y: auto;
     overflow-x: hidden;
     transition: max-height 0.25s ease;
@@ -703,6 +737,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 }
 
 .mcp-item:hover { background: #f4f8f6; }
+
 
 .mcp-item-dot {
     flex-shrink: 0;
@@ -739,6 +774,115 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     font-size: 13px;
     color: #9ab8b0;
 }
+
+/* ── Tool detail modal ───────────────────────────────────────────────────── */
+.tool-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 36, 32, 0.4);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.tool-modal-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.tool-modal {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    width: min(600px, 90vw);
+    max-height: 75vh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(10px);
+    transition: transform 0.15s;
+}
+
+.tool-modal-backdrop.open .tool-modal {
+    transform: translateY(0);
+}
+
+.tool-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid #e8eeec;
+    flex-shrink: 0;
+}
+
+.tool-modal-name {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    color: #1a7a56;
+    background: #f0f8f4;
+    border: 1px solid #d4ede4;
+    border-radius: 6px;
+    padding: 3px 8px;
+}
+
+.tool-modal-close {
+    border: none;
+    background: transparent;
+    color: #9ab8b0;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 0;
+    outline: none;
+    appearance: none;
+    border-radius: 6px;
+    transition: color 0.12s, background 0.12s;
+}
+
+.tool-modal-close:hover { color: #374b47; background: #f0f5f3; }
+
+.tool-modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #374b47;
+}
+
+.tool-modal-body p  { margin: 0 0 10px; }
+.tool-modal-body p:last-child { margin-bottom: 0; }
+.tool-modal-body h1, .tool-modal-body h2, .tool-modal-body h3 {
+    font-size: 14px; font-weight: 600; color: #0d2420; margin: 16px 0 6px;
+}
+.tool-modal-body h1:first-child,
+.tool-modal-body h2:first-child,
+.tool-modal-body h3:first-child { margin-top: 0; }
+.tool-modal-body strong { font-weight: 600; color: #0d2420; }
+.tool-modal-body em { font-style: italic; }
+.tool-modal-body code {
+    background: #f0f6f3;
+    border: 1px solid #d4e8de;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12.5px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+}
+.tool-modal-body pre {
+    background: #f0f6f3;
+    border: 1px solid #d4e8de;
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 10px;
+}
+.tool-modal-body pre code { background: none; border: none; padding: 0; font-size: 12.5px; }
+.tool-modal-body ul, .tool-modal-body ol { margin: 0 0 10px; padding-left: 22px; }
+.tool-modal-body li { margin-bottom: 4px; }
+.md-empty { color: #9ab8b0 !important; font-style: italic; }
 
 /* ── Description toast (appears near cursor on hover / click) ────────────── */
 .desc-toast {
@@ -1261,12 +1405,51 @@ button.clear-chat-btn:hover {
     transform: none;
 }
 
-/* ── Health page: instance header row ────────────────────────────────────── */
-.health-inst-header {
+/* ── Health page: edge instance grid ─────────────────────────────────────── */
+.edge-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.edge-grid-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.edge-grid-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+    overflow: hidden;
+    margin-top: 0;
+    padding: 0;
+}
+
+.edge-card-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    margin-bottom: 16px;
+    padding: 14px 20px;
+    background: #f0f6f3;
+    border-bottom: 1px solid #d4e8de;
+    border-radius: 12px 12px 0 0;
+    flex-shrink: 0;
+}
+
+.edge-card-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0d2420;
+}
+
+.edge-card-body {
+    padding: 20px 24px;
+    flex: 1;
+    overflow-y: auto;
 }
 
 /* ── Health page: per-service status rows ─────────────────────────────────── */
