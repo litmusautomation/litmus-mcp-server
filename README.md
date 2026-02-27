@@ -30,7 +30,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 ## Table of Contents
 
-- [Quick Launch](#quick-launch)
+- [Quick Launch](#quick-launch) (Streamable HTTP)
   - [Claude Code CLI](#claude-code-cli)
   - [Cursor IDE](#cursor-ide)
   - [VS Code / Copilot](#vs-code--github-copilot)
@@ -43,9 +43,11 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 ## Quick Launch
 
-### Start an HTTP SSE MCP Server using Docker
+### Start the MCP Server using Docker
 
-Run the server in Docker (HTTP SSE only)
+Run the server in Docker. The server exposes two HTTP transports:
+- **Streamable HTTP** at `/mcp` — the modern MCP transport (recommended)
+- **SSE** at `/sse` (deprecated) — legacy transport, kept for backward compatibility
 
 ```bash
 docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
@@ -64,8 +66,8 @@ Run Claude from a directory that includes a configuration file at `~/.claude/mcp
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "type": "sse",
-      "url": "http://localhost:8000/sse",
+      "type": "http",
+      "url": "http://localhost:8000/mcp",
       "headers": {
         "EDGE_URL": "${EDGE_URL}",
         "EDGE_API_CLIENT_ID": "${EDGE_API_CLIENT_ID}",
@@ -84,11 +86,28 @@ Run Claude from a directory that includes a configuration file at `~/.claude/mcp
   }
 }
 ```
+
+<details>
+<summary>SSE transport (deprecated)</summary>
+
+```json
+{
+  "mcpServers": {
+    "litmus-mcp-server": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse",
+      "headers": { "...": "same as above" }
+    }
+  }
+}
+```
+</details>
+
 [Anthropic Docs](https://docs.anthropic.com/en/docs/agents-and-tools/mcp)
 
 ---
 
-### Cursor IDE 
+### Cursor IDE
 
 Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 
@@ -96,7 +115,8 @@ Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "type": "http",
+      "url": "http://<MCP_SERVER_IP>:8000/mcp",
       "headers": {
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
@@ -130,7 +150,8 @@ Open User Settings (JSON) → Add:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "type": "http",
+      "url": "http://<MCP_SERVER_IP>:8000/mcp",
       "headers": {
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
@@ -164,7 +185,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "url": "http://<MCP_SERVER_IP>:8000/sse",
+      "type": "http",
+      "url": "http://<MCP_SERVER_IP>:8000/mcp",
       "headers": {
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
@@ -188,7 +210,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ## STDIO with Claude Desktop
 
-This MCP server supports local connections with Claude Desktop and other applications via Standard file Input/Output (STDIO): https://modelcontextprotocol.io/legacy/concepts/transports
+This MCP server also supports local connections with Claude Desktop and other applications via Standard file Input/Output (STDIO): https://modelcontextprotocol.io/legacy/concepts/transports
 
 To use STDIO: Clone, edit config.py to enable STDIO, run the server as a local process, and update Claude Desktop MCP server configuration file to use the server:
 
