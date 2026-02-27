@@ -26,7 +26,7 @@ async def list_digital_twin_models_tool(request: Request) -> list[TextContent]:
     """
     try:
         connection = get_litmus_connection(request)
-        models = list_models(le_connection=connection)
+        models = list_models(connection=connection)
 
         logger.info(f"Retrieved {len(models)} digital twin models")
 
@@ -61,11 +61,11 @@ async def list_digital_twin_instances_tool(
             from litmussdk.digital_twins import get_instance_by_model
 
             instances = get_instance_by_model(
-                model_id=model_id, le_connection=connection
+                model_id=model_id, connection=connection
             )
             logger.info(f"Retrieved {len(instances)} instances for model {model_id}")
         else:
-            instances = list_all_instances(le_connection=connection)
+            instances = list_all_instances(connection=connection)
             logger.info(f"Retrieved {len(instances)} digital twin instances")
 
         result = {
@@ -135,7 +135,7 @@ async def create_digital_twin_instance_tool(
             instance_topic=instance_topic,
             instance_interval=instance_interval,
             instance_flat_hierarchy=instance_flat_hierarchy,
-            le_connection=connection,
+            connection=connection,
         )
 
         logger.info(
@@ -189,7 +189,7 @@ async def list_static_attributes_tool(
 
         # List static attributes
         attributes = list_static_attributes(
-            model_id=model_id, instance_id=instance_id, le_connection=connection
+            model_id=model_id, instance_id=instance_id, connection=connection
         )
 
         logger.info(
@@ -249,7 +249,7 @@ async def list_dynamic_attributes_tool(
 
         # List dynamic attributes
         attributes = list_dynamic_attributes(
-            model_id=model_id, instance_id=instance_id, le_connection=connection
+            model_id=model_id, instance_id=instance_id, connection=connection
         )
 
         logger.info(
@@ -299,7 +299,7 @@ async def list_transformations_tool(
 
         # List transformations
         transformations = list_transformations(
-            model_id=model_id, le_connection=connection
+            model_id=model_id, connection=connection
         )
 
         logger.info(
@@ -341,7 +341,7 @@ async def get_hierarchy_tool(request: Request, arguments: dict) -> list[TextCont
             )
 
         # Get hierarchy
-        hierarchy = get_hierarchy(model_id=model_id, le_connection=connection)
+        hierarchy = get_hierarchy(model_id=model_id, connection=connection)
 
         logger.info(f"Retrieved hierarchy for model {model_id}")
 
@@ -391,7 +391,7 @@ async def save_hierarchy_tool(request: Request, arguments: dict) -> list[TextCon
         result_data = save_hierarchy(
             model_id=model_id,
             hierarchy_json=hierarchy_json,
-            le_connection=connection,
+            connection=connection,
         )
 
         logger.info(f"Saved hierarchy for model {model_id}")

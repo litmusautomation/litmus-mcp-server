@@ -13,7 +13,7 @@ async def get_all_containers_on_litmusedge(request: Request) -> list[TextContent
     """Lists all Docker containers running in the Litmus Edge marketplace."""
     try:
         connection = get_litmus_connection(request)
-        container_list = list_all_containers(le_connection=connection)
+        container_list = list_all_containers(connection=connection)
 
         logger.info(f"Retrieved {len(container_list)} containers")
 
@@ -50,7 +50,7 @@ async def run_docker_container_on_litmusedge(
             )
 
         connection = get_litmus_connection(request)
-        result = run_container(docker_run_command, le_connection=connection)
+        result = run_container(docker_run_command, connection=connection)
 
         container_id = result.get("id", "Unknown container ID")
 
