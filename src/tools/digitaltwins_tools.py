@@ -15,6 +15,7 @@ from litmussdk.digital_twins import (
 )
 from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
+from utils.async_utils import run_sync
 from config import logger
 
 
@@ -25,8 +26,8 @@ async def list_digital_twin_models_tool(request: Request) -> list[TextContent]:
     Returns information about each model including ID, name, description, and version.
     """
     try:
-        connection = get_litmus_connection(request)
-        models = list_models(connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        models = await run_sync(list_models, connection=connection)
 
         logger.info(f"Retrieved {len(models)} digital twin models")
 
@@ -53,19 +54,20 @@ async def list_digital_twin_instances_tool(
     Can optionally filter by model_id to get only instances of a specific model.
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
         model_id = arguments.get("model_id")
 
         if model_id:
             # Import here to avoid circular dependency
             from litmussdk.digital_twins import get_instance_by_model
 
-            instances = get_instance_by_model(
-                model_id=model_id, connection=connection
+            instances = await run_sync(
+                get_instance_by_model,
+                model_id=model_id, connection=connection,
             )
             logger.info(f"Retrieved {len(instances)} instances for model {model_id}")
         else:
-            instances = list_all_instances(connection=connection)
+            instances = await run_sync(list_all_instances, connection=connection)
             logger.info(f"Retrieved {len(instances)} digital twin instances")
 
         result = {
@@ -94,7 +96,7 @@ async def create_digital_twin_instance_tool(
     Requires model_id, instance name, and topic for data access.
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         # Extract required parameters
         model_id = arguments.get("model_id")
@@ -129,7 +131,8 @@ async def create_digital_twin_instance_tool(
             )
 
         # Create the instance
-        instance = create_instance(
+        instance = await run_sync(
+            create_instance,
             model_id=model_id,
             instance_name=instance_name,
             instance_topic=instance_topic,
@@ -165,7 +168,7 @@ async def list_static_attributes_tool(
     Must provide either model_id OR instance_id (not both).
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         model_id = arguments.get("model_id")
         instance_id = arguments.get("instance_id")
@@ -188,8 +191,9 @@ async def list_static_attributes_tool(
             )
 
         # List static attributes
-        attributes = list_static_attributes(
-            model_id=model_id, instance_id=instance_id, connection=connection
+        attributes = await run_sync(
+            list_static_attributes,
+            model_id=model_id, instance_id=instance_id, connection=connection,
         )
 
         logger.info(
@@ -225,7 +229,7 @@ async def list_dynamic_attributes_tool(
     Must provide either model_id OR instance_id (not both).
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         model_id = arguments.get("model_id")
         instance_id = arguments.get("instance_id")
@@ -248,8 +252,9 @@ async def list_dynamic_attributes_tool(
             )
 
         # List dynamic attributes
-        attributes = list_dynamic_attributes(
-            model_id=model_id, instance_id=instance_id, connection=connection
+        attributes = await run_sync(
+            list_dynamic_attributes,
+            model_id=model_id, instance_id=instance_id, connection=connection,
         )
 
         logger.info(
@@ -285,7 +290,7 @@ async def list_transformations_tool(
     Transformations define how data is processed within the model.
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         model_id = arguments.get("model_id")
 
@@ -298,8 +303,9 @@ async def list_transformations_tool(
             )
 
         # List transformations
-        transformations = list_transformations(
-            model_id=model_id, connection=connection
+        transformations = await run_sync(
+            list_transformations,
+            model_id=model_id, connection=connection,
         )
 
         logger.info(
@@ -328,7 +334,7 @@ async def get_hierarchy_tool(request: Request, arguments: dict) -> list[TextCont
     The hierarchy defines the structural relationships within the model.
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         model_id = arguments.get("model_id")
 
@@ -341,7 +347,7 @@ async def get_hierarchy_tool(request: Request, arguments: dict) -> list[TextCont
             )
 
         # Get hierarchy
-        hierarchy = get_hierarchy(model_id=model_id, connection=connection)
+        hierarchy = await run_sync(get_hierarchy, model_id=model_id, connection=connection)
 
         logger.info(f"Retrieved hierarchy for model {model_id}")
 
@@ -366,7 +372,7 @@ async def save_hierarchy_tool(request: Request, arguments: dict) -> list[TextCon
     The hierarchy must be in the exact JSON format used by Digital Twins.
     """
     try:
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         model_id = arguments.get("model_id")
         hierarchy_json = arguments.get("hierarchy_json")
@@ -388,7 +394,8 @@ async def save_hierarchy_tool(request: Request, arguments: dict) -> list[TextCon
             )
 
         # Save hierarchy
-        result_data = save_hierarchy(
+        result_data = await run_sync(
+            save_hierarchy,
             model_id=model_id,
             hierarchy_json=hierarchy_json,
             connection=connection,

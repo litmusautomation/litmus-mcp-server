@@ -7,13 +7,14 @@ from litmussdk.marketplace import list_all_containers, run_container
 
 from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
+from utils.async_utils import run_sync
 
 
 async def get_all_containers_on_litmusedge(request: Request) -> list[TextContent]:
     """Lists all Docker containers running in the Litmus Edge marketplace."""
     try:
-        connection = get_litmus_connection(request)
-        container_list = list_all_containers(connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        container_list = await run_sync(list_all_containers, connection=connection)
 
         logger.info(f"Retrieved {len(container_list)} containers")
 
@@ -49,8 +50,8 @@ async def run_docker_container_on_litmusedge(
                 )
             )
 
-        connection = get_litmus_connection(request)
-        result = run_container(docker_run_command, connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        result = await run_sync(run_container, docker_run_command, connection=connection)
 
         container_id = result.get("id", "Unknown container ID")
 

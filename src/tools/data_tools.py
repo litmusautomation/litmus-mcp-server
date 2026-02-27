@@ -10,6 +10,7 @@ from config import NATS_PORT, NATS_SOURCE
 
 from utils.formatting import format_success_response, format_error_response
 from utils.auth import get_nats_connection_params, get_influx_connection_params
+from utils.async_utils import run_sync
 
 from numpy import zeros
 from starlette.requests import Request
@@ -326,7 +327,7 @@ async def get_historical_data_from_influxdb_tool(
         )
 
         # Execute query
-        result = influx_client.query(query, chunked=True, chunk_size=10000)
+        result = await run_sync(influx_client.query, query, chunked=True, chunk_size=10000)
         points = list(result.get_points())
 
         if not points:
