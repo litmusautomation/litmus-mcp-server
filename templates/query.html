@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Litmus MCP Server</title>
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="chat-page">
+
+    <!-- ── Left panels: Tools + Resources ──────────────────────────────────── -->
+    <div class="side-panels" id="side-panels">
+        <div class="mcp-panel" id="tools-panel">
+            <button class="mcp-panel-header" onclick="togglePanel('tools-panel')" aria-expanded="true">
+                <span class="mcp-panel-title">Tools <span class="mcp-panel-count" id="tools-count"></span></span>
+                <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="mcp-panel-body" id="tools-body">
+                <div class="mcp-panel-loading">Loading&hellip;</div>
+            </div>
+        </div>
+        <div class="mcp-panel" id="resources-panel">
+            <button class="mcp-panel-header" onclick="togglePanel('resources-panel')" aria-expanded="true">
+                <span class="mcp-panel-title">Resources <span class="mcp-panel-count" id="resources-count"></span></span>
+                <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="mcp-panel-body" id="resources-body">
+                <div class="mcp-panel-loading">Loading&hellip;</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Right panel: MCP Client Config ──────────────────────────────────── -->
+    <div class="config-right-panel" id="mcp-config-panel">
+        <button class="mcp-panel-header" onclick="toggleMcpConfig()" aria-expanded="true">
+            <span class="mcp-panel-title"><span>MCP Client Config</span></span>
+            <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="config-panel-body" id="mcp-config-body">
+            <p class="config-section-hint" style="margin-top:0;">
+                Your Litmus MCP server is pre-configured below. Add more MCP servers or edit as needed,
+                then copy and paste into your client's config file.
+            </p>
+            <div class="config-tabs">
+                <button class="config-tab active" data-tab="cursor"         onclick="mcpCfgSwitchTab('cursor')">Cursor / VS Code</button>
+                <button class="config-tab"        data-tab="claude_code"    onclick="mcpCfgSwitchTab('claude_code')">Claude Code</button>
+                <button class="config-tab"        data-tab="claude_desktop" onclick="mcpCfgSwitchTab('claude_desktop')">Claude Desktop</button>
+            </div>
+            <div class="config-json-wrap">
+                <div class="config-json-toolbar">
+                    <button type="button" class="config-reset-btn" onclick="mcpCfgReset()" title="Restore Litmus server entry">Reset</button>
+                    <button type="button" class="config-copy-btn" id="mcp-cfg-copy-btn" onclick="mcpCfgCopy()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy
+                    </button>
+                </div>
+                <textarea class="config-json" id="mcp-cfg-editor" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </div>
+
+<div class="chat-shell">
+
+    <!-- Header -->
+    <header class="chat-header">
+        <span class="chat-title">Litmus MCP</span>
+
+        <!-- Model selector (claude.ai style) -->
+        <div class="chat-model-selector" id="chat-model-selector">
+            <button type="button" class="chat-model-btn" id="chat-model-btn">
+                <span class="chat-model-btn-label" id="chat-model-btn-label">{{ current_model_id or model }}</span>
+                <svg class="chat-model-chevron" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="chat-model-dropdown" id="chat-model-dropdown">
+                <div id="chat-model-list">
+                    <div class="chat-model-loading">Loading…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instance selector -->
+        <div class="chat-instance-selector" id="chat-instance-selector">
+            <button type="button" class="chat-instance-btn" id="chat-instance-btn">
+                <span class="chat-instance-btn-label" id="chat-instance-btn-label">{{ active_instance_name or 'No Edge' }}</span>
+                <svg class="chat-model-chevron" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="chat-instance-dropdown" id="chat-instance-dropdown">
+                <div id="chat-instance-list">
+                    <div class="chat-model-loading">Loading…</div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="chat-nav">
+            <a href="{{ url_for('query_handler') }}" class="{{ 'active' if active_page == 'home' else '' }}">Home</a>
+            <a href="{{ url_for('update_env_form') }}" class="{{ 'active' if active_page == 'config' else '' }}">Config</a>
+            <a href="{{ url_for('health') }}" class="{{ 'active' if active_page == 'health' else '' }}">Health</a>
+        </nav>
+    </header>
+
+    <!-- Messages -->
+    <div class="chat-messages" id="chat-messages">
+        {% if not has_history %}
+        <div class="chat-empty">
+            <p>Ask anything about your Litmus Edge devices, data, or configuration.</p>
+        </div>
+        {% endif %}
+
+        {% for exchange in chat_log %}
+        <div class="msg-row msg-user">
+            <div class="msg-bubble">{{ exchange.user }}</div>
+        </div>
+        <div class="msg-row msg-assistant">
+            <div class="msg-meta">{{ exchange.model | safe }}</div>
+            <div class="msg-bubble md-body" data-md="{{ exchange.assistant }}">{{ exchange.assistant }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Input -->
+    <div class="chat-input-area">
+        <div id="loading-bar" class="loading-bar" style="display:none;">
+            <div class="loading-bar-inner"></div>
+        </div>
+        <form id="chat-form" class="chat-input-form">
+            <textarea
+                id="query"
+                name="query"
+                placeholder="Message Litmus MCP..."
+                rows="1"
+                required
+            ></textarea>
+            <button type="submit" id="send-btn" aria-label="Send">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </form>
+        {% if has_history %}
+        <form method="post" action="{{ url_for('clear_history') }}" id="clear-history-form" style="display:none;"></form>
+        {% endif %}
+
+        <!-- Clear chat confirmation overlay -->
+        <div id="clear-confirm-overlay" class="confirm-overlay" style="display:none;" aria-modal="true" role="dialog">
+            <div class="confirm-box">
+                <p class="confirm-msg">Clear all chat history?</p>
+                <div class="confirm-actions">
+                    <button type="button" id="clear-confirm-cancel" class="confirm-btn-cancel">Cancel</button>
+                    <button type="button" id="clear-confirm-ok" class="confirm-btn-ok">Clear</button>
+                </div>
+            </div>
+        </div>
+        <div class="input-hint-row">
+            <span class="input-hint"><kbd>Enter</kbd> to send &nbsp;&middot;&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline</span>
+            {% if has_history %}
+            <button type="submit" form="clear-history-form" class="clear-chat-btn">Clear chat</button>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Tool detail modal -->
+<div class="tool-modal-backdrop" id="tool-modal-backdrop" aria-hidden="true" onclick="closeToolModal()">
+    <div class="tool-modal" onclick="event.stopPropagation()">
+        <div class="tool-modal-header">
+            <code class="tool-modal-name" id="tool-modal-name"></code>
+            <button class="tool-modal-close" onclick="closeToolModal()" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="tool-modal-body" id="tool-modal-body"></div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', path='mcp-panels.js') }}"></script>
+<script>
+// ── Model selector ────────────────────────────────────────────────────────
+(function () {
+    const _initModelId  = {{ current_model_id | tojson }};
+    const _initProvider = {{ model | tojson }};
+    const FALLBACK_ID   = _initProvider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4.1';
+
+    let currentModelId  = _initModelId || FALLBACK_ID;
+    let currentProvider = _initProvider;
+    let modelsLoaded    = false;
+
+    const selector  = document.getElementById('chat-model-selector');
+    const btn       = document.getElementById('chat-model-btn');
+    const btnLabel  = document.getElementById('chat-model-btn-label');
+    const dropdown  = document.getElementById('chat-model-dropdown');
+    const listEl    = document.getElementById('chat-model-list');
+
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const isOpen = selector.classList.toggle('open');
+        if (isOpen && !modelsLoaded) {
+            await loadModels();
+            modelsLoaded = true;
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) selector.classList.remove('open');
+    });
+
+    async function loadModels() {
+        listEl.innerHTML = '<div class="chat-model-loading">Loading…</div>';
+        const providers = ['anthropic', 'openai'];
+        const results   = await Promise.allSettled(
+            providers.map(p => fetch('/api/models?provider=' + p).then(r => r.json()))
+        );
+
+        listEl.innerHTML = '';
+        let anyRendered = false;
+
+        providers.forEach((provider, i) => {
+            const res = results[i];
+            if (res.status === 'rejected' || res.value.error) return;
+            const models = res.value.models;
+            if (!models.length) return;
+
+            anyRendered = true;
+            const group = document.createElement('div');
+            group.className = 'chat-model-group';
+            const groupLabel = document.createElement('div');
+            groupLabel.className = 'chat-model-group-label';
+            groupLabel.textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+            group.appendChild(groupLabel);
+
+            models.forEach(m => {
+                const opt  = document.createElement('div');
+                const active = m.id === currentModelId && provider === currentProvider;
+                opt.className = 'chat-model-option' + (active ? ' active' : '');
+                opt.dataset.id       = m.id;
+                opt.dataset.provider = provider;
+                opt.dataset.name     = m.name || m.id;
+                opt.innerHTML =
+                    '<span class="chat-model-option-check">' + (active ? '✓' : '') + '</span>' +
+                    '<span class="chat-model-option-name">' + escHtml(m.name || m.id) + '</span>';
+                opt.addEventListener('click', () => selectModel(provider, m.id, m.name || m.id));
+                group.appendChild(opt);
+            });
+            listEl.appendChild(group);
+        });
+
+        if (!anyRendered) {
+            listEl.innerHTML = '<div class="chat-model-error">No models found — check API keys in Config</div>';
+        }
+    }
+
+    async function selectModel(provider, modelId, modelName) {
+        selector.classList.remove('open');
+        currentModelId  = modelId;
+        currentProvider = provider;
+        btnLabel.textContent = modelName;
+
+        // Update checkmarks
+        document.querySelectorAll('.chat-model-option').forEach(opt => {
+            const active = opt.dataset.id === modelId && opt.dataset.provider === provider;
+            opt.classList.toggle('active', active);
+            opt.querySelector('.chat-model-option-check').textContent = active ? '✓' : '';
+        });
+
+        // Persist to server (fire-and-forget)
+        const fd = new FormData();
+        fd.append('provider', provider);
+        fd.append('model_id', modelId);
+        fetch('/api/switch-model', { method: 'POST', body: fd }).catch(() => {});
+
+        // Update label used for new messages
+        window._chatModelLabel = modelName;
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+})();
+
+// ── Instance selector ─────────────────────────────────────────────────────
+(function () {
+    const _initInstances   = {{ edge_instances | tojson }};
+    const _initActiveIndex = {{ active_edge_instance }};
+
+    let activeIndex = _initActiveIndex;
+    let instancesLoaded = false;
+
+    const selector   = document.getElementById('chat-instance-selector');
+    const btn        = document.getElementById('chat-instance-btn');
+    const btnLabel   = document.getElementById('chat-instance-btn-label');
+    const dropdown   = document.getElementById('chat-instance-dropdown');
+    const listEl     = document.getElementById('chat-instance-list');
+    const sendBtn    = document.getElementById('send-btn');
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const isOpen = selector.classList.toggle('open');
+        if (isOpen && !instancesLoaded) {
+            await loadInstances();
+            instancesLoaded = true;
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) selector.classList.remove('open');
+    });
+
+    async function loadInstances() {
+        listEl.innerHTML = '<div class="chat-model-loading">Loading…</div>';
+        try {
+            const resp = await fetch('/api/edge-instances');
+            const data = await resp.json();
+            renderInstanceList(data.instances, data.active);
+        } catch (e) {
+            listEl.innerHTML = '<div class="chat-model-error">Could not load instances</div>';
+        }
+    }
+
+    function renderInstanceList(instances, active) {
+        if (!instances || instances.length === 0) {
+            listEl.innerHTML = '<div class="chat-model-error">No instances — <a href="/update-env" style="color:#1a7a56;">add one in Config</a></div>';
+            return;
+        }
+        listEl.innerHTML = '';
+        instances.forEach(inst => {
+            const opt = document.createElement('div');
+            const isActive = inst.index === active;
+            opt.className = 'chat-model-option' + (isActive ? ' active' : '');
+            opt.innerHTML =
+                '<span class="chat-model-option-check">' + (isActive ? '✓' : '') + '</span>' +
+                '<span class="chat-model-option-name">' + escHtml(inst.name) + '</span>';
+            opt.addEventListener('click', () => selectInstance(inst.index, inst.name));
+            listEl.appendChild(opt);
+        });
+    }
+
+    async function selectInstance(index, name) {
+        selector.classList.remove('open');
+        if (sendBtn) sendBtn.disabled = true;
+        const prevLabel = btnLabel.textContent;
+        btnLabel.textContent = 'Switching…';
+
+        const fd = new FormData();
+        fd.append('index', index);
+        try {
+            const resp = await fetch('/api/switch-edge-instance', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (data.ok) {
+                // Switch succeeded and history cleared — reload for a clean chat.
+                window.location.href = '/';
+                return;
+            }
+            btnLabel.textContent = prevLabel;
+        } catch (e) {
+            btnLabel.textContent = prevLabel;
+        }
+        if (sendBtn) sendBtn.disabled = false;
+    }
+
+    // Dim the button if no instances configured
+    if (!_initInstances || _initInstances.length === 0) {
+        btnLabel.style.color = '#9ab8b0';
+    }
+})();
+
+// ── Chat ──────────────────────────────────────────────────────────────────
+(function () {
+    const form        = document.getElementById("chat-form");
+    const textarea    = document.getElementById("query");
+    const sendBtn     = document.getElementById("send-btn");
+    const messages    = document.getElementById("chat-messages");
+    const loadingBar  = document.getElementById("loading-bar");
+    const clearForm   = document.getElementById("clear-history-form");
+    const _initModelLabel = {{ (current_model_id or model) | tojson }};
+
+    function getModelLabel() {
+        return window._chatModelLabel || _initModelLabel;
+    }
+
+    // Configure marked
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // Render existing history bubbles with marked
+    document.querySelectorAll(".msg-bubble[data-md]").forEach(el => {
+        el.innerHTML = marked.parse(el.dataset.md);
+    });
+
+    // Custom confirm overlay for clear history
+    const clearOverlay  = document.getElementById("clear-confirm-overlay");
+    const clearCancelBtn = document.getElementById("clear-confirm-cancel");
+    const clearOkBtn    = document.getElementById("clear-confirm-ok");
+
+    if (clearForm && clearOverlay) {
+        document.querySelector("button.clear-chat-btn")?.addEventListener("click", e => {
+            e.preventDefault();
+            clearOverlay.style.display = "flex";
+            clearCancelBtn.focus();
+        });
+        clearCancelBtn.addEventListener("click", () => {
+            clearOverlay.style.display = "none";
+        });
+        clearOkBtn.addEventListener("click", () => {
+            clearForm.submit();
+        });
+        clearOverlay.addEventListener("click", e => {
+            if (e.target === clearOverlay) clearOverlay.style.display = "none";
+        });
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape" && clearOverlay.style.display !== "none") {
+                clearOverlay.style.display = "none";
+            }
+        });
+    }
+
+    // Auto-resize textarea
+    function resize() {
+        textarea.style.height = "auto";
+        textarea.style.height = Math.min(textarea.scrollHeight, 180) + "px";
+    }
+    textarea.addEventListener("input", resize);
+
+    // Scroll to bottom (instant — no smooth animation during streaming)
+    function scrollToBottom() {
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    // True if the user is close enough to the bottom that auto-scroll makes sense
+    function isNearBottom() {
+        return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120;
+    }
+
+    scrollToBottom();
+
+    // Remove empty-state placeholder once a message is added
+    function removeEmpty() {
+        const empty = messages.querySelector(".chat-empty");
+        if (empty) empty.remove();
+    }
+
+    // Escape plain text for user bubbles (no markdown rendering)
+    function escapeText(text) {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+    }
+
+    // Render assistant content: markdown via marked, with [Tool: name] badges
+    function renderMarkdown(text) {
+        const withBadges = text.replace(
+            /\[Tool: ([^\]]+)\]/g,
+            '<span class="tool-badge">$1</span>'
+        );
+        return marked.parse(withBadges);
+    }
+
+    // Add a user message bubble immediately
+    function addUserMessage(text) {
+        removeEmpty();
+        const row = document.createElement("div");
+        row.className = "msg-row msg-user";
+        row.innerHTML = `<div class="msg-bubble">${escapeText(text)}</div>`;
+        messages.appendChild(row);
+        scrollToBottom();
+        return row;
+    }
+
+    // Add an assistant message bubble (streaming target)
+    function addAssistantMessage() {
+        const row = document.createElement("div");
+        row.className = "msg-row msg-assistant";
+        row.innerHTML = `
+            <div class="msg-meta">${getModelLabel()}</div>
+            <div class="msg-bubble md-body"></div>`;
+        messages.appendChild(row);
+        scrollToBottom();
+        return row.querySelector(".msg-bubble");
+    }
+
+    let isSubmitting = false;
+
+    async function submit() {
+        const query = textarea.value.trim();
+        if (!query || isSubmitting) return;
+
+        isSubmitting = true;
+        sendBtn.disabled = true;
+        textarea.disabled = true;
+        loadingBar.style.display = "block";
+
+        textarea.value = "";
+        resize();
+
+        addUserMessage(query);
+        const bubble = addAssistantMessage();
+
+        const formData = new FormData();
+        formData.append("query", query);
+
+        let accumulated = "";
+        let lastLen = 0;
+
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/chat", true);
+
+            xhr.onprogress = () => {
+                const near = isNearBottom();
+                const newChunk = xhr.responseText.slice(lastLen);
+                lastLen = xhr.responseText.length;
+                if (newChunk) {
+                    accumulated += newChunk;
+                    bubble.innerHTML = renderMarkdown(accumulated);
+                    if (near) scrollToBottom();
+                }
+            };
+
+            xhr.onload = () => {
+                loadingBar.style.display = "none";
+                // Final render (catches any trailing chunk)
+                const tail = xhr.responseText.slice(lastLen);
+                if (tail) {
+                    accumulated += tail;
+                    bubble.innerHTML = renderMarkdown(accumulated);
+                }
+                done();
+            };
+
+            xhr.onerror = () => {
+                bubble.innerHTML = renderContent("Network error — please try again.");
+                done();
+            };
+
+            xhr.ontimeout = () => {
+                bubble.innerHTML = renderContent("Request timed out — please try again.");
+                done();
+            };
+
+            xhr.send(formData);
+
+        } catch (err) {
+            bubble.innerHTML = renderContent(`Error: ${err.message}`);
+            done();
+        }
+    }
+
+    function done() {
+        loadingBar.style.display = "none";
+        sendBtn.disabled = false;
+        textarea.disabled = false;
+        textarea.focus();
+        isSubmitting = false;
+    }
+
+    form.addEventListener("submit", e => { e.preventDefault(); submit(); });
+
+    textarea.addEventListener("keydown", e => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+        }
+    });
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}AI Keys · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>AI Keys</h1>
+</div>
+
+<p style="font-size: 14px; color: #4d6b65; margin: 0 0 24px;">
+    Provide at least one API key to enable the chat interface.
+</p>
+
+<hr>
+
+<noscript>
+<form method="post" action="{{ url_for('setup') }}">
+    <label for="value_of_anthropic_api_key_ns">Anthropic API Key</label>
+    <input type="text" name="value_of_anthropic_api_key" id="value_of_anthropic_api_key_ns" placeholder="sk-ant-...">
+    <label for="value_of_openai_api_key_ns">OpenAI API Key</label>
+    <input type="text" name="value_of_openai_api_key" id="value_of_openai_api_key_ns" placeholder="sk-...">
+    <button type="submit">Save and continue</button>
+</form>
+</noscript>
+
+<div id="js-form">
+    <label for="value_of_anthropic_api_key">Anthropic API Key</label>
+    <input type="text" id="value_of_anthropic_api_key" placeholder="sk-ant-...">
+
+    <label for="value_of_openai_api_key">OpenAI API Key</label>
+    <input type="text" id="value_of_openai_api_key" placeholder="sk-...">
+
+    {% if error %}
+    <p style="color: #c0392b; font-size: 13px; margin: -8px 0 16px;">{{ error }}</p>
+    {% endif %}
+
+    <button type="button" id="save-keys-btn">Save and continue</button>
+</div>
+
+<div id="models-toast-container"></div>
+
+<script>
+document.getElementById('save-keys-btn').addEventListener('click', async function () {
+    const anthropic = document.getElementById('value_of_anthropic_api_key').value.trim();
+    const openai = document.getElementById('value_of_openai_api_key').value.trim();
+    if (!anthropic && !openai) {
+        alert('Please provide at least one API key.');
+        return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const formData = new FormData();
+    if (anthropic) formData.append('value_of_anthropic_api_key', anthropic);
+    if (openai) formData.append('value_of_openai_api_key', openai);
+
+    let saved = [];
+    try {
+        const resp = await fetch('/setup-key', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.error) {
+            btn.disabled = false;
+            btn.textContent = 'Save and continue';
+            showToastError(data.error);
+            return;
+        }
+        saved = data.saved || [];
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Save and continue';
+        showToastError('Request failed: ' + e.message);
+        return;
+    }
+
+    btn.textContent = 'Saved ✓';
+
+    const container = document.getElementById('models-toast-container');
+    container.innerHTML = '';
+
+    for (const provider of saved) {
+        await fetchAndRenderModels(provider, container);
+    }
+
+    // If no models panel to show, redirect after short delay
+    if (saved.length > 0 && container.children.length === 0) {
+        setTimeout(() => { window.location.href = '/'; }, 800);
+    }
+});
+
+async function fetchAndRenderModels(provider, container) {
+    const toast = document.createElement('div');
+    toast.className = 'models-toast models-toast-loading';
+    toast.innerHTML = '<span class="models-toast-label">' + capitalize(provider) + ' key saved — fetching models…</span>';
+    container.appendChild(toast);
+
+    try {
+        const resp = await fetch('/api/models?provider=' + provider);
+        const data = await resp.json();
+
+        if (data.error) {
+            toast.className = 'models-toast models-toast-error';
+            toast.innerHTML = '<span class="models-toast-label">' + capitalize(provider) + ' key saved</span>'
+                + '<span class="models-toast-error-msg">' + escHtml(data.error) + '</span>';
+            return;
+        }
+
+        toast.className = 'models-toast models-toast-success';
+        const label = document.createElement('span');
+        label.className = 'models-toast-label';
+        label.textContent = capitalize(provider) + ' — ' + data.models.length + ' model' + (data.models.length !== 1 ? 's' : '') + ' available';
+        toast.innerHTML = '';
+        toast.appendChild(label);
+
+        const pills = document.createElement('div');
+        pills.className = 'models-toast-pills';
+        data.models.slice(0, 8).forEach(m => {
+            const p = document.createElement('span');
+            p.className = 'models-toast-pill';
+            p.textContent = m.name || m.id;
+            pills.appendChild(p);
+        });
+        if (data.models.length > 8) {
+            const more = document.createElement('span');
+            more.className = 'models-toast-pill models-toast-pill-more';
+            more.textContent = '+' + (data.models.length - 8) + ' more';
+            pills.appendChild(more);
+        }
+        toast.appendChild(pills);
+
+        const goLink = document.createElement('a');
+        goLink.href = '/';
+        goLink.className = 'models-toast-go';
+        goLink.textContent = 'Go to chat →';
+        toast.appendChild(goLink);
+
+    } catch (e) {
+        toast.className = 'models-toast models-toast-error';
+        toast.innerHTML = '<span class="models-toast-label">' + capitalize(provider) + ' key saved</span>'
+            + '<span class="models-toast-error-msg">Could not fetch models: ' + escHtml(e.message) + '</span>';
+    }
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

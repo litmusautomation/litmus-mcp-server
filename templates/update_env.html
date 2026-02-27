@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}Config · Litmus MCP Server{% endblock %}
+
+{% block content %}
+<div class="title-bar">
+    <h1>Configuration</h1>
+</div>
+
+<hr>
+
+
+<!-- API Keys -->
+<h2>API Keys</h2>
+<div class="settings-form">
+    <label>Anthropic API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="anthropic-key" value="{{ settings.anthropic_key }}"
+                   placeholder="sk-ant-…" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('anthropic-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+    <label>OpenAI API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="openai-key" value="{{ settings.openai_key }}"
+                   placeholder="sk-…" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('openai-key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+    <div class="settings-save-row">
+        <span class="settings-status" id="api-keys-status"></span>
+        <button type="button" class="side-button" onclick="saveApiKeys()">Save keys</button>
+    </div>
+</div>
+
+<hr>
+
+<!-- Active model -->
+<h2>Active model</h2>
+
+<div class="model-selector">
+    <div class="provider-pills">
+        <button type="button" class="provider-pill{% if current_model == 'anthropic' %} active{% endif %}"
+                data-provider="anthropic" onclick="switchProvider('anthropic')">Anthropic</button>
+        <button type="button" class="provider-pill{% if current_model == 'openai' %} active{% endif %}"
+                data-provider="openai" onclick="switchProvider('openai')">OpenAI</button>
+    </div>
+
+    <div class="model-list-panel">
+        <div class="model-list" id="model-list">
+            <div class="mcp-panel-loading">Loading…</div>
+        </div>
+        <div class="model-selector-footer">
+            <span class="model-selector-hint" id="model-selector-hint"></span>
+            <button type="button" class="side-button" id="save-model-btn" onclick="saveModel()" disabled>Save model</button>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="{{ url_for('switch_model') }}" id="model-save-form" style="display:none;">
+    <input type="hidden" name="switch_model_to">
+    <input type="hidden" name="model_id">
+</form>
+
+<script>
+const _initProvider = {{ ('"' + current_model + '"') | safe }} || 'anthropic';
+const _initModelId  = {{ ('"' + current_model_id + '"') | safe }} || '';
+let selectedProvider = _initProvider;
+let selectedModelId  = _initModelId;
+
+async function loadModels(provider) {
+    const list = document.getElementById('model-list');
+    list.innerHTML = '<div class="mcp-panel-loading">Loading…</div>';
+    document.getElementById('save-model-btn').disabled = true;
+    document.getElementById('model-selector-hint').textContent = '';
+
+    try {
+        const resp = await fetch('/api/models?provider=' + provider);
+        const data = await resp.json();
+
+        if (data.error) {
+            list.innerHTML = '<div class="model-list-error">Could not load models — check API key</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        if (data.models.length === 0) {
+            list.innerHTML = '<div class="mcp-panel-empty">No models found</div>';
+            return;
+        }
+
+        data.models.forEach(m => {
+            const item = document.createElement('div');
+            const isCurrent = (m.id === selectedModelId && provider === selectedProvider);
+            item.className = 'model-list-item' + (isCurrent ? ' selected' : '');
+            item.dataset.id = m.id;
+            item.innerHTML = '<span class="model-list-dot"></span><span class="model-list-name">' + escHtml(m.name || m.id) + '</span>';
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.model-list-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+                selectedModelId = m.id;
+                document.getElementById('save-model-btn').disabled = false;
+                document.getElementById('model-selector-hint').textContent = '';
+            });
+            list.appendChild(item);
+        });
+
+        if (list.querySelector('.model-list-item.selected')) {
+            document.getElementById('save-model-btn').disabled = false;
+        }
+
+    } catch (e) {
+        list.innerHTML = '<div class="model-list-error">Could not load models — check API key</div>';
+    }
+}
+
+function switchProvider(provider) {
+    selectedProvider = provider;
+    document.querySelectorAll('.provider-pill').forEach(p => {
+        p.classList.toggle('active', p.dataset.provider === provider);
+    });
+    selectedModelId = (provider === _initProvider) ? _initModelId : '';
+    loadModels(provider);
+}
+
+function saveModel() {
+    if (!selectedModelId) {
+        document.getElementById('model-selector-hint').textContent = 'Select a model first';
+        return;
+    }
+    const form = document.getElementById('model-save-form');
+    form.querySelector('[name=switch_model_to]').value = selectedProvider;
+    form.querySelector('[name=model_id]').value = selectedModelId;
+    form.submit();
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadModels(_initProvider);
+</script>
+
+<hr>
+
+<!-- Edge Instances -->
+<h2>Litmus Edge Instances</h2>
+
+<div class="edge-add-form">
+    <input type="text" id="inst-url" placeholder="URL (https://...)" style="margin-bottom:0;">
+    <input type="text" id="inst-id" placeholder="Client ID" style="margin-bottom:0;">
+    <input type="password" id="inst-secret" placeholder="Client Secret" style="margin-bottom:0;">
+    <button type="button" id="inst-add-btn" onclick="addInstance()">Add instance</button>
+</div>
+<div id="inst-status" style="font-size:13px; margin-bottom:8px; min-height:18px;"></div>
+<div class="inst-list" id="inst-list">
+    <div class="mcp-panel-loading">Loading…</div>
+</div>
+
+<script>
+function escInstHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function loadInstances() {
+    const list = document.getElementById('inst-list');
+    try {
+        const resp = await fetch('/api/edge-instances');
+        const data = await resp.json();
+        renderInstances(data.instances, data.active);
+    } catch (e) {
+        list.innerHTML = '<div class="mcp-panel-empty">Could not load instances.</div>';
+    }
+}
+
+function renderInstances(instances, active) {
+    const list = document.getElementById('inst-list');
+    if (!instances || instances.length === 0) {
+        list.innerHTML = '<div class="mcp-panel-empty">No instances configured yet.</div>';
+        return;
+    }
+    list.innerHTML = instances.map(inst => {
+        const isActive = inst.index === active;
+        const actionBtn = isActive
+            ? '<span style="font-size:12px;color:#5ba89a;font-weight:600;">Active</span>'
+            : `<button type="button" class="side-button" onclick="switchInstance(${inst.index})">Make active</button>`;
+        return `<div class="inst-item${isActive ? ' active-inst' : ''}">
+            <div class="inst-dot${isActive ? ' active' : ''}"></div>
+            <span class="inst-name">${escInstHtml(inst.name)}</span>
+            <span class="inst-url">${escInstHtml(inst.url)}</span>
+            <div class="inst-actions">
+                ${actionBtn}
+                <button type="button" class="md-icon-btn" onclick="removeInstance(${inst.index})" title="Remove">
+                    <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function addInstance() {
+    const url    = document.getElementById('inst-url').value.trim();
+    const cid    = document.getElementById('inst-id').value.trim();
+    const secret = document.getElementById('inst-secret').value.trim();
+    const status = document.getElementById('inst-status');
+    const btn    = document.getElementById('inst-add-btn');
+
+    if (!url || !cid || !secret) {
+        status.textContent = 'All fields are required.';
+        status.style.color = '#c0392b';
+        return;
+    }
+
+    btn.disabled = true;
+    status.textContent = 'Connecting…';
+    status.style.color = '#4d6b65';
+
+    const fd = new FormData();
+    fd.append('url', url);
+    fd.append('client_id', cid);
+    fd.append('client_secret', secret);
+
+    try {
+        const resp = await fetch('/api/add-edge-instance', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.error) {
+            status.textContent = data.error;
+            status.style.color = '#c0392b';
+        } else {
+            status.textContent = `Added: ${data.name}`;
+            status.style.color = '#059669';
+            document.getElementById('inst-url').value    = '';
+            document.getElementById('inst-id').value     = '';
+            document.getElementById('inst-secret').value = '';
+            await loadInstances();
+        }
+    } catch (e) {
+        status.textContent = 'Connection error.';
+        status.style.color = '#c0392b';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function switchInstance(index) {
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/switch-edge-instance', { method: 'POST', body: fd });
+    await loadInstances();
+}
+
+async function removeInstance(index) {
+    if (!confirm('Remove this instance?')) return;
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/remove-edge-instance', { method: 'POST', body: fd });
+    await loadInstances();
+}
+
+loadInstances();
+</script>
+
+<hr>
+
+<!-- Connection Settings -->
+<h2>Connection Settings</h2>
+<p class="config-section-hint">Required for NATS topic tools and InfluxDB history queries.</p>
+
+<h3>NATS</h3>
+<div class="settings-form settings-form-grid">
+    <label>Source (IP)<input type="text" id="nats-source" value="{{ mcp_config.nats_source }}" placeholder="10.0.0.1"></label>
+    <label>Port<input type="text" id="nats-port" value="{{ mcp_config.nats_port }}" placeholder="4222"></label>
+    <label>User<input type="text" id="nats-user" value="{{ mcp_config.nats_user }}"></label>
+    <label>Password
+        <div class="settings-input-wrap">
+            <input type="password" id="nats-password" value="{{ mcp_config.nats_password }}" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('nats-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+</div>
+
+<h3>InfluxDB</h3>
+<div class="settings-form settings-form-grid">
+    <label>Host<input type="text" id="influx-host" value="{{ mcp_config.influx_host }}" placeholder="10.0.0.1"></label>
+    <label>Port<input type="text" id="influx-port" value="{{ mcp_config.influx_port }}" placeholder="8086"></label>
+    <label>Database<input type="text" id="influx-db" value="{{ mcp_config.influx_db_name }}" placeholder="tsdata"></label>
+    <label>Username<input type="text" id="influx-user" value="{{ mcp_config.influx_username }}"></label>
+    <label>Password
+        <div class="settings-input-wrap">
+            <input type="password" id="influx-password" value="{{ mcp_config.influx_password }}" autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('influx-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+</div>
+
+<div class="settings-save-row">
+    <span class="settings-status" id="conn-settings-status"></span>
+    <label class="settings-checkbox">
+        <input type="checkbox" id="validate-cert" {% if settings.validate_cert == 'true' %}checked{% endif %}>
+        Validate TLS certificate
+    </label>
+    <button type="button" class="side-button" onclick="saveConnSettings()">Save settings</button>
+</div>
+
+<script>
+// ── Settings save helpers ──────────────────────────────────────────────────
+
+async function saveApiKeys() {
+    const data = {};
+    const ak = document.getElementById('anthropic-key').value.trim();
+    const ok = document.getElementById('openai-key').value.trim();
+    if (ak) data['ANTHROPIC_API_KEY'] = ak;
+    if (ok) data['OPENAI_API_KEY'] = ok;
+    if (!Object.keys(data).length) {
+        document.getElementById('api-keys-status').textContent = 'Enter at least one key.';
+        document.getElementById('api-keys-status').className = 'settings-status err';
+        return;
+    }
+    await postSettings(data, 'api-keys-status');
+}
+
+async function saveConnSettings() {
+    const cert = document.getElementById('validate-cert').checked ? 'true' : 'false';
+    const data = {
+        NATS_SOURCE:          document.getElementById('nats-source').value.trim(),
+        NATS_PORT:            document.getElementById('nats-port').value.trim(),
+        NATS_USER:            document.getElementById('nats-user').value.trim(),
+        NATS_PASSWORD:        document.getElementById('nats-password').value.trim(),
+        INFLUX_HOST:          document.getElementById('influx-host').value.trim(),
+        INFLUX_PORT:          document.getElementById('influx-port').value.trim(),
+        INFLUX_DB_NAME:       document.getElementById('influx-db').value.trim(),
+        INFLUX_USERNAME:      document.getElementById('influx-user').value.trim(),
+        INFLUX_PASSWORD:      document.getElementById('influx-password').value.trim(),
+        VALIDATE_CERTIFICATE: cert,
+    };
+    await postSettings(data, 'conn-settings-status');
+}
+
+async function postSettings(data, statusId) {
+    const status = document.getElementById(statusId);
+    status.textContent = 'Saving…';
+    status.className = 'settings-status';
+    try {
+        const resp = await fetch('/api/save-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await resp.json();
+        status.textContent = result.ok ? 'Saved.' : 'Error.';
+        status.className = 'settings-status ' + (result.ok ? 'ok' : 'err');
+        setTimeout(() => { status.textContent = ''; status.className = 'settings-status'; }, 2500);
+    } catch (e) {
+        status.textContent = 'Failed.';
+        status.className = 'settings-status err';
+    }
+}
+
+const _eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const _eyeOff  = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+function toggleReveal(inputId, btn) {
+    const inp = document.getElementById(inputId);
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? _eyeOff : _eyeOpen;
+    btn.setAttribute('aria-label', show ? 'Hide' : 'Show');
+}
+</script>
+{% endblock %}

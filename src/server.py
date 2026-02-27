@@ -47,11 +47,19 @@ from tools.digitaltwins_tools import (
     get_hierarchy_tool,
     save_hierarchy_tool,
 )
+from tools.resource_tools import (
+    get_documentation_resource_list,
+    read_documentation_resource,
+)
 
 # Set up logging
+import warnings
+import urllib3
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+logging.getLogger(__name__).setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create MCP server
@@ -124,19 +132,22 @@ def get_tool_definitions() -> list[Tool]:
         Tool(
             name="get_devicehub_device_tags",
             description=(
-                "Retrieves all tags (data points/registers) configured for a specific device. "
-                "Returns tag configuration including name, address, data type, scaling, etc. "
-                "Use this to see what data points are available before reading values."
+                "Retrieves tags (data points/registers) with their configuration. "
+                "If device_name is provided, returns tags for that device only. "
+                "If device_name is omitted, returns tags across ALL devices. "
+                "Always performs a count check first — if the total exceeds 1000 the "
+                "tags are NOT returned and you should inform the user of the count and "
+                "ask them to specify a device_name to narrow the query."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "device_name": {
                         "type": "string",
-                        "description": "Exact name of the device (get from get_devicehub_devices first)",
+                        "description": "Name of the device to filter by (omit to query all devices)",
                     },
                 },
-                "required": ["device_name"],
+                "required": [],
             },
         ),
         Tool(
@@ -489,6 +500,31 @@ def get_tool_definitions() -> list[Tool]:
             },
         ),
     ]
+
+
+@mcp.list_resources()
+async def handle_list_resources():
+    """List all available documentation resources."""
+    from mcp.types import Resource
+
+    return [
+        Resource(
+            uri=doc["uri"],
+            name=doc["name"],
+            description=doc["description"],
+            mimeType=doc.get("mimeType", "text/plain"),
+        )
+        for doc in get_documentation_resource_list()
+    ]
+
+
+@mcp.read_resource()
+async def handle_read_resource(uri):
+    """Read a specific documentation resource."""
+    from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+    text_contents = await read_documentation_resource(uri)
+    return [ReadResourceContents(content=t, mime_type="text/plain") for t in text_contents]
 
 
 @mcp.list_tools()

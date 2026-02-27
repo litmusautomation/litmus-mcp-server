@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Litmus MCP Server{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    {% block scripts %}{% endblock %}
+</head>
+<body>
+
+    <!-- ── Left panels: Tools + Resources ──────────────────────────────────── -->
+    <div class="side-panels" id="side-panels">
+        <div class="mcp-panel" id="tools-panel">
+            <button class="mcp-panel-header" onclick="togglePanel('tools-panel')" aria-expanded="true">
+                <span class="mcp-panel-title">Tools <span class="mcp-panel-count" id="tools-count"></span></span>
+                <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="mcp-panel-body" id="tools-body">
+                <div class="mcp-panel-loading">Loading&hellip;</div>
+            </div>
+        </div>
+        <div class="mcp-panel" id="resources-panel">
+            <button class="mcp-panel-header" onclick="togglePanel('resources-panel')" aria-expanded="true">
+                <span class="mcp-panel-title">Resources <span class="mcp-panel-count" id="resources-count"></span></span>
+                <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="mcp-panel-body" id="resources-body">
+                <div class="mcp-panel-loading">Loading&hellip;</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Right panel: MCP Client Config ──────────────────────────────────── -->
+    <div class="config-right-panel" id="mcp-config-panel">
+        <button class="mcp-panel-header" onclick="toggleMcpConfig()" aria-expanded="true">
+            <span class="mcp-panel-title"><span>MCP Client Config</span></span>
+            <svg class="mcp-panel-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="config-panel-body" id="mcp-config-body">
+            <p class="config-section-hint" style="margin-top:0;">
+                Your Litmus MCP server is pre-configured below. Add more MCP servers or edit as needed,
+                then copy and paste into your client's config file.
+            </p>
+            <div class="config-tabs">
+                <button class="config-tab active" data-tab="cursor"         onclick="mcpCfgSwitchTab('cursor')">Cursor / VS Code</button>
+                <button class="config-tab"        data-tab="claude_code"    onclick="mcpCfgSwitchTab('claude_code')">Claude Code</button>
+                <button class="config-tab"        data-tab="claude_desktop" onclick="mcpCfgSwitchTab('claude_desktop')">Claude Desktop</button>
+            </div>
+            <div class="config-json-wrap">
+                <div class="config-json-toolbar">
+                    <button type="button" class="config-reset-btn" onclick="mcpCfgReset()" title="Restore Litmus server entry">Reset</button>
+                    <button type="button" class="config-copy-btn" id="mcp-cfg-copy-btn" onclick="mcpCfgCopy()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy
+                    </button>
+                </div>
+                <textarea class="config-json" id="mcp-cfg-editor" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="top-nav">
+            <a href="{{ url_for('query_handler') }}" class="{{ 'active' if active_page == 'home' else '' }}">Home</a>
+            <a href="{{ url_for('update_env_form') }}" class="{{ 'active' if active_page == 'config' else '' }}">Config</a>
+            <a href="{{ url_for('health') }}" class="{{ 'active' if active_page == 'health' else '' }}">Health</a>
+        </div>
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Tool detail modal -->
+    <div class="tool-modal-backdrop" id="tool-modal-backdrop" aria-hidden="true" onclick="closeToolModal()">
+        <div class="tool-modal" onclick="event.stopPropagation()">
+            <div class="tool-modal-header">
+                <code class="tool-modal-name" id="tool-modal-name"></code>
+                <button class="tool-modal-close" onclick="closeToolModal()" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="tool-modal-body" id="tool-modal-body"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='mcp-panels.js') }}"></script>
+</body>
+</html>
