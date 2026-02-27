@@ -2,6 +2,8 @@ import os
 import secrets
 import asyncio
 import logging
+import warnings
+import urllib3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException
@@ -47,72 +49,28 @@ from conversation import (
     update_conversation_history,
     get_chat_log,
     markdown_to_html,
+    clear_all_sessions,
 )
 from client_utils import MCPClient
 from tools.resource_tools import DOCUMENTATION_RESOURCES
 
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logging.getLogger("web_client").setLevel(logging.INFO)
 logger = logging.getLogger("web_client")
 
 mcp_env_loader()
 
-_CREDENTIAL_KEYS = (
-    "EDGE_URL",
-    "EDGE_API_CLIENT_ID",
-    "EDGE_API_CLIENT_SECRET",
-    "VALIDATE_CERTIFICATE",
-    "NATS_SOURCE",
-    "NATS_PORT",
-    "NATS_USER",
-    "NATS_PASSWORD",
-    "INFLUX_HOST",
-    "INFLUX_PORT",
-    "INFLUX_DB_NAME",
-    "INFLUX_USERNAME",
-    "INFLUX_PASSWORD",
-)
-
-
-def _build_sse_headers() -> dict:
-    return {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting MCP client connection")
-    sse_url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
-    headers = _build_sse_headers()
-
-    client = None
-    max_attempts = 20
-    for attempt in range(1, max_attempts + 1):
-        try:
-            client = MCPClient()
-            await client.connect_to_sse_server(url=sse_url, headers=headers)
-            break
-        except Exception as exc:
-            if attempt == max_attempts:
-                logger.error(
-                    "MCP SSE server unreachable after %d attempts (%s): %s",
-                    max_attempts,
-                    sse_url,
-                    exc,
-                )
-                raise
-            logger.warning(
-                "MCP SSE server not ready (attempt %d/%d), retrying in 1s...",
-                attempt,
-                max_attempts,
-            )
-            await asyncio.sleep(1)
-
-    app.state.client = client
+    logger.info("MCP client initialised (per-query connections)")
+    app.state.client = MCPClient()
     yield
-    logger.info("Cleaning up MCP client")
-    await client.cleanup()
+    logger.info("MCP client shut down")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -146,22 +104,6 @@ def _get_client(request: Request) -> MCPClient:
     if not client:
         raise HTTPException(status_code=500, detail="MCP client not initialised")
     return client
-
-
-async def _reconnect_client(app: FastAPI):
-    old = getattr(app.state, "client", None)
-    if old:
-        try:
-            await old.cleanup()
-        except Exception:
-            pass
-    mcp_env_loader()
-    nc = MCPClient()
-    await nc.connect_to_sse_server(
-        url=os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse"),
-        headers=_build_sse_headers(),
-    )
-    app.state.client = nc
 
 
 # ── Auth / setup ───────────────────────────────────────────────────────────
@@ -402,7 +344,7 @@ async def api_add_edge_instance(
     active = int(os.environ.get(ACTIVE_EDGE_INSTANCE, 0))
     if not active:
         activate_edge_instance(idx)
-        await _reconnect_client(request.app)
+        mcp_env_loader()
 
     return JSONResponse({"ok": True, "index": idx, "name": name, "url": url})
 
@@ -417,7 +359,7 @@ async def api_remove_edge_instance(request: Request, index: int = Form(...)):
         instances = get_edge_instances()
         if instances:
             activate_edge_instance(instances[0]["index"])
-            await _reconnect_client(request.app)
+            mcp_env_loader()
         else:
             mcp_env_updater(ACTIVE_EDGE_INSTANCE, "0")
     return JSONResponse({"ok": True})
@@ -427,7 +369,8 @@ async def api_remove_edge_instance(request: Request, index: int = Form(...)):
 async def api_switch_edge_instance(request: Request, index: int = Form(...)):
     mcp_env_loader()
     activate_edge_instance(index)
-    await _reconnect_client(request.app)
+    mcp_env_loader()
+    clear_all_sessions()
     name = os.environ.get(f"EDGE_INSTANCE_{index}_NAME", f"Edge {index}")
     return JSONResponse({"ok": True, "index": index, "name": name})
 
@@ -683,6 +626,26 @@ async def api_edge_health(index: int = 0):
             logger.info("version %s → code=%s data=%s", path, c, d)
             return c, d
 
+        def _gql(path, query_str):
+            """POST a GraphQL query; returns (status_code, parsed_json_or_none)."""
+            try:
+                import json as _json
+                body = _json.dumps({"query": query_str, "variables": {}})
+                code, raw = direct_request(
+                    connection=connection,
+                    url=f"{edge_url}{path}",
+                    request_type="POST",
+                    additional_body=body,
+                    extra_headers={"Content-Type": "application/json"},
+                )
+                try:
+                    data = _json.loads(raw) if raw else None
+                except Exception:
+                    data = raw
+                return code, data
+            except Exception:
+                return None, None
+
         services = {}
         host = {}
 
@@ -695,12 +658,20 @@ async def api_edge_health(index: int = 0):
             "git": g,
         }
 
-        # Digital Twins
-        code, _ = _get("/digital-twins")
-        _, vdata = _getver("/digital-twins/version")
-        v, g = _ver(vdata)
+        # Digital Twins — GraphQL endpoint, requires POST
+        dt_code, dt_data = _gql(
+            "/digital-twins",
+            "query Version { Version { Git Version } }",
+        )
+        v, g = "", ""
+        if isinstance(dt_data, dict):
+            ver = (dt_data.get("data") or {}).get("Version") or {}
+            v = str(ver.get("Version", "") or "")
+            g = str(ver.get("Git", "") or "")
+            if isinstance(g, str) and len(g) > 8:
+                g = g[:8]
         services["digital_twins"] = {
-            "status": "ok" if _ok(code) else "error",
+            "status": "ok" if _ok(dt_code) else "error",
             "version": v,
             "git": g,
         }

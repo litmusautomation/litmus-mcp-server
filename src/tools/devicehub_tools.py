@@ -11,6 +11,7 @@ from mcp.types import TextContent
 from starlette.requests import Request
 from litmussdk.devicehub import devices, tags
 from litmussdk.devicehub.drivers import list_all_drivers
+from litmussdk.utils import api, api_paths, gql_queries
 
 # Short-lived cache for the device list, keyed by EDGE_URL.
 # Avoids redundant API round-trips when the LLM calls multiple device tools
@@ -194,63 +195,165 @@ async def create_devicehub_device(
         return format_error_response("creation_failed", str(e))
 
 
+_TAG_LIMIT = 1000
+
+_COUNT_DEVICE_TAGS = """
+query CountRegisters($input: ListRegistersRequest!) {
+    ListRegisters(input: $input) {
+        TotalCount
+    }
+}
+"""
+
+_COUNT_ALL_TAGS = """
+query CountAllRegisters($input: ListRegistersFromAllDevicesRequest!) {
+    ListRegistersFromAllDevices(input: $input) {
+        TotalCount
+    }
+}
+"""
+
+_LIST_ALL_TAGS_RAW = """
+query ListAllRegisters($input: ListRegistersFromAllDevicesRequest!) {
+    ListRegistersFromAllDevices(input: $input) {
+        Registers {
+            ID
+            DeviceID
+            Name
+            TagName
+            Description
+            ValueType
+            Properties {
+                Name
+                Value
+            }
+        }
+    }
+}
+"""
+
+
+def _extract_tags(raw_registers: list) -> list[dict]:
+    """Build tag dicts from raw GQL register records, skipping pydantic validation."""
+    def _prop(props, name):
+        for p in props or []:
+            if p.get("Name") == name:
+                return p.get("Value")
+        return None
+
+    tag_data = []
+    for raw in raw_registers:
+        props = raw.get("Properties") or []
+        tag_info = {
+            "tag_name": raw.get("TagName") or raw.get("Name"),
+            "id": raw.get("ID"),
+            "address": _prop(props, "Address") or _prop(props, "address"),
+            "data_type": raw.get("ValueType") or _prop(props, "DataType"),
+            "description": raw.get("Description"),
+        }
+        tag_data.append({k: v for k, v in tag_info.items() if v is not None})
+    tag_data.sort(key=lambda x: x["tag_name"])
+    return tag_data
+
+
 async def get_devicehub_device_tags(
     request: Request, arguments: dict
 ) -> list[TextContent]:
     """
-    Retrieves all tags (data points/registers) for a specific device.
+    Retrieves tags for a specific device or all devices.
 
-    Returns tag configuration including address, data type, scaling, etc.
+    Always counts first; refuses to list if total exceeds _TAG_LIMIT.
     """
     try:
-        device_name = arguments.get("device_name")
-
-        if not device_name:
-            raise McpError(
-                ErrorData(
-                    code=INVALID_PARAMS, message="'device_name' parameter is required"
-                )
-            )
-
+        device_name = (arguments.get("device_name") or "").strip()
         connection = get_litmus_connection(request)
 
-        # Find the device
-        requested_device = _find_device_by_name(connection, device_name, request)
-        if not requested_device:
-            raise McpError(
-                ErrorData(
-                    code=INVALID_PARAMS,
-                    message=f"Device '{device_name}' not found. Use get_devicehub_devices to see available devices.",
+        if device_name:
+            # ── Single-device path ────────────────────────────────────────
+            requested_device = _find_device_by_name(connection, device_name, request)
+            if not requested_device:
+                raise McpError(
+                    ErrorData(
+                        code=INVALID_PARAMS,
+                        message=f"Device '{device_name}' not found. Use get_devicehub_devices to see available devices.",
+                    )
                 )
+
+            count_result = api.gql_query(
+                api_paths.DH_GRAPHQL,
+                {"query": _COUNT_DEVICE_TAGS,
+                 "variables": {"input": {"DeviceID": requested_device.id}}},
+                connection,
             )
+            total = (
+                count_result.get("data", {})
+                .get("ListRegisters", {})
+                .get("TotalCount", 0)
+            )
+            if total > _TAG_LIMIT:
+                return format_success_response({
+                    "device_name": device_name,
+                    "total_count": total,
+                    "message": (
+                        f"Device '{device_name}' has {total} tags, which exceeds "
+                        f"the limit of {_TAG_LIMIT}. Cannot return the full list."
+                    ),
+                })
 
-        # Get tags
-        tag_list = tags.list_registers_from_single_device(requested_device)
+            list_result = api.gql_query(
+                api_paths.DH_GRAPHQL,
+                {"query": gql_queries.LIST_TAGS,
+                 "variables": {"input": {"DeviceID": requested_device.id, "Limit": _TAG_LIMIT}}},
+                connection,
+            )
+            raw_registers = (
+                list_result.get("data", {}).get("ListRegisters", {}).get("Registers", [])
+            )
+            scope = f"device '{device_name}'"
 
-        tag_data = []
-        for current_tag in tag_list:
-            tag_info = {
-                "tag_name": current_tag.tag_name,
-                "id": getattr(current_tag, "id", None),
-                "address": getattr(current_tag, "address", None),
-                "data_type": getattr(current_tag, "data_type", None),
-                "scaling": getattr(current_tag, "scaling", None),
-                "read_write": getattr(current_tag, "read_write", None),
-                "unit": getattr(current_tag, "unit", None),
-                "description": getattr(current_tag, "description", None),
-            }
-            tag_data.append({k: v for k, v in tag_info.items() if v is not None})
+        else:
+            # ── All-devices path ──────────────────────────────────────────
+            count_result = api.gql_query(
+                api_paths.DH_GRAPHQL,
+                {"query": _COUNT_ALL_TAGS, "variables": {"input": {}}},
+                connection,
+            )
+            total = (
+                count_result.get("data", {})
+                .get("ListRegistersFromAllDevices", {})
+                .get("TotalCount", 0)
+            )
+            if total > _TAG_LIMIT:
+                return format_success_response({
+                    "total_count": total,
+                    "message": (
+                        f"There are {total} tags across all devices, which exceeds "
+                        f"the limit of {_TAG_LIMIT}. Specify a device_name to narrow the query."
+                    ),
+                })
 
-        tag_data.sort(key=lambda x: x["tag_name"])
+            list_result = api.gql_query(
+                api_paths.DH_GRAPHQL,
+                {"query": _LIST_ALL_TAGS_RAW, "variables": {"input": {"Limit": _TAG_LIMIT}}},
+                connection,
+            )
+            raw_registers = (
+                list_result.get("data", {})
+                .get("ListRegistersFromAllDevices", {})
+                .get("Registers", [])
+            )
+            scope = "all devices"
 
-        logger.info(f"Retrieved {len(tag_data)} tags for device '{device_name}'")
+        tag_data = _extract_tags(raw_registers)
+        logger.info(f"Retrieved {len(tag_data)} tags for {scope}")
 
         result = {
-            "device_name": device_name,
             "count": len(tag_data),
             "tags": tag_data,
             "tag_names": [t["tag_name"] for t in tag_data],
         }
+        if device_name:
+            result["device_name"] = device_name
 
         return format_success_response(result)
 
@@ -389,10 +492,13 @@ def _find_device_by_name(
 
 def _build_device_info(device: Any) -> dict:
     """Build device information dictionary."""
+    driver = getattr(device, "driver", None)
+    if driver is not None and not isinstance(driver, str):
+        driver = getattr(driver, "name", None) or getattr(driver, "id", None) or str(driver)
     device_info = {
         "name": device.name,
         "id": getattr(device, "id", None),
-        "driver": getattr(device, "driver", None),
+        "driver": driver,
         "metadata": getattr(device, "metadata", "unknown"),
         "description": getattr(device, "description", None),
         "properties": getattr(device, "properties", None),

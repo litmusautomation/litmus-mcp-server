@@ -65,6 +65,11 @@ def check_streaming_status(current_route: str) -> Tuple[bool, str]:
     return redirect, new_route
 
 
+def clear_all_sessions():
+    """Clear all in-memory session histories (called on device switch)."""
+    _SESSIONS.clear()
+
+
 def markdown_to_html(text: str) -> str:
     if not text:
         return ""

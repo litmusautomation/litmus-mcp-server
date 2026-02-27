@@ -1,6 +1,13 @@
 /* ── Reset ────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* ── Thin scrollbar (matches floating panels, applied globally) ───────────── */
+* { scrollbar-width: thin; scrollbar-color: #ccddd8 transparent; }
+*::-webkit-scrollbar       { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #ccddd8; border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: #9ab8b0; }
+
 /* ── Base ─────────────────────────────────────────────────────────────────── */
 body {
     background-color: #f0f5f3;
@@ -725,22 +732,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     white-space: nowrap;
 }
 
-.mcp-panel-body::-webkit-scrollbar {
-    width: 5px;
-}
-
-.mcp-panel-body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.mcp-panel-body::-webkit-scrollbar-thumb {
-    background: #ccddd8;
-    border-radius: 99px;
-}
-
-.mcp-panel-body::-webkit-scrollbar-thumb:hover {
-    background: #9ab8b0;
-}
 
 .mcp-panel-loading,
 .mcp-panel-empty {
@@ -1164,10 +1155,110 @@ body.chat-page {
 
 .chat-input-form button:disabled { background: #c8ddd8; }
 
+.input-hint-row {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+}
+
 .input-hint {
-    margin: 6px 4px 0;
+    margin: 0 4px;
     font-size: 12px;
     color: #b0c4bc;
+}
+
+/* ── Clear chat confirmation overlay ──────────────────────────────────────── */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 36, 32, 0.35);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.confirm-box {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.14);
+    padding: 24px 28px 20px;
+    min-width: 280px;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.confirm-msg {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: #0d2420;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.confirm-btn-cancel {
+    background: transparent;
+    color: #4d6b65;
+    border: 1px solid #d4deda;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    letter-spacing: normal;
+}
+
+.confirm-btn-cancel:hover {
+    background: #f0f5f3;
+    border-color: #b4d4c8;
+    transform: none;
+}
+
+.confirm-btn-ok {
+    background: #c0392b;
+    color: #fff;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: normal;
+}
+
+.confirm-btn-ok:hover {
+    background: #a93226;
+    transform: none;
+}
+
+button.clear-chat-btn {
+    margin-left: auto;
+    background-color: transparent;
+    color: #d9706e;
+    border: 1px solid #f0cece;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 7px;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    letter-spacing: normal;
+}
+
+button.clear-chat-btn:hover {
+    background-color: #fdf2f2;
+    color: #b83232;
+    border-color: #e0a8a8;
+    transform: none;
 }
 
 /* ── Health page: instance header row ────────────────────────────────────── */

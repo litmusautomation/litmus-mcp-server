@@ -50,11 +50,6 @@
             <a href="{{ url_for('setup') }}" class="{{ 'active' if active_page == 'setup' else '' }}">AI Keys</a>
             <a href="{{ url_for('health') }}" class="{{ 'active' if active_page == 'health' else '' }}">Health</a>
         </nav>
-        {% if has_history %}
-        <form method="post" action="{{ url_for('clear_history') }}" id="clear-history-form">
-            <button type="submit" class="side-button">Clear</button>
-        </form>
-        {% endif %}
     </header>
 
     <!-- Messages -->
@@ -96,7 +91,26 @@
                 </svg>
             </button>
         </form>
-        <p class="input-hint"><kbd>Enter</kbd> to send &nbsp;&middot;&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline</p>
+        {% if has_history %}
+        <form method="post" action="{{ url_for('clear_history') }}" id="clear-history-form" style="display:none;"></form>
+        {% endif %}
+
+        <!-- Clear chat confirmation overlay -->
+        <div id="clear-confirm-overlay" class="confirm-overlay" style="display:none;" aria-modal="true" role="dialog">
+            <div class="confirm-box">
+                <p class="confirm-msg">Clear all chat history?</p>
+                <div class="confirm-actions">
+                    <button type="button" id="clear-confirm-cancel" class="confirm-btn-cancel">Cancel</button>
+                    <button type="button" id="clear-confirm-ok" class="confirm-btn-ok">Clear</button>
+                </div>
+            </div>
+        </div>
+        <div class="input-hint-row">
+            <span class="input-hint"><kbd>Enter</kbd> to send &nbsp;&middot;&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline</span>
+            {% if has_history %}
+            <button type="submit" form="clear-history-form" class="clear-chat-btn">Clear chat</button>
+            {% endif %}
+        </div>
     </div>
 
 </div>
@@ -268,6 +282,7 @@
     async function selectInstance(index, name) {
         selector.classList.remove('open');
         if (sendBtn) sendBtn.disabled = true;
+        const prevLabel = btnLabel.textContent;
         btnLabel.textContent = 'Switching…';
 
         const fd = new FormData();
@@ -276,17 +291,15 @@
             const resp = await fetch('/api/switch-edge-instance', { method: 'POST', body: fd });
             const data = await resp.json();
             if (data.ok) {
-                activeIndex = index;
-                btnLabel.textContent = name;
-                instancesLoaded = false;
-            } else {
-                btnLabel.textContent = name;
+                // Switch succeeded and history cleared — reload for a clean chat.
+                window.location.href = '/';
+                return;
             }
+            btnLabel.textContent = prevLabel;
         } catch (e) {
-            btnLabel.textContent = name;
-        } finally {
-            if (sendBtn) sendBtn.disabled = false;
+            btnLabel.textContent = prevLabel;
         }
+        if (sendBtn) sendBtn.disabled = false;
     }
 
     // Dim the button if no instances configured
@@ -317,10 +330,30 @@
         el.innerHTML = marked.parse(el.dataset.md);
     });
 
-    // Confirm before clearing history
-    if (clearForm) {
-        clearForm.addEventListener("submit", e => {
-            if (!confirm("Clear all chat history?")) e.preventDefault();
+    // Custom confirm overlay for clear history
+    const clearOverlay  = document.getElementById("clear-confirm-overlay");
+    const clearCancelBtn = document.getElementById("clear-confirm-cancel");
+    const clearOkBtn    = document.getElementById("clear-confirm-ok");
+
+    if (clearForm && clearOverlay) {
+        document.querySelector("button.clear-chat-btn")?.addEventListener("click", e => {
+            e.preventDefault();
+            clearOverlay.style.display = "flex";
+            clearCancelBtn.focus();
+        });
+        clearCancelBtn.addEventListener("click", () => {
+            clearOverlay.style.display = "none";
+        });
+        clearOkBtn.addEventListener("click", () => {
+            clearForm.submit();
+        });
+        clearOverlay.addEventListener("click", e => {
+            if (e.target === clearOverlay) clearOverlay.style.display = "none";
+        });
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape" && clearOverlay.style.display !== "none") {
+                clearOverlay.style.display = "none";
+            }
         });
     }
 

@@ -1,6 +1,6 @@
 import os
 from typing import Optional, Iterable, cast
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
@@ -13,6 +13,22 @@ from agents import ModelSettings
 
 _anthropic_display_name = "Claude Sonnet 4.6"
 _openai_display_name = "OpenAI GPT-4.1"
+
+_CREDENTIAL_KEYS = (
+    "EDGE_URL",
+    "EDGE_API_CLIENT_ID",
+    "EDGE_API_CLIENT_SECRET",
+    "VALIDATE_CERTIFICATE",
+    "NATS_SOURCE",
+    "NATS_PORT",
+    "NATS_USER",
+    "NATS_PASSWORD",
+    "INFLUX_HOST",
+    "INFLUX_PORT",
+    "INFLUX_DB_NAME",
+    "INFLUX_USERNAME",
+    "INFLUX_PASSWORD",
+)
 
 
 def _get_model_id(provider: str) -> str:
@@ -31,29 +47,21 @@ _system_prompt = (
 
 class MCPClient:
     def __init__(self):
-        self.session: Optional[ClientSession] = None
-        self.exit_stack = AsyncExitStack()
         self.anthropic: Optional[AsyncAnthropic] = None
         self._anthropic_key: str = ""
-        self.read = None
-        self.write = None
-        self._sse_url: str = ""
-        self._sse_headers: dict = {}
         self.model_used = None
 
-    async def connect_to_sse_server(self, url: str, headers: dict):
-        sse_transport = await self.exit_stack.enter_async_context(
-            sse_client(url=url, headers=headers)
-        )
-        self.read, self.write = sse_transport
-        self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.read, self.write)
-        )
-        await self.session.initialize()
-        response = await self.session.list_tools()
-        print("Connected to SSE server with tools:", [t.name for t in response.tools])
-        self._sse_url = url
-        self._sse_headers = headers
+    @asynccontextmanager
+    async def _open_session(self):
+        """Open a fresh SSE session using current env credentials."""
+        url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
+        headers = {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
+        async with AsyncExitStack() as stack:
+            transport = await stack.enter_async_context(sse_client(url=url, headers=headers))
+            read, write = transport
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+            yield session
 
     def _ensure_anthropic(self):
         key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -62,7 +70,8 @@ class MCPClient:
             self._anthropic_key = key
 
     async def _list_tools(self):
-        response = await self.session.list_tools()
+        async with self._open_session() as session:
+            response = await session.list_tools()
         return [
             {
                 "name": t.name,
@@ -73,7 +82,8 @@ class MCPClient:
         ]
 
     async def _list_resources(self):
-        response = await self.session.list_resources()
+        async with self._open_session() as session:
+            response = await session.list_resources()
         return [
             {
                 "uri": str(r.uri),
@@ -92,57 +102,67 @@ class MCPClient:
         messages = list(conversation_history) if conversation_history else []
         messages.append({"role": "user", "content": query})
 
-        available_tools = await self._list_tools()
-        converted_tools = cast(Iterable[ToolParam], available_tools)
-        final_text = []
-
-        response = await self.anthropic.messages.create(
-            model=_get_model_id("anthropic"),
-            max_tokens=max_tokens,
-            system=_system_prompt,
-            messages=cast(Iterable[MessageParam], messages),
-            tools=converted_tools,
-        )
-
-        while True:
-            text_parts = []
-            tool_uses = []
-
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-                elif block.type == "tool_use":
-                    tool_uses.append(block)
-
-            if text_parts:
-                final_text.extend(text_parts)
-
-            if response.stop_reason != "tool_use" or not tool_uses:
-                break
-
-            # Execute all tool calls and continue the conversation
-            messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
-            for block in tool_uses:
-                tool_args = dict(block.input) if block.input else {}
-                result = await self.session.call_tool(block.name, tool_args)
-                result_text = "\n".join(
-                    rc.text for rc in result.content if hasattr(rc, "text")
-                )
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result_text,
-                })
-
-            messages.append({"role": "user", "content": tool_results})
+        async with self._open_session() as session:
+            tools_resp = await session.list_tools()
+            converted_tools = cast(
+                Iterable[ToolParam],
+                [
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.inputSchema,
+                    }
+                    for t in tools_resp.tools
+                ],
+            )
+            final_text = []
 
             response = await self.anthropic.messages.create(
                 model=_get_model_id("anthropic"),
                 max_tokens=max_tokens,
+                system=_system_prompt,
                 messages=cast(Iterable[MessageParam], messages),
                 tools=converted_tools,
             )
+
+            while True:
+                text_parts = []
+                tool_uses = []
+
+                for block in response.content:
+                    if block.type == "text":
+                        text_parts.append(block.text)
+                    elif block.type == "tool_use":
+                        tool_uses.append(block)
+
+                if text_parts:
+                    final_text.extend(text_parts)
+
+                if response.stop_reason != "tool_use" or not tool_uses:
+                    break
+
+                messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+                for block in tool_uses:
+                    tool_args = dict(block.input) if block.input else {}
+                    result = await session.call_tool(block.name, tool_args)
+                    result_text = "\n".join(
+                        rc.text for rc in result.content if hasattr(rc, "text")
+                    )
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result_text,
+                    })
+
+                messages.append({"role": "user", "content": tool_results})
+
+                response = await self.anthropic.messages.create(
+                    model=_get_model_id("anthropic"),
+                    max_tokens=max_tokens,
+                    messages=cast(Iterable[MessageParam], messages),
+                    tools=converted_tools,
+                )
 
         return "\n".join(final_text)
 
@@ -161,46 +181,54 @@ class MCPClient:
         messages = list(conversation_history) if conversation_history else []
         messages.append({"role": "user", "content": query})
 
-        available_tools = await self._list_tools()
+        async with self._open_session() as session:
+            tools_resp = await session.list_tools()
+            available_tools = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.inputSchema,
+                }
+                for t in tools_resp.tools
+            ]
 
-        while True:
-            async with self.anthropic.messages.stream(
-                model=_get_model_id("anthropic"),
-                max_tokens=max_tokens,
-                system=_system_prompt,
-                messages=cast(Iterable[MessageParam], messages),
-                tools=cast(Iterable[ToolParam], available_tools),
-            ) as stream:
-                async for text in stream.text_stream:
-                    yield text
+            while True:
+                async with self.anthropic.messages.stream(
+                    model=_get_model_id("anthropic"),
+                    max_tokens=max_tokens,
+                    system=_system_prompt,
+                    messages=cast(Iterable[MessageParam], messages),
+                    tools=cast(Iterable[ToolParam], available_tools),
+                ) as stream:
+                    async for text in stream.text_stream:
+                        yield text
 
-                final = await stream.get_final_message()
+                    final = await stream.get_final_message()
 
-            if final.stop_reason != "tool_use":
-                break
+                if final.stop_reason != "tool_use":
+                    break
 
-            # Execute every tool call, then continue streaming
-            messages.append({"role": "assistant", "content": final.content})
-            tool_results = []
-            for block in final.content:
-                if block.type == "tool_use":
-                    yield f"\n[Tool: {block.name}]\n"
-                    tool_args = dict(block.input) if block.input else {}
-                    result = await self.session.call_tool(block.name, tool_args)
-                    result_text = "\n".join(
-                        rc.text for rc in result.content if hasattr(rc, "text")
-                    )
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result_text,
-                    })
+                messages.append({"role": "assistant", "content": final.content})
+                tool_results = []
+                for block in final.content:
+                    if block.type == "tool_use":
+                        yield f"\n[Tool: {block.name}]\n"
+                        tool_args = dict(block.input) if block.input else {}
+                        result = await session.call_tool(block.name, tool_args)
+                        result_text = "\n".join(
+                            rc.text for rc in result.content if hasattr(rc, "text")
+                        )
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result_text,
+                        })
 
-            messages.append({"role": "user", "content": tool_results})
-            # Loop: stream the follow-up response after tool results
+                messages.append({"role": "user", "content": tool_results})
+                # Loop: stream the follow-up response after tool results
 
     async def cleanup(self):
-        await self.exit_stack.aclose()
+        pass  # No persistent resources; kept for interface compatibility
 
     async def process_query_with_openai_agent(
         self, query: str, conversation_history=None
@@ -208,9 +236,12 @@ class MCPClient:
         messages = list(conversation_history) if conversation_history else []
         messages.append({"role": "user", "content": query})
 
+        url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
+        headers = {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
+
         async with MCPServerSse(
             name="SseServer",
-            params={"url": self._sse_url, "headers": self._sse_headers},
+            params={"url": url, "headers": headers},
         ) as server:
             trace_id = gen_trace_id()
             with trace(workflow_name="SseServer", trace_id=trace_id):
