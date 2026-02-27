@@ -1,6 +1,7 @@
 from config import logger
 from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
+from utils.async_utils import run_sync
 
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS
@@ -12,8 +13,8 @@ from litmussdk.system import network, device_management
 async def get_litmusedge_friendly_name(request: Request) -> list[TextContent]:
     """Gets the human-readable name of this Litmus Edge device."""
     try:
-        connection = get_litmus_connection(request)
-        friendly_name = network.get_friendly_name(le_connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        friendly_name = await run_sync(network.get_friendly_name, connection=connection)
 
         logger.info(f"Retrieved friendly name: {friendly_name}")
 
@@ -42,8 +43,8 @@ async def set_litmusedge_friendly_name(
                 )
             )
 
-        connection = get_litmus_connection(request)
-        network.set_friendly_name(new_friendly_name, le_connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        await run_sync(network.set_friendly_name, new_friendly_name, connection=connection)
 
         logger.info(f"Updated friendly name to: {new_friendly_name}")
 
@@ -63,9 +64,10 @@ async def set_litmusedge_friendly_name(
 async def get_cloud_activation_status(request: Request) -> list[TextContent]:
     """Checks cloud registration and activation status with Litmus Edge Manager."""
     try:
-        connection = get_litmus_connection(request)
-        status = device_management.show_cloud_registration_status(
-            le_connection=connection
+        connection = await run_sync(get_litmus_connection, request)
+        status = await run_sync(
+            device_management.show_cloud_registration_status,
+            connection=connection,
         )
 
         logger.info("Retrieved cloud activation status")

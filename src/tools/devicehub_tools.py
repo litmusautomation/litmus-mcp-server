@@ -2,6 +2,7 @@ from typing import Optional, Any
 from config import logger
 from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
+from utils.async_utils import run_sync
 from .data_tools import get_current_value_on_topic
 
 from mcp.shared.exceptions import McpError
@@ -21,8 +22,8 @@ async def get_litmusedge_driver_list(request: Request) -> list[TextContent]:
     """
     try:
 
-        connection = get_litmus_connection(request)
-        driver_list = list_all_drivers(le_connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        driver_list = await run_sync(list_all_drivers, connection=connection)
 
         drivers = []
         for driver in driver_list:
@@ -64,8 +65,8 @@ async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextC
     try:
         filter_by_driver = arguments.get("filter_by_driver")
 
-        connection = get_litmus_connection(request)
-        device_list = devices.list_devices(le_connection=connection)
+        connection = await run_sync(get_litmus_connection, request)
+        device_list = await run_sync(devices.list_devices, connection=connection)
         logger.info(f"Retrieved {len(device_list)} devices from Litmus Edge")
 
         device_data = []
@@ -130,10 +131,10 @@ async def create_devicehub_device(
                 )
             )
 
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         # Get driver information
-        driver_list = list_all_drivers(le_connection=connection)
+        driver_list = await run_sync(list_all_drivers, connection=connection)
         driver_map = {}
         driver_names = []
 
@@ -159,7 +160,7 @@ async def create_devicehub_device(
             driver=driver_map[selected_driver]["id"],
         )
 
-        created_device = devices.create_device(device, le_connection=connection)
+        created_device = await run_sync(devices.create_device, device, connection=connection)
 
         # Build JSON-serializable device info
         device_dict = _build_device_info(created_device)
@@ -202,10 +203,10 @@ async def get_devicehub_device_tags(
                 )
             )
 
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         # Find the device
-        requested_device = _find_device_by_name(connection, device_name)
+        requested_device = await _find_device_by_name(connection, device_name)
         if not requested_device:
             raise McpError(
                 ErrorData(
@@ -215,7 +216,7 @@ async def get_devicehub_device_tags(
             )
 
         # Get tags
-        tag_list = tags.list_registers_from_single_device(requested_device)
+        tag_list = await run_sync(tags.list_registers_from_single_device, requested_device)
 
         tag_data = []
         for current_tag in tag_list:
@@ -279,10 +280,10 @@ async def get_current_value_of_devicehub_tag(
                 )
             )
 
-        connection = get_litmus_connection(request)
+        connection = await run_sync(get_litmus_connection, request)
 
         # Find device
-        requested_device = _find_device_by_name(connection, device_name)
+        requested_device = await _find_device_by_name(connection, device_name)
         if not requested_device:
             raise McpError(
                 ErrorData(
@@ -292,7 +293,7 @@ async def get_current_value_of_devicehub_tag(
             )
 
         # Find tag
-        tag_list = tags.list_registers_from_single_device(requested_device)
+        tag_list = await run_sync(tags.list_registers_from_single_device, requested_device)
 
         if tag_name:
             requested_tag = next(
@@ -352,9 +353,9 @@ async def get_current_value_of_devicehub_tag(
         return format_error_response("read_failed", str(e))
 
 
-def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
+async def _find_device_by_name(connection: Any, device_name: str) -> Optional[Any]:
     """Find a device by name from the device list."""
-    device_list = devices.list_devices(le_connection=connection)
+    device_list = await run_sync(devices.list_devices, connection=connection)
     for device in device_list:
         if device.name == device_name:
             return device

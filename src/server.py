@@ -5,12 +5,17 @@ import os
 from contextvars import ContextVar
 from mcp.server import Server
 
+import contextlib
+
 from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
@@ -497,7 +502,7 @@ async def handle_list_tools() -> list[Tool]:
     return get_tool_definitions()
 
 
-@mcp.call_tool()
+@mcp.call_tool(validate_input=False)
 async def handle_call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     """
     Handle tool execution requests and route to appropriate implementations.
@@ -630,6 +635,18 @@ async def run_stdio_server():
 # SSE endpoint handler
 sse = SseServerTransport("/messages")
 
+# Streamable HTTP session manager (stateless — credentials come per-request)
+session_manager = StreamableHTTPSessionManager(
+    app=mcp,
+    stateless=True,
+)
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    async with session_manager.run():
+        yield
+
 
 # SSE endpoint handler
 async def handle_sse(request: Request):
@@ -739,9 +756,15 @@ async def health_check(request: Request):
 # Wrap the SSE POST handler with our context-capturing middleware
 wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
 
-# Create Starlette app with both SSE and POST message routes
+# Wrap the streamable HTTP handler with our context-capturing middleware
+wrapped_streamable_handler = ContextCapturingMiddleware(session_manager.handle_request)
+
+# Create Starlette app with SSE, streamable HTTP, and POST message routes
 app = Starlette(
     routes=[
+        # Streamable HTTP (modern MCP transport)
+        Mount("/mcp", app=wrapped_streamable_handler),
+        # SSE (legacy transport, kept for backward compatibility)
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=wrapped_post_handler),
         # OAuth discovery endpoints - return proper JSON errors
@@ -755,7 +778,17 @@ app = Starlette(
         Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
         # Health check endpoint
         Route("/health", endpoint=health_check, methods=["GET"]),
-    ]
+    ],
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=False,
+        ),
+    ],
+    lifespan=lifespan,
 )
 
 if __name__ == "__main__":
@@ -767,7 +800,8 @@ if __name__ == "__main__":
         logger.info("STDIO mode enabled")
         asyncio.run(run_stdio_server())
     else:
-        # SSE mode - runs HTTP server (current behavior)
-        logger.info(f"SSE mode enabled - Starting on port {MCP_PORT}")
+        # HTTP mode - runs HTTP server with SSE + Streamable HTTP transports
+        logger.info(f"HTTP mode enabled - Starting on port {MCP_PORT}")
+        logger.info(f"Streamable HTTP endpoint: http://0.0.0.0:{MCP_PORT}/mcp")
         logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
         uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)
