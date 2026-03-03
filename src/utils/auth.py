@@ -4,7 +4,7 @@ from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 import logging
 
-from litmussdk.utils.conn import new_le_connection
+from litmussdk.utils.conn import new_le_connection, new_lem_bridge_connection
 from config import DEFAULT_TIMEOUT, NATS_PORT
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 def get_litmus_connection(request: Request) -> Any:
     """
     Get Litmus SDK connection from request headers.
+
+    Supports two connection modes:
+    - LEM bridge: when EDGE_MANAGER_URL header is present
+    - Direct: when EDGE_URL + OAuth credentials are present
 
     Args:
         request: Starlette request object
@@ -23,18 +27,41 @@ def get_litmus_connection(request: Request) -> Any:
     Raises:
         McpError: If authentication fails
     """
-    # Extract headers
-    edge_url = request.headers.get("EDGE_URL")
-    client_id = request.headers.get("EDGE_API_CLIENT_ID")
-    client_secret = request.headers.get("EDGE_API_CLIENT_SECRET")
     validate_certificate = (
         request.headers.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
     )
 
-    # Validate required headers
-    _validate_auth_headers(edge_url, client_id, client_secret)
+    manager_url = request.headers.get("EDGE_MANAGER_URL", "")
+    api_token = request.headers.get("EDGE_API_TOKEN", "")
+    project_id = request.headers.get("EDGE_MANAGER_PROJECT_ID", "")
+    device_id = request.headers.get("EDGE_MANAGER_DEVICE_ID", "")
+    if manager_url and api_token and project_id and device_id:
+        # LEM bridge path — all four credentials present
+        try:
+            connection = new_lem_bridge_connection(
+                edge_manager_url=manager_url,
+                edge_api_token=api_token,
+                project_id=project_id,
+                device_id=device_id,
+                validate_certificate=validate_certificate,
+                timeout_seconds=DEFAULT_TIMEOUT,
+            )
+            logger.debug(f"LEM bridge connection established to {manager_url}")
+            return connection
+        except Exception as e:
+            logger.error(f"LEM bridge connection failed: {e}", exc_info=True)
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=f"Failed to connect via LEM bridge: {str(e)}",
+                )
+            ) from e
 
-    # Create connection
+    # Direct connection path
+    edge_url = request.headers.get("EDGE_URL")
+    client_id = request.headers.get("EDGE_API_CLIENT_ID")
+    client_secret = request.headers.get("EDGE_API_CLIENT_SECRET")
+    _validate_auth_headers(edge_url, client_id, client_secret)
     try:
         connection = new_le_connection(
             edge_url=edge_url,

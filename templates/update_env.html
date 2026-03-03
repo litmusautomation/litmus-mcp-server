@@ -145,12 +145,26 @@ loadModels(_initProvider);
 <!-- Edge Instances -->
 <h2>Litmus Edge Instances</h2>
 
-<div class="edge-add-form">
+<div class="conn-type-toggle" style="display:flex;gap:6px;margin-bottom:10px;">
+    <button type="button" class="conn-type-btn active" data-type="direct" onclick="setConnType('direct')">Direct</button>
+    <button type="button" class="conn-type-btn" data-type="lem" onclick="setConnType('lem')">LEM Bridge</button>
+</div>
+
+<div class="edge-add-form" id="direct-fields">
     <input type="text" id="inst-url" placeholder="URL (https://...)" style="margin-bottom:0;">
     <input type="text" id="inst-id" placeholder="Client ID" style="margin-bottom:0;">
     <input type="password" id="inst-secret" placeholder="Client Secret" style="margin-bottom:0;">
     <button type="button" id="inst-add-btn" onclick="addInstance()">Add instance</button>
 </div>
+
+<div class="edge-add-form" id="lem-fields" style="display:none;">
+    <input type="text" id="inst-manager-url" placeholder="LEM Manager URL (https://...)" style="margin-bottom:0;">
+    <input type="password" id="inst-api-token" placeholder="API Token" style="margin-bottom:0;">
+    <input type="text" id="inst-project-id" placeholder="Project ID" style="margin-bottom:0;">
+    <input type="text" id="inst-device-id" placeholder="Device ID" style="margin-bottom:0;">
+    <button type="button" id="inst-add-btn-lem" onclick="addInstance()">Add instance</button>
+</div>
+
 <div id="inst-status" style="font-size:13px; margin-bottom:8px; min-height:18px;"></div>
 <div class="inst-list" id="inst-list">
     <div class="mcp-panel-loading">Loading…</div>
@@ -159,6 +173,17 @@ loadModels(_initProvider);
 <script>
 function escInstHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let _activeConnType = 'direct';
+
+function setConnType(type) {
+    _activeConnType = type;
+    document.querySelectorAll('.conn-type-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.type === type);
+    });
+    document.getElementById('direct-fields').style.display = type === 'direct' ? '' : 'none';
+    document.getElementById('lem-fields').style.display    = type === 'lem'    ? '' : 'none';
 }
 
 async function loadInstances() {
@@ -180,12 +205,15 @@ function renderInstances(instances, active) {
     }
     list.innerHTML = instances.map(inst => {
         const isActive = inst.index === active;
+        const isLem = inst.type === 'lem';
+        const typeBadge = isLem ? '<span class="inst-type-badge">LEM</span>' : '';
         const actionBtn = isActive
             ? '<span style="font-size:12px;color:#5ba89a;font-weight:600;">Active</span>'
             : `<button type="button" class="side-button" onclick="switchInstance(${inst.index})">Make active</button>`;
         return `<div class="inst-item${isActive ? ' active-inst' : ''}">
             <div class="inst-dot${isActive ? ' active' : ''}"></div>
             <span class="inst-name">${escInstHtml(inst.name)}</span>
+            ${typeBadge}
             <span class="inst-url">${escInstHtml(inst.url)}</span>
             <div class="inst-actions">
                 ${actionBtn}
@@ -201,10 +229,55 @@ function renderInstances(instances, active) {
 }
 
 async function addInstance() {
+    const status = document.getElementById('inst-status');
+    const fd = new FormData();
+
+    if (_activeConnType === 'lem') {
+        const managerUrl = document.getElementById('inst-manager-url').value.trim();
+        const apiToken   = document.getElementById('inst-api-token').value.trim();
+        const projectId  = document.getElementById('inst-project-id').value.trim();
+        const deviceId   = document.getElementById('inst-device-id').value.trim();
+        if (!managerUrl || !apiToken || !projectId || !deviceId) {
+            status.textContent = 'All LEM Bridge fields are required.';
+            status.style.color = '#c0392b';
+            return;
+        }
+        fd.append('manager_url', managerUrl);
+        fd.append('api_token', apiToken);
+        fd.append('project_id', projectId);
+        fd.append('device_id', deviceId);
+        const btn = document.getElementById('inst-add-btn-lem');
+        btn.disabled = true;
+        status.textContent = 'Connecting via LEM Bridge…';
+        status.style.color = '#4d6b65';
+        try {
+            const resp = await fetch('/api/add-edge-instance', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (data.error) {
+                status.textContent = data.error;
+                status.style.color = '#c0392b';
+            } else {
+                status.textContent = `Added: ${data.name}`;
+                status.style.color = '#059669';
+                document.getElementById('inst-manager-url').value = '';
+                document.getElementById('inst-api-token').value   = '';
+                document.getElementById('inst-project-id').value  = '';
+                document.getElementById('inst-device-id').value   = '';
+                await loadInstances();
+            }
+        } catch (e) {
+            status.textContent = 'Connection error.';
+            status.style.color = '#c0392b';
+        } finally {
+            btn.disabled = false;
+        }
+        return;
+    }
+
+    // Direct connection
     const url    = document.getElementById('inst-url').value.trim();
     const cid    = document.getElementById('inst-id').value.trim();
     const secret = document.getElementById('inst-secret').value.trim();
-    const status = document.getElementById('inst-status');
     const btn    = document.getElementById('inst-add-btn');
 
     if (!url || !cid || !secret) {
@@ -217,7 +290,6 @@ async function addInstance() {
     status.textContent = 'Connecting…';
     status.style.color = '#4d6b65';
 
-    const fd = new FormData();
     fd.append('url', url);
     fd.append('client_id', cid);
     fd.append('client_secret', secret);

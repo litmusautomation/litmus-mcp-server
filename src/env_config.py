@@ -123,6 +123,10 @@ def get_edge_instances() -> list:
                 "client_id": os.environ.get(f"EDGE_INSTANCE_{i}_CLIENT_ID", ""),
                 "secret": os.environ.get(f"EDGE_INSTANCE_{i}_SECRET", ""),
                 "name": os.environ.get(f"EDGE_INSTANCE_{i}_NAME", f"Edge {i}"),
+                "type": os.environ.get(f"EDGE_INSTANCE_{i}_TYPE", "direct"),
+                "api_token": os.environ.get(f"EDGE_INSTANCE_{i}_API_TOKEN", ""),
+                "project_id": os.environ.get(f"EDGE_INSTANCE_{i}_PROJECT_ID", ""),
+                "device_id": os.environ.get(f"EDGE_INSTANCE_{i}_DEVICE_ID", ""),
             }
         )
     return instances
@@ -137,19 +141,31 @@ def next_edge_instance_index() -> int:
 
 
 def remove_edge_instance(index: int):
-    """Delete all 4 keys for an instance index."""
-    for suffix in ("URL", "CLIENT_ID", "SECRET", "NAME"):
+    """Delete all keys for an instance index."""
+    for suffix in ("URL", "CLIENT_ID", "SECRET", "NAME", "TYPE", "API_TOKEN", "PROJECT_ID", "DEVICE_ID"):
         mcp_env_remover(f"EDGE_INSTANCE_{index}_{suffix}")
 
 
 def activate_edge_instance(index: int):
     """Copy instance credentials to main EDGE_ vars and write ACTIVE_EDGE_INSTANCE."""
+    inst_type = os.environ.get(f"EDGE_INSTANCE_{index}_TYPE", "direct")
     url = os.environ.get(f"EDGE_INSTANCE_{index}_URL", "")
-    cid = os.environ.get(f"EDGE_INSTANCE_{index}_CLIENT_ID", "")
-    sec = os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", "")
-    mcp_env_updater("EDGE_URL", url)
-    mcp_env_updater("EDGE_API_CLIENT_ID", cid)
-    mcp_env_updater("EDGE_API_CLIENT_SECRET", sec)
+    if inst_type == "lem":
+        mcp_env_updater("EDGE_MANAGER_URL", url)
+        mcp_env_updater("EDGE_API_TOKEN", os.environ.get(f"EDGE_INSTANCE_{index}_API_TOKEN", ""))
+        mcp_env_updater("EDGE_MANAGER_PROJECT_ID", os.environ.get(f"EDGE_INSTANCE_{index}_PROJECT_ID", ""))
+        mcp_env_updater("EDGE_MANAGER_DEVICE_ID", os.environ.get(f"EDGE_INSTANCE_{index}_DEVICE_ID", ""))
+        mcp_env_updater("EDGE_URL", "")
+        mcp_env_updater("EDGE_API_CLIENT_ID", "")
+        mcp_env_updater("EDGE_API_CLIENT_SECRET", "")
+    else:
+        mcp_env_updater("EDGE_URL", url)
+        mcp_env_updater("EDGE_API_CLIENT_ID", os.environ.get(f"EDGE_INSTANCE_{index}_CLIENT_ID", ""))
+        mcp_env_updater("EDGE_API_CLIENT_SECRET", os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", ""))
+        mcp_env_updater("EDGE_MANAGER_URL", "")
+        mcp_env_updater("EDGE_API_TOKEN", "")
+        mcp_env_updater("EDGE_MANAGER_PROJECT_ID", "")
+        mcp_env_updater("EDGE_MANAGER_DEVICE_ID", "")
     mcp_env_updater(ACTIVE_EDGE_INSTANCE, str(index))
     mcp_env_loader()
 
