@@ -248,6 +248,10 @@ async def update_env_form(request: Request):
         "edge_url": os.environ.get("EDGE_URL", ""),
         "client_id": os.environ.get("EDGE_API_CLIENT_ID", ""),
         "client_secret": os.environ.get("EDGE_API_CLIENT_SECRET", ""),
+        "edge_manager_url": os.environ.get("EDGE_MANAGER_URL", ""),
+        "edge_api_token": os.environ.get("EDGE_API_TOKEN", ""),
+        "edge_manager_project_id": os.environ.get("EDGE_MANAGER_PROJECT_ID", ""),
+        "edge_manager_device_id": os.environ.get("EDGE_MANAGER_DEVICE_ID", ""),
         "nats_source": os.environ.get("NATS_SOURCE", ""),
         "nats_port": os.environ.get("NATS_PORT", "4222"),
         "nats_user": os.environ.get("NATS_USER", ""),
@@ -327,13 +331,91 @@ async def api_edge_instances():
 @app.post("/api/add-edge-instance", name="api_add_edge_instance")
 async def api_add_edge_instance(
     request: Request,
-    url: str = Form(...),
-    client_id: str = Form(...),
-    client_secret: str = Form(...),
+    url: str = Form(default=""),
+    client_id: str = Form(default=""),
+    client_secret: str = Form(default=""),
+    manager_url: str = Form(default=""),
+    api_token: str = Form(default=""),
+    project_id: str = Form(default=""),
+    device_id: str = Form(default=""),
 ):
     mcp_env_loader()
-    url = url.rstrip("/")
     validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    is_lem = bool(manager_url.strip())
+
+    if is_lem:
+        manager_url = manager_url.strip().rstrip("/")
+        api_token = api_token.strip()
+        project_id = project_id.strip()
+        device_id = device_id.strip()
+        if not api_token or not project_id or not device_id:
+            return JSONResponse(
+                {"error": "LEM bridge requires API Token, Project ID, and Device ID"},
+                status_code=400,
+            )
+        bridge_base = f"{manager_url}/api/v1/edge/{project_id}/{device_id}"
+
+        def _fetch_name_lem():
+            import json as _json
+            from litmussdk.utils.conn import new_lem_bridge_connection
+            from litmussdk.utils.api import direct_request
+
+            conn = new_lem_bridge_connection(
+                edge_manager_url=manager_url,
+                edge_api_token=api_token,
+                project_id=project_id,
+                device_id=device_id,
+                validate_certificate=validate_cert,
+                timeout_seconds=10,
+            )
+            code, raw = direct_request(
+                connection=conn, url=f"{bridge_base}/dm/host/info", request_type="GET"
+            )
+            try:
+                data = _json.loads(raw) if raw else {}
+            except Exception:
+                data = {}
+            if code == 200 and isinstance(data, dict):
+                return (
+                    data.get("description")
+                    or data.get("hostname")
+                    or data.get("deviceName")
+                    or data.get("name")
+                    or ""
+                )
+            return ""
+
+        try:
+            name = await asyncio.to_thread(_fetch_name_lem)
+        except Exception as exc:
+            logger.exception(f"add-edge-instance (LEM): connection failed: {exc}")
+            return JSONResponse({"error": f"Could not connect via LEM bridge: {exc}"}, status_code=400)
+
+        idx = next_edge_instance_index()
+        if not name:
+            name = f"LEM Bridge {idx}"
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_URL", manager_url)
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_TYPE", "lem")
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_API_TOKEN", api_token)
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_PROJECT_ID", project_id)
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_DEVICE_ID", device_id)
+        mcp_env_updater(f"EDGE_INSTANCE_{idx}_NAME", name)
+        mcp_env_loader()
+
+        active = int(os.environ.get(ACTIVE_EDGE_INSTANCE, 0))
+        if not active:
+            activate_edge_instance(idx)
+            mcp_env_loader()
+
+        return JSONResponse({"ok": True, "index": idx, "name": name, "url": manager_url, "type": "lem"})
+
+    # Direct connection path
+    if not url or not client_id or not client_secret:
+        return JSONResponse(
+            {"error": "Direct connection requires URL, Client ID, and Client Secret"},
+            status_code=400,
+        )
+    url = url.strip().rstrip("/")
 
     def _fetch_name():
         import json as _json
@@ -376,6 +458,7 @@ async def api_add_edge_instance(
     mcp_env_updater(f"EDGE_INSTANCE_{idx}_URL", url)
     mcp_env_updater(f"EDGE_INSTANCE_{idx}_CLIENT_ID", client_id)
     mcp_env_updater(f"EDGE_INSTANCE_{idx}_SECRET", client_secret)
+    mcp_env_updater(f"EDGE_INSTANCE_{idx}_TYPE", "direct")
     mcp_env_updater(f"EDGE_INSTANCE_{idx}_NAME", name)
     mcp_env_loader()
 
@@ -384,7 +467,7 @@ async def api_add_edge_instance(
         activate_edge_instance(idx)
         mcp_env_loader()
 
-    return JSONResponse({"ok": True, "index": idx, "name": name, "url": url})
+    return JSONResponse({"ok": True, "index": idx, "name": name, "url": url, "type": "direct"})
 
 
 @app.post("/api/remove-edge-instance", name="api_remove_edge_instance")
@@ -587,6 +670,10 @@ async def api_mcp_client_config(request: Request):
             "edge_url": os.environ.get("EDGE_URL", ""),
             "client_id": os.environ.get("EDGE_API_CLIENT_ID", ""),
             "client_secret": os.environ.get("EDGE_API_CLIENT_SECRET", ""),
+            "edge_manager_url": os.environ.get("EDGE_MANAGER_URL", ""),
+            "edge_api_token": os.environ.get("EDGE_API_TOKEN", ""),
+            "edge_manager_project_id": os.environ.get("EDGE_MANAGER_PROJECT_ID", ""),
+            "edge_manager_device_id": os.environ.get("EDGE_MANAGER_DEVICE_ID", ""),
             "nats_source": os.environ.get("NATS_SOURCE", ""),
             "nats_port": os.environ.get("NATS_PORT", "4222"),
             "nats_user": os.environ.get("NATS_USER", ""),
@@ -619,25 +706,193 @@ async def health_check(request: Request):
     )
 
 
+def _run_health_checks(connection, base_url: str) -> dict:
+    """Run all service health checks using the given connection and base URL."""
+    import json as _json
+    from litmussdk.utils.api import direct_request
+
+    def _get(path):
+        try:
+            code, raw = direct_request(
+                connection=connection, url=f"{base_url}{path}", request_type="GET"
+            )
+            try:
+                data = _json.loads(raw) if raw else None
+            except Exception:
+                data = raw
+            return code, data
+        except Exception:
+            return None, None
+
+    def _ok(code):
+        return code is not None and 200 <= code < 300
+
+    def _ver(data):
+        if not isinstance(data, dict):
+            return "", ""
+        version = (
+            data.get("version") or data.get("Version") or data.get("tag") or data.get("appVersion") or ""
+        )
+        git = (
+            data.get("git") or data.get("gitCommit") or data.get("git_commit")
+            or data.get("commit") or data.get("hash") or ""
+        )
+        if isinstance(git, str) and len(git) > 8:
+            git = git[:8]
+        return (str(version) if version else ""), (str(git) if git else "")
+
+    def _getver(path):
+        c, d = _get(path)
+        logger.info("version %s → code=%s data=%s", path, c, d)
+        return c, d
+
+    def _gql(path, query_str):
+        try:
+            body = _json.dumps({"query": query_str, "variables": {}})
+            code, raw = direct_request(
+                connection=connection,
+                url=f"{base_url}{path}",
+                request_type="POST",
+                additional_body=body,
+                extra_headers={"Content-Type": "application/json"},
+            )
+            try:
+                data = _json.loads(raw) if raw else None
+            except Exception:
+                data = raw
+            return code, data
+        except Exception:
+            return None, None
+
+    services = {}
+    host = {}
+
+    code, data = _getver("/devicehub/version")
+    v, g = _ver(data)
+    services["devicehub"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    dt_code, dt_data = _gql("/digital-twins", "query Version { Version { Git Version } }")
+    v, g = "", ""
+    if isinstance(dt_data, dict):
+        ver = (dt_data.get("data") or {}).get("Version") or {}
+        v = str(ver.get("Version", "") or "")
+        g = str(ver.get("Git", "") or "")
+        if isinstance(g, str) and len(g) > 8:
+            g = g[:8]
+    services["digital_twins"] = {"status": "ok" if _ok(dt_code) else "error", "version": v, "git": g}
+
+    code, _ = _get("/flows-manager/flows")
+    _, vdata = _getver("/flows-manager/version")
+    v, g = _ver(vdata)
+    services["flows_manager"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    code, data = _getver("/analytics/v2/version")
+    v, g = _ver(data)
+    services["analytics"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    code, data = _get("/apps/dc/containers/?all=true")
+    _, vdata = _getver("/apps/version")
+    v, g = _ver(vdata)
+    services["marketplace"] = {
+        "status": "ok" if _ok(code) else "error",
+        "data": len(data) if isinstance(data, list) else None,
+        "version": v,
+        "git": g,
+    }
+
+    code, _ = _get("/cc/providers")
+    _, vdata = _getver("/cc/version")
+    v, g = _ver(vdata)
+    services["integration"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    code, _ = _get("/opcua/service_conf")
+    _, vdata = _getver("/opcua/version")
+    v, g = _ver(vdata)
+    services["opcua"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    code, data = _get("/dm/host/info")
+    if isinstance(data, dict):
+        host = data
+    _, vdata = _getver("/dm/version")
+    v, g = _ver(vdata)
+    if not v and isinstance(data, dict):
+        v = str(
+            data.get("firmwareVersion") or data.get("osVersion")
+            or data.get("kernelVersion") or data.get("version") or ""
+        )
+    services["system"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+
+    hostname = (
+        host.get("description") or host.get("hostname")
+        or host.get("deviceName") or host.get("name") or ""
+    )
+    return {"status": "connected", "url": base_url, "hostname": hostname, "services": services}
+
+
 @app.get("/api/edge-health", name="api_edge_health")
 async def api_edge_health(index: int = 0):
     mcp_env_loader()
+    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+
+    # Determine connection type and parameters
     if index > 0:
-        edge_url = os.environ.get(f"EDGE_INSTANCE_{index}_URL", "").rstrip("/")
+        inst_type = os.environ.get(f"EDGE_INSTANCE_{index}_TYPE", "direct")
+        inst_url = os.environ.get(f"EDGE_INSTANCE_{index}_URL", "").rstrip("/")
+    else:
+        inst_type = "lem" if os.environ.get("EDGE_MANAGER_URL", "") else "direct"
+        inst_url = ""
+
+    if inst_type == "lem":
+        if index > 0:
+            manager_url = inst_url
+            api_token = os.environ.get(f"EDGE_INSTANCE_{index}_API_TOKEN", "")
+            proj_id = os.environ.get(f"EDGE_INSTANCE_{index}_PROJECT_ID", "")
+            dev_id = os.environ.get(f"EDGE_INSTANCE_{index}_DEVICE_ID", "")
+        else:
+            manager_url = os.environ.get("EDGE_MANAGER_URL", "").rstrip("/")
+            api_token = os.environ.get("EDGE_API_TOKEN", "")
+            proj_id = os.environ.get("EDGE_MANAGER_PROJECT_ID", "")
+            dev_id = os.environ.get("EDGE_MANAGER_DEVICE_ID", "")
+
+        if not manager_url or not api_token or not proj_id or not dev_id:
+            return JSONResponse({"status": "not_configured"})
+
+        bridge_base = f"{manager_url}/api/v1/edge/{proj_id}/{dev_id}"
+
+        def _check():
+            from litmussdk.utils.conn import new_lem_bridge_connection
+
+            connection = new_lem_bridge_connection(
+                edge_manager_url=manager_url,
+                edge_api_token=api_token,
+                project_id=proj_id,
+                device_id=dev_id,
+                validate_certificate=validate_cert,
+                timeout_seconds=10,
+            )
+            return _run_health_checks(connection, bridge_base)
+
+        try:
+            result = await asyncio.to_thread(_check)
+            return JSONResponse(result)
+        except Exception:
+            return JSONResponse({"status": "error"})
+
+    # Direct connection path
+    if index > 0:
+        edge_url = inst_url
         client_id = os.environ.get(f"EDGE_INSTANCE_{index}_CLIENT_ID", "")
         client_secret = os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", "")
     else:
         edge_url = os.environ.get("EDGE_URL", "").rstrip("/")
         client_id = os.environ.get("EDGE_API_CLIENT_ID", "")
         client_secret = os.environ.get("EDGE_API_CLIENT_SECRET", "")
-    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
 
     if not edge_url or not client_id or not client_secret:
         return JSONResponse({"status": "not_configured"})
 
     def _check():
         from litmussdk.utils.conn import new_le_connection
-        from litmussdk.utils.api import direct_request
 
         connection = new_le_connection(
             edge_url=edge_url,
@@ -646,189 +901,7 @@ async def api_edge_health(index: int = 0):
             validate_certificate=validate_cert,
             timeout_seconds=10,
         )
-
-        def _get(path):
-            try:
-                import json as _json
-
-                code, raw = direct_request(
-                    connection=connection, url=f"{edge_url}{path}", request_type="GET"
-                )
-                try:
-                    data = _json.loads(raw) if raw else None
-                except Exception:
-                    data = raw
-                return code, data
-            except Exception:
-                return None, None
-
-        def _ok(code):
-            return code is not None and 200 <= code < 300
-
-        def _ver(data):
-            """Extract (version, git) from a version API response dict."""
-            if not isinstance(data, dict):
-                return "", ""
-            version = (
-                data.get("version")
-                or data.get("Version")
-                or data.get("tag")
-                or data.get("appVersion")
-                or ""
-            )
-            git = (
-                data.get("git")
-                or data.get("gitCommit")
-                or data.get("git_commit")
-                or data.get("commit")
-                or data.get("hash")
-                or ""
-            )
-            if isinstance(git, str) and len(git) > 8:
-                git = git[:8]
-            return (str(version) if version else ""), (str(git) if git else "")
-
-        def _getver(path):
-            """Fetch a version endpoint; log raw response for debugging."""
-            c, d = _get(path)
-            logger.info("version %s → code=%s data=%s", path, c, d)
-            return c, d
-
-        def _gql(path, query_str):
-            """POST a GraphQL query; returns (status_code, parsed_json_or_none)."""
-            try:
-                import json as _json
-
-                body = _json.dumps({"query": query_str, "variables": {}})
-                code, raw = direct_request(
-                    connection=connection,
-                    url=f"{edge_url}{path}",
-                    request_type="POST",
-                    additional_body=body,
-                    extra_headers={"Content-Type": "application/json"},
-                )
-                try:
-                    data = _json.loads(raw) if raw else None
-                except Exception:
-                    data = raw
-                return code, data
-            except Exception:
-                return None, None
-
-        services = {}
-        host = {}
-
-        # DeviceHub — version endpoint doubles as health check
-        code, data = _getver("/devicehub/version")
-        v, g = _ver(data)
-        services["devicehub"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # Digital Twins — GraphQL endpoint, requires POST
-        dt_code, dt_data = _gql(
-            "/digital-twins",
-            "query Version { Version { Git Version } }",
-        )
-        v, g = "", ""
-        if isinstance(dt_data, dict):
-            ver = (dt_data.get("data") or {}).get("Version") or {}
-            v = str(ver.get("Version", "") or "")
-            g = str(ver.get("Git", "") or "")
-            if isinstance(g, str) and len(g) > 8:
-                g = g[:8]
-        services["digital_twins"] = {
-            "status": "ok" if _ok(dt_code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # Flows Manager
-        code, _ = _get("/flows-manager/flows")
-        _, vdata = _getver("/flows-manager/version")
-        v, g = _ver(vdata)
-        services["flows_manager"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # Analytics — version endpoint doubles as health check
-        code, data = _getver("/analytics/v2/version")
-        v, g = _ver(data)
-        services["analytics"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # Marketplace
-        code, data = _get("/apps/dc/containers/?all=true")
-        _, vdata = _getver("/apps/version")
-        v, g = _ver(vdata)
-        services["marketplace"] = {
-            "status": "ok" if _ok(code) else "error",
-            "data": len(data) if isinstance(data, list) else None,
-            "version": v,
-            "git": g,
-        }
-
-        # Integration
-        code, _ = _get("/cc/providers")
-        _, vdata = _getver("/cc/version")
-        v, g = _ver(vdata)
-        services["integration"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # OPC UA
-        code, _ = _get("/opcua/service_conf")
-        _, vdata = _getver("/opcua/version")
-        v, g = _ver(vdata)
-        services["opcua"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        # System / Device Manager
-        code, data = _get("/dm/host/info")
-        if isinstance(data, dict):
-            host = data
-        _, vdata = _getver("/dm/version")
-        v, g = _ver(vdata)
-        if not v and isinstance(data, dict):
-            v = str(
-                data.get("firmwareVersion")
-                or data.get("osVersion")
-                or data.get("kernelVersion")
-                or data.get("version")
-                or ""
-            )
-        services["system"] = {
-            "status": "ok" if _ok(code) else "error",
-            "version": v,
-            "git": g,
-        }
-
-        hostname = (
-            host.get("description")
-            or host.get("hostname")
-            or host.get("deviceName")
-            or host.get("name")
-            or ""
-        )
-
-        return {
-            "status": "connected",
-            "url": edge_url,
-            "hostname": hostname,
-            "services": services,
-        }
+        return _run_health_checks(connection, edge_url)
 
     try:
         result = await asyncio.to_thread(_check)

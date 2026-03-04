@@ -1555,6 +1555,46 @@ button.clear-chat-btn:hover {
     flex-shrink: 0;
 }
 
+.inst-type-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #4fb896;
+    background: #e8f7f2;
+    border: 1px solid #b6e4d3;
+    border-radius: 4px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+
+.conn-type-btn {
+    background: #f4f8f6;
+    color: #4d6b65;
+    border: 1px solid #e4eeea;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.conn-type-btn:hover {
+    background: #edf6f2;
+    border-color: #c8ddd8;
+    color: #0d2420;
+}
+
+.conn-type-btn.active {
+    background: #d6ede5;
+    border-color: #a4ccbe;
+    color: #0d2420;
+    font-weight: 600;
+}
+
+.conn-type-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(45,158,116,0.2); }
+
 /* ── Chat header: instance selector — mirrors model selector ──────────────── */
 .chat-instance-selector {
     position: relative;
