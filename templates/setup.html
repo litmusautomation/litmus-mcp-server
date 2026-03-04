@@ -15,19 +15,36 @@
 <noscript>
 <form method="post" action="{{ url_for('setup') }}">
     <label for="value_of_anthropic_api_key_ns">Anthropic API Key</label>
-    <input type="text" name="value_of_anthropic_api_key" id="value_of_anthropic_api_key_ns" placeholder="sk-ant-...">
+    <input type="password" name="value_of_anthropic_api_key" id="value_of_anthropic_api_key_ns" placeholder="sk-ant-..." autocomplete="off">
     <label for="value_of_openai_api_key_ns">OpenAI API Key</label>
-    <input type="text" name="value_of_openai_api_key" id="value_of_openai_api_key_ns" placeholder="sk-...">
+    <input type="password" name="value_of_openai_api_key" id="value_of_openai_api_key_ns" placeholder="sk-..." autocomplete="off">
+    <label for="value_of_gemini_api_key_ns">Google Gemini API Key</label>
+    <input type="password" name="value_of_gemini_api_key" id="value_of_gemini_api_key_ns" placeholder="AIza..." autocomplete="off">
     <button type="submit">Save and continue</button>
 </form>
 </noscript>
 
 <div id="js-form">
-    <label for="value_of_anthropic_api_key">Anthropic API Key</label>
-    <input type="text" id="value_of_anthropic_api_key" placeholder="sk-ant-...">
+    <label for="value_of_anthropic_api_key">Anthropic API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="value_of_anthropic_api_key" placeholder="sk-ant-..." autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('value_of_anthropic_api_key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
 
-    <label for="value_of_openai_api_key">OpenAI API Key</label>
-    <input type="text" id="value_of_openai_api_key" placeholder="sk-...">
+    <label for="value_of_openai_api_key">OpenAI API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="value_of_openai_api_key" placeholder="sk-..." autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('value_of_openai_api_key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
+
+    <label for="value_of_gemini_api_key">Google Gemini API Key
+        <div class="settings-input-wrap">
+            <input type="password" id="value_of_gemini_api_key" placeholder="AIza..." autocomplete="off">
+            <button type="button" class="reveal-btn" onclick="toggleReveal('value_of_gemini_api_key', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+    </label>
 
     {% if error %}
     <p style="color: #c0392b; font-size: 13px; margin: -8px 0 16px;">{{ error }}</p>
@@ -42,7 +59,8 @@
 document.getElementById('save-keys-btn').addEventListener('click', async function () {
     const anthropic = document.getElementById('value_of_anthropic_api_key').value.trim();
     const openai = document.getElementById('value_of_openai_api_key').value.trim();
-    if (!anthropic && !openai) {
+    const gemini = document.getElementById('value_of_gemini_api_key').value.trim();
+    if (!anthropic && !openai && !gemini) {
         alert('Please provide at least one API key.');
         return;
     }
@@ -54,6 +72,7 @@ document.getElementById('save-keys-btn').addEventListener('click', async functio
     const formData = new FormData();
     if (anthropic) formData.append('value_of_anthropic_api_key', anthropic);
     if (openai) formData.append('value_of_openai_api_key', openai);
+    if (gemini) formData.append('value_of_gemini_api_key', gemini);
 
     let saved = [];
     try {
@@ -144,6 +163,17 @@ async function fetchAndRenderModels(provider, container) {
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+const _eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const _eyeOff  = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+function toggleReveal(inputId, btn) {
+    const inp = document.getElementById(inputId);
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? _eyeOff : _eyeOpen;
+    btn.setAttribute('aria-label', show ? 'Hide' : 'Show');
 }
 </script>
 {% endblock %}
