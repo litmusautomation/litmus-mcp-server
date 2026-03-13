@@ -78,29 +78,34 @@ async def get_devicehub_devices(request: Request, arguments: dict) -> list[TextC
 
         device_data = []
         for current_device in device_list:
-            device_info = _build_device_info(current_device)
+            try:
+                device_info = _build_device_info(current_device)
+            except Exception as e:
+                logger.warning(f"Skipping device due to parse error: {e}")
+                device_info = {
+                    "name": getattr(current_device, "name", str(current_device)),
+                    "id": getattr(current_device, "id", None),
+                    "parse_error": True,
+                }
 
-            # Apply filters
             if filter_by_driver and device_info.get("driver") != filter_by_driver:
                 continue
             device_data.append(device_info)
 
-        device_data.sort(key=lambda x: x["name"])
+        device_data.sort(key=lambda x: x.get("name", ""))
 
-        logger.info(f"Retrieved {len(device_data)} devices from Litmus Edge")
-
-        summary = _create_device_summary(device_data)
+        try:
+            summary = _create_device_summary(device_data)
+        except Exception:
+            summary = {}
 
         result: dict[str, Any] = {
             "count": len(device_data),
             "devices": device_data,
             "summary": summary,
         }
-
         if filter_by_driver:
-            result["filters_applied"] = {
-                "driver": filter_by_driver,
-            }
+            result["filters_applied"] = {"driver": filter_by_driver}
 
         return format_success_response(result)
 
