@@ -15,7 +15,7 @@ dependencies = [
     "nats-py>=2.11.0",
     "numpy>=2.3.4",
     "pandas>=2.3.3",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "python-multipart>=0.0.26",
 ]
 
