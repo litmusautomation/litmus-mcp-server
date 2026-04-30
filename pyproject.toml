@@ -16,7 +16,7 @@ dependencies = [
     "numpy>=2.3.4",
     "pandas>=2.3.3",
     "python-dotenv>=1.0.0",
-    "python-multipart>=0.0.22",
+    "python-multipart>=0.0.26",
 ]
 
 [dependency-groups]
