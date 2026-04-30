@@ -35,7 +35,7 @@ llm-sdks = [
     "openai-agents>=0.0.13",
 ]
 test = [
-    "pytest>=8.4.2",
+    "pytest>=9.0.3",
     ]
 
 
