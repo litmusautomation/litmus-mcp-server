@@ -22,6 +22,12 @@ from tools.devicehub_tools import (
     create_devicehub_device,
     get_devicehub_device_tags,
     get_current_value_of_devicehub_tag,
+    get_device_connection_status,
+    create_devicehub_tag,
+    update_devicehub_tag,
+    delete_devicehub_tag,
+    get_tag_status,
+    get_all_tags_status,
 )
 from tools.dm_tools import (
     get_litmusedge_friendly_name,
@@ -36,6 +42,21 @@ from tools.data_tools import (
     get_current_value_on_topic_tool,
     get_multiple_values_from_topic_tool,
     get_historical_data_from_influxdb_tool,
+    list_influxdb_measurements,
+    get_device_historical_data,
+    query_tag_data,
+    get_tag_statistics,
+    get_device_data_for_inference,
+)
+from tools.system_tools import (
+    get_device_logs,
+    get_system_event_stats,
+    get_firewall_rules,
+    get_network_interface_info,
+    get_packet_capture_interfaces,
+    get_packet_capture_status,
+    start_packet_capture,
+    stop_packet_capture,
 )
 from tools.digitaltwins_tools import (
     list_digital_twin_models_tool,
@@ -499,6 +520,295 @@ def get_tool_definitions() -> list[Tool]:
                 "required": ["model_id", "hierarchy_json"],
             },
         ),
+        # ── DeviceHub connection status ───────────────────────────────────────
+        Tool(
+            name="get_device_connection_status",
+            description=(
+                "Checks whether DeviceHub devices are actively publishing data by probing InfluxDB "
+                "for recent records. Returns connected/stale/no_data per device. "
+                "Use this to diagnose disconnected or silent devices."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Specific device to check (omit for all devices)"},
+                    "threshold_seconds": {"type": "integer", "description": "Age threshold in seconds to consider connected (default 60)", "default": 60},
+                },
+                "required": [],
+            },
+        ),
+        # ── DeviceHub tag CRUD ────────────────────────────────────────────────
+        Tool(
+            name="create_devicehub_tag",
+            description=(
+                "Creates a new tag (register) on a DeviceHub device. "
+                "register_name is the driver-specific register type (e.g. 'S' for Generator, "
+                "'HoldingRegister' for Modbus). Required driver properties (address, count, "
+                "pollingInterval, etc.) auto-fill from driver defaults; pass `properties` to "
+                "override individual fields. Use get_litmusedge_driver_list to find drivers "
+                "and get_devicehub_device_tags to see existing tags."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Name of the device to add the tag to"},
+                    "register_name": {"type": "string", "description": "Driver register type (e.g. 'S' for Generator, 'HoldingRegister' for Modbus)"},
+                    "tag_name": {"type": "string", "description": "Display name for the tag"},
+                    "value_type": {"type": "string", "description": "Data type (e.g. 'float64', 'int64', 'bit', 'string')"},
+                    "description": {"type": "string", "description": "Optional description"},
+                    "properties": {"type": "object", "description": "Optional driver-specific overrides (e.g. {\"address\": \"5\", \"pollingInterval\": \"500\"}). Missing required fields are filled from driver defaults."},
+                },
+                "required": ["device_name", "register_name", "tag_name", "value_type"],
+            },
+        ),
+        Tool(
+            name="update_devicehub_tag",
+            description=(
+                "Updates mutable fields of an existing DeviceHub tag: display name, description, or properties. "
+                "The device and tag must already exist. Use get_devicehub_device_tags to find tag names."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Name of the device owning the tag"},
+                    "tag_name": {"type": "string", "description": "Current display name of the tag to update"},
+                    "new_tag_name": {"type": "string", "description": "New display name (optional)"},
+                    "description": {"type": "string", "description": "New description (optional)"},
+                    "properties": {"type": "object", "description": "New properties dict (optional)"},
+                },
+                "required": ["device_name", "tag_name"],
+            },
+        ),
+        Tool(
+            name="delete_devicehub_tag",
+            description=(
+                "Deletes a tag from a DeviceHub device. This is destructive and cannot be undone. "
+                "Use get_devicehub_device_tags to confirm the tag name before deleting."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Name of the device owning the tag"},
+                    "tag_name": {"type": "string", "description": "Display name of the tag to delete"},
+                },
+                "required": ["device_name", "tag_name"],
+            },
+        ),
+        Tool(
+            name="get_tag_status",
+            description=(
+                "Returns OK/ERROR status for tags on a specific device. "
+                "Optionally filter to a single tag by name. "
+                "Use this to diagnose which tags are failing on a device."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Name of the device to check"},
+                    "tag_name": {"type": "string", "description": "Optional: check a single tag by name"},
+                },
+                "required": ["device_name"],
+            },
+        ),
+        Tool(
+            name="get_all_tags_status",
+            description=(
+                "Returns tag status across ALL devices. Defaults to returning only non-OK tags "
+                "so the LLM sees actionable issues first. Pass filter_status='' to see all. "
+                "Use get_tag_status for a single device."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter_status": {
+                        "type": "string",
+                        "description": "Filter by state: 'not_ok' (default), 'OK', 'ERROR', or '' for all",
+                        "default": "not_ok",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        # ── InfluxDB tools ────────────────────────────────────────────────────
+        Tool(
+            name="list_influxdb_measurements",
+            description=(
+                "Lists all measurement names in the InfluxDB tsdata database. "
+                "Use this to discover available data series before querying historical data. "
+                "Measurement names are typically NATS topic strings."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="get_device_historical_data",
+            description=(
+                "Queries historical InfluxDB data using fuzzy device name matching. "
+                "Use this when you know a device name but not the exact InfluxDB measurement. "
+                "For precise measurement queries use get_historical_data_from_influxdb instead."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_query": {"type": "string", "description": "Device or measurement name to search for (fuzzy matched)"},
+                    "tag_name_query": {"type": "string", "description": "Optional: further filter matches by tag name substring"},
+                    "time_range": {"type": "string", "description": "InfluxDB duration (e.g. '1h', '24h', '7d'). Default '1h'", "default": "1h"},
+                    "limit": {"type": "integer", "description": "Max records per measurement (default 1000, max 100000)", "default": 1000},
+                },
+                "required": ["device_query"],
+            },
+        ),
+        Tool(
+            name="query_tag_data",
+            description=(
+                "Queries historical time-series data for a specific tag by looking up its InfluxDB topic. "
+                "Returns data ordered newest first. "
+                "Use get_tag_statistics for aggregated stats instead of raw samples."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Device that owns the tag"},
+                    "tag_name": {"type": "string", "description": "Tag display name (use this or tag_id)"},
+                    "tag_id": {"type": "string", "description": "Tag UUID (alternative to tag_name)"},
+                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
+                    "limit": {"type": "integer", "description": "Max records (default 500, max 500)", "default": 500},
+                },
+                "required": ["device_name"],
+            },
+        ),
+        Tool(
+            name="get_tag_statistics",
+            description=(
+                "Returns aggregate statistics for a tag: mean, min, max, stddev, count, and baseline range (mean±2σ). "
+                "Use this for anomaly detection or understanding normal operating range. "
+                "Use query_tag_data to get raw samples instead."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Device that owns the tag"},
+                    "tag_name": {"type": "string", "description": "Tag display name (use this or tag_id)"},
+                    "tag_id": {"type": "string", "description": "Tag UUID (alternative to tag_name)"},
+                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
+                },
+                "required": ["device_name"],
+            },
+        ),
+        Tool(
+            name="get_device_data_for_inference",
+            description=(
+                "Comprehensive data package for AI inference: device metadata, all tags, per-tag statistics, "
+                "and recent samples in one call. Preferred when asking the AI to analyze or diagnose a device. "
+                "Use get_tag_statistics or query_tag_data for single-tag queries."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "device_name": {"type": "string", "description": "Device to gather data for"},
+                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
+                    "include_statistics": {"type": "boolean", "description": "Include per-tag statistics (default true)", "default": True},
+                    "sample_size": {"type": "integer", "description": "Recent samples per tag (default 20, max 100)", "default": 20},
+                },
+                "required": ["device_name"],
+            },
+        ),
+        # ── System tools ──────────────────────────────────────────────────────
+        Tool(
+            name="get_device_logs",
+            description=(
+                "Retrieves system events and logs from Litmus Edge. "
+                "Filter by time range, component, and severity. "
+                "Use get_system_event_stats for queue health and throughput metrics instead."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "from_timestamp": {"type": "integer", "description": "Start time as Unix epoch seconds (default: 1 hour ago)"},
+                    "to_timestamp": {"type": "integer", "description": "End time as Unix epoch seconds (default: now)"},
+                    "component": {"type": "string", "description": "Filter by component name (optional)"},
+                    "severity": {"type": "string", "description": "Filter by severity: INFO, WARN, ALERT, or ERROR (optional)"},
+                    "limit": {"type": "integer", "description": "Max events to return (default 100, max 1000)", "default": 100},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_system_event_stats",
+            description=(
+                "Returns event manager statistics: queue sizes, processing rates, memory, health indicators. "
+                "Use this to check system health and event pipeline throughput. "
+                "Use get_device_logs to read actual event messages."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="get_firewall_rules",
+            description=(
+                "Returns the firewall rules configured on this Litmus Edge device: "
+                "ports, protocols, and ALLOW/DENY actions. "
+                "Use this to diagnose network connectivity or security configuration."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="get_network_interface_info",
+            description=(
+                "Returns network interface details for the Litmus Edge device: "
+                "IP address, MAC, gateway, link status, MTU, and speed. "
+                "Defaults to eth0. Use this to check network configuration."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "interface": {"type": "string", "description": "Interface name (default 'eth0')", "default": "eth0"},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_packet_capture_interfaces",
+            description=(
+                "Lists network interfaces available for packet capture on Litmus Edge "
+                "(e.g. eth0, wlan0). Use this before starting a capture to pick the right interface."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="get_packet_capture_status",
+            description=(
+                "Returns the current packet capture state and list of captured .pcap files with metadata. "
+                "Use start_packet_capture / stop_packet_capture to control capture."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="start_packet_capture",
+            description=(
+                "Starts a packet capture on a Litmus Edge network interface. "
+                "Duration is 1–30 minutes. Let it run to completion — the pcap file "
+                "is only retained when the capture finishes naturally. Use "
+                "get_packet_capture_status to check progress."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "interface": {"type": "string", "description": "Interface to capture on (default 'eth0')", "default": "eth0"},
+                    "duration": {"type": "integer", "description": "Capture duration in minutes (1–30, default 1)", "default": 1},
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="stop_packet_capture",
+            description=(
+                "Stops an in-progress packet capture on Litmus Edge. "
+                "WARNING: stopping early discards the pcap file — only use this to abort "
+                "a capture you don't want. To keep the pcap, let start_packet_capture run "
+                "to completion instead. "
+                "Use get_packet_capture_status to confirm state before and after."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
     ]
 
 
@@ -621,6 +931,50 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
             return await get_hierarchy_tool(request, args)
         elif name == "save_digital_twin_hierarchy":
             return await save_hierarchy_tool(request, args)
+
+        # DeviceHub connection + tag CRUD + tag status
+        elif name == "get_device_connection_status":
+            return await get_device_connection_status(request, args)
+        elif name == "create_devicehub_tag":
+            return await create_devicehub_tag(request, args)
+        elif name == "update_devicehub_tag":
+            return await update_devicehub_tag(request, args)
+        elif name == "delete_devicehub_tag":
+            return await delete_devicehub_tag(request, args)
+        elif name == "get_tag_status":
+            return await get_tag_status(request, args)
+        elif name == "get_all_tags_status":
+            return await get_all_tags_status(request, args)
+
+        # InfluxDB measurement + tag query tools
+        elif name == "list_influxdb_measurements":
+            return await list_influxdb_measurements(request, args)
+        elif name == "get_device_historical_data":
+            return await get_device_historical_data(request, args)
+        elif name == "query_tag_data":
+            return await query_tag_data(request, args)
+        elif name == "get_tag_statistics":
+            return await get_tag_statistics(request, args)
+        elif name == "get_device_data_for_inference":
+            return await get_device_data_for_inference(request, args)
+
+        # System events, network, and packet capture
+        elif name == "get_device_logs":
+            return await get_device_logs(request, args)
+        elif name == "get_system_event_stats":
+            return await get_system_event_stats(request, args)
+        elif name == "get_firewall_rules":
+            return await get_firewall_rules(request, args)
+        elif name == "get_network_interface_info":
+            return await get_network_interface_info(request, args)
+        elif name == "get_packet_capture_interfaces":
+            return await get_packet_capture_interfaces(request, args)
+        elif name == "get_packet_capture_status":
+            return await get_packet_capture_status(request, args)
+        elif name == "start_packet_capture":
+            return await start_packet_capture(request, args)
+        elif name == "stop_packet_capture":
+            return await stop_packet_capture(request, args)
 
         else:
             raise ValueError(f"Unknown tool: {name}")

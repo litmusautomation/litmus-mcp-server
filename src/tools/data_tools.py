@@ -1,4 +1,5 @@
 import asyncio
+import difflib
 import re
 import nats
 import json
@@ -10,7 +11,7 @@ from config import logger, ssl_config
 from config import NATS_PORT, NATS_SOURCE
 
 from utils.formatting import format_success_response, format_error_response
-from utils.auth import get_nats_connection_params, get_influx_connection_params
+from utils.auth import get_nats_connection_params, get_influx_connection_params, get_litmus_connection
 
 from numpy import zeros
 from starlette.requests import Request
@@ -19,6 +20,7 @@ from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 from mcp.types import TextContent
 
 import influxdb
+from litmussdk.devicehub import devices as dh_devices, tags as dh_tags
 
 INFLUXDB_AVAILABLE = True
 
@@ -435,4 +437,340 @@ async def get_historical_data_from_influxdb_tool(
         return format_error_response("influxdb_server_error", str(e))
     except Exception as e:
         logger.error(f"Error querying InfluxDB: {e}", exc_info=True)
+        return format_error_response("query_failed", str(e))
+
+
+# ── InfluxDB helpers ──────────────────────────────────────────────────────────
+
+def _make_influx_client(params: dict) -> influxdb.InfluxDBClient:
+    return influxdb.InfluxDBClient(
+        host=params["INFLUX_HOST"],
+        port=params["INFLUX_PORT"],
+        username=params["INFLUX_USERNAME"],
+        password=params["INFLUX_PASSWORD"],
+        database=params["INFLUX_DB_NAME"],
+        ssl=False,
+    )
+
+
+def _find_device(connection, device_name: str):
+    for d in dh_devices.list_devices(le_connection=connection):
+        if d.name == device_name:
+            return d
+    return None
+
+
+def _get_output_topic(tag) -> Optional[str]:
+    for tp in (tag.topics or []):
+        if tp.direction == "Output":
+            return tp.topic
+    return None
+
+
+def _validate_time_range(time_range: str) -> None:
+    if not re.fullmatch(r"\d+(ms|[usmhdw])", time_range):
+        raise McpError(ErrorData(
+            code=INVALID_PARAMS,
+            message=f"Invalid time_range '{time_range}'. Use InfluxDB format e.g. '1h', '30m', '7d'.",
+        ))
+
+
+# ── New tools ─────────────────────────────────────────────────────────────────
+
+async def list_influxdb_measurements(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    params = get_influx_connection_params(request)
+    try:
+        client = _make_influx_client(params)
+        rs = client.query("SHOW MEASUREMENTS")
+        measurements = sorted(pt["name"] for pt in rs.get_points())
+        return format_success_response({
+            "database": params["INFLUX_DB_NAME"],
+            "count": len(measurements),
+            "measurements": measurements,
+        })
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing measurements: {e}", exc_info=True)
+        return format_error_response("query_failed", str(e))
+
+
+async def get_device_historical_data(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    try:
+        device_query = (arguments.get("device_query") or "").strip()
+        tag_name_query = (arguments.get("tag_name_query") or "").strip()
+        time_range = arguments.get("time_range", "1h")
+        limit = min(int(arguments.get("limit", 1000)), 100000)
+
+        if not device_query:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_query' is required"))
+        _validate_time_range(time_range)
+
+        params = get_influx_connection_params(request)
+        client = _make_influx_client(params)
+
+        rs = client.query("SHOW MEASUREMENTS")
+        all_measurements = [pt["name"] for pt in rs.get_points()]
+
+        matches = difflib.get_close_matches(device_query, all_measurements, n=20, cutoff=0.35)
+        if not matches:
+            matches = [m for m in all_measurements if device_query.lower() in m.lower()]
+
+        if tag_name_query:
+            matches = [m for m in matches if tag_name_query.lower() in m.lower()]
+
+        if not matches:
+            return format_success_response({
+                "device_query": device_query,
+                "matched_measurements": [],
+                "results": [],
+                "message": "No measurements matched the query. Use list_influxdb_measurements to see available names.",
+            })
+
+        results = []
+        for measurement in matches[:5]:
+            try:
+                q = f'SELECT * FROM "{measurement}" WHERE time > now() - {time_range} LIMIT {limit}'
+                r = client.query(q, chunked=True, chunk_size=10000)
+                pts = list(r.get_points())
+                results.append({"measurement": measurement, "count": len(pts), "data": pts})
+            except Exception as ex:
+                results.append({"measurement": measurement, "error": str(ex)})
+
+        return format_success_response({
+            "device_query": device_query,
+            "matched_measurements": matches,
+            "time_range": time_range,
+            "results": results,
+            "total_records": sum(r.get("count", 0) for r in results),
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_device_historical_data: {e}", exc_info=True)
+        return format_error_response("query_failed", str(e))
+
+
+async def query_tag_data(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        tag_name = (arguments.get("tag_name") or "").strip()
+        tag_id = (arguments.get("tag_id") or "").strip()
+        time_range = arguments.get("time_range", "1h")
+        limit = min(int(arguments.get("limit", 500)), 500)
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+        if not tag_name and not tag_id:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"))
+        _validate_time_range(time_range)
+
+        connection = get_litmus_connection(request)
+        device = _find_device(connection, device_name)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found. Use get_devicehub_devices to list devices."))
+
+        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+        if tag_id:
+            tag = next((t for t in tag_list if t.id == tag_id), None)
+            identifier = f"ID '{tag_id}'"
+        else:
+            tag = next((t for t in tag_list if t.tag_name == tag_name), None)
+            identifier = f"name '{tag_name}'"
+
+        if not tag:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag with {identifier} not found on device '{device_name}'."))
+
+        output_topic = _get_output_topic(tag)
+        if not output_topic:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag '{tag.tag_name}' has no output topic — no data in InfluxDB."))
+
+        params = get_influx_connection_params(request)
+        client = _make_influx_client(params)
+        q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {limit}'
+        r = client.query(q, chunked=True, chunk_size=5000)
+        pts = list(r.get_points())
+
+        return format_success_response({
+            "device_name": device_name,
+            "tag_name": tag.tag_name,
+            "tag_id": tag.id,
+            "measurement": output_topic,
+            "time_range": time_range,
+            "count": len(pts),
+            "data": pts,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in query_tag_data: {e}", exc_info=True)
+        return format_error_response("query_failed", str(e))
+
+
+async def get_tag_statistics(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        tag_name = (arguments.get("tag_name") or "").strip()
+        tag_id = (arguments.get("tag_id") or "").strip()
+        time_range = arguments.get("time_range", "1h")
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+        if not tag_name and not tag_id:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"))
+        _validate_time_range(time_range)
+
+        connection = get_litmus_connection(request)
+        device = _find_device(connection, device_name)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+        if tag_id:
+            tag = next((t for t in tag_list if t.id == tag_id), None)
+        else:
+            tag = next((t for t in tag_list if t.tag_name == tag_name), None)
+
+        if not tag:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag not found on device '{device_name}'."))
+
+        output_topic = _get_output_topic(tag)
+        if not output_topic:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag '{tag.tag_name}' has no output topic."))
+
+        params = get_influx_connection_params(request)
+        client = _make_influx_client(params)
+        q = (
+            f'SELECT mean("value") AS mean, min("value") AS min, max("value") AS max, '
+            f'count("value") AS count, stddev("value") AS stddev '
+            f'FROM "{output_topic}" WHERE time > now() - {time_range}'
+        )
+        r = client.query(q)
+        pts = list(r.get_points())
+        stats = pts[0] if pts else {}
+
+        mean_v = stats.get("mean")
+        std_v = stats.get("stddev")
+        if mean_v is not None and std_v is not None:
+            stats["baseline_low"] = mean_v - 2 * std_v
+            stats["baseline_high"] = mean_v + 2 * std_v
+
+        return format_success_response({
+            "device_name": device_name,
+            "tag_name": tag.tag_name,
+            "tag_id": tag.id,
+            "measurement": output_topic,
+            "time_range": time_range,
+            "statistics": stats,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_tag_statistics: {e}", exc_info=True)
+        return format_error_response("query_failed", str(e))
+
+
+async def get_device_data_for_inference(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        time_range = arguments.get("time_range", "1h")
+        include_statistics = bool(arguments.get("include_statistics", True))
+        sample_size = min(int(arguments.get("sample_size", 20)), 100)
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+        _validate_time_range(time_range)
+
+        connection = get_litmus_connection(request)
+        device = _find_device(connection, device_name)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        params = get_influx_connection_params(request)
+        client = _make_influx_client(params)
+
+        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+
+        tags_data = []
+        for tag in tag_list:
+            output_topic = _get_output_topic(tag)
+            entry = {
+                "tag_name": tag.tag_name,
+                "tag_id": tag.id,
+                "value_type": tag.value_type,
+                "measurement": output_topic,
+            }
+
+            if output_topic and include_statistics:
+                try:
+                    q = (
+                        f'SELECT mean("value") AS mean, min("value") AS min, max("value") AS max, '
+                        f'count("value") AS count, stddev("value") AS stddev '
+                        f'FROM "{output_topic}" WHERE time > now() - {time_range}'
+                    )
+                    r = client.query(q)
+                    pts = list(r.get_points())
+                    if pts:
+                        s = pts[0]
+                        mean_v, std_v = s.get("mean"), s.get("stddev")
+                        if mean_v is not None and std_v is not None:
+                            s["baseline_low"] = mean_v - 2 * std_v
+                            s["baseline_high"] = mean_v + 2 * std_v
+                        entry["statistics"] = s
+                except Exception:
+                    pass
+
+            if output_topic and sample_size > 0:
+                try:
+                    q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {sample_size}'
+                    r = client.query(q)
+                    entry["recent_samples"] = list(r.get_points())
+                except Exception:
+                    pass
+
+            tags_data.append(entry)
+
+        driver_name = None
+        try:
+            driver_name = getattr(device.driver, "name", None) or str(device.driver)
+        except Exception:
+            pass
+
+        return format_success_response({
+            "device": {
+                "name": device.name,
+                "id": device.id,
+                "driver": driver_name,
+                "description": device.description,
+            },
+            "time_range": time_range,
+            "sample_size": sample_size,
+            "tag_count": len(tags_data),
+            "tags": tags_data,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_device_data_for_inference: {e}", exc_info=True)
         return format_error_response("query_failed", str(e))
