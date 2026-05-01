@@ -20,18 +20,17 @@ import sys
 import warnings
 
 import pytest
+from dotenv import load_dotenv
 
-warnings.filterwarnings("ignore")
 try:
     import urllib3
+
     urllib3.disable_warnings()
 except ImportError:
     pass
 
+warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
-from dotenv import load_dotenv
-
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 
@@ -66,17 +65,19 @@ def _make_request():
     from unittest.mock import MagicMock
 
     req = MagicMock()
-    req.headers = _Headers({
-        "EDGE_URL": EDGE_URL,
-        "EDGE_API_CLIENT_ID": CLIENT_ID,
-        "EDGE_API_CLIENT_SECRET": CLIENT_SECRET,
-        "INFLUX_HOST": INFLUX_HOST,
-        "INFLUX_PORT": INFLUX_PORT,
-        "INFLUX_DB_NAME": INFLUX_DB,
-        "INFLUX_USERNAME": INFLUX_USER,
-        "INFLUX_PASSWORD": INFLUX_PASS,
-        "VALIDATE_CERTIFICATE": "false",
-    })
+    req.headers = _Headers(
+        {
+            "EDGE_URL": EDGE_URL,
+            "EDGE_API_CLIENT_ID": CLIENT_ID,
+            "EDGE_API_CLIENT_SECRET": CLIENT_SECRET,
+            "INFLUX_HOST": INFLUX_HOST,
+            "INFLUX_PORT": INFLUX_PORT,
+            "INFLUX_DB_NAME": INFLUX_DB,
+            "INFLUX_USERNAME": INFLUX_USER,
+            "INFLUX_PASSWORD": INFLUX_PASS,
+            "VALIDATE_CERTIFICATE": "false",
+        }
+    )
     return req
 
 
@@ -111,11 +112,13 @@ def device_with_tag(le_connection, all_devices):
 
     for d in all_devices:
         try:
-            tag_list = dh_tags.list_registers_from_single_device(d, le_connection=le_connection)
+            tag_list = dh_tags.list_registers_from_single_device(
+                d, le_connection=le_connection
+            )
         except Exception:
             continue
         for t in tag_list:
-            for tp in (t.topics or []):
+            for tp in t.topics or []:
                 if tp.direction == "Output":
                     return {"device": d, "tag": t, "topic": tp.topic}
     pytest.skip("No device with a configured tag found on this Edge.")
@@ -130,11 +133,11 @@ def crud_target(le_connection, all_devices):
     """
     for d in all_devices:
         try:
-            for sr in (d.driver.supported_registers or []):
+            for sr in d.driver.supported_registers or []:
                 # Need at least one valid valueType
                 value_types = []
                 missing_required = []
-                for prop in (sr.properties or []):
+                for prop in sr.properties or []:
                     if prop.name == "valueType" and prop.list_values:
                         value_types = [lv.value for lv in prop.list_values]
                     elif prop.required and prop.default_value is None:
@@ -159,12 +162,17 @@ def crud_target(le_connection, all_devices):
 def test_query_tag_data(request_obj, device_with_tag):
     from tools.data_tools import query_tag_data
 
-    result = asyncio.run(query_tag_data(request_obj, {
-        "device_name": device_with_tag["device"].name,
-        "tag_name": device_with_tag["tag"].tag_name,
-        "time_range": "24h",
-        "limit": 5,
-    }))
+    result = asyncio.run(
+        query_tag_data(
+            request_obj,
+            {
+                "device_name": device_with_tag["device"].name,
+                "tag_name": device_with_tag["tag"].tag_name,
+                "time_range": "24h",
+                "limit": 5,
+            },
+        )
+    )
     data = json.loads(result[0].text)
     assert data.get("success") is True, data
     assert data["measurement"] == device_with_tag["topic"]
@@ -177,11 +185,16 @@ def test_query_tag_data(request_obj, device_with_tag):
 def test_get_tag_statistics(request_obj, device_with_tag):
     from tools.data_tools import get_tag_statistics
 
-    result = asyncio.run(get_tag_statistics(request_obj, {
-        "device_name": device_with_tag["device"].name,
-        "tag_name": device_with_tag["tag"].tag_name,
-        "time_range": "24h",
-    }))
+    result = asyncio.run(
+        get_tag_statistics(
+            request_obj,
+            {
+                "device_name": device_with_tag["device"].name,
+                "tag_name": device_with_tag["tag"].tag_name,
+                "time_range": "24h",
+            },
+        )
+    )
     data = json.loads(result[0].text)
     assert data.get("success") is True, data
     assert data["measurement"] == device_with_tag["topic"]
@@ -192,19 +205,26 @@ def test_get_tag_statistics(request_obj, device_with_tag):
 def test_tag_crud_cycle(request_obj, crud_target):
     """create_devicehub_tag → update_devicehub_tag → delete_devicehub_tag."""
     from tools.devicehub_tools import (
-        create_devicehub_tag, update_devicehub_tag, delete_devicehub_tag,
+        create_devicehub_tag,
+        update_devicehub_tag,
+        delete_devicehub_tag,
     )
 
     device_name = crud_target["device"].name
     tag_name = "mcp_integration_test_tag"
 
     # Create
-    result = asyncio.run(create_devicehub_tag(request_obj, {
-        "device_name": device_name,
-        "tag_name": tag_name,
-        "register_name": crud_target["register_name"],
-        "value_type": crud_target["value_type"],
-    }))
+    result = asyncio.run(
+        create_devicehub_tag(
+            request_obj,
+            {
+                "device_name": device_name,
+                "tag_name": tag_name,
+                "register_name": crud_target["register_name"],
+                "value_type": crud_target["value_type"],
+            },
+        )
+    )
     data = json.loads(result[0].text)
     assert data.get("success") is True, f"create failed: {data}"
     tag_id = data["tag_id"]
@@ -212,19 +232,29 @@ def test_tag_crud_cycle(request_obj, crud_target):
 
     try:
         # Update
-        result = asyncio.run(update_devicehub_tag(request_obj, {
-            "device_name": device_name,
-            "tag_name": tag_name,
-            "description": "updated by integration test",
-        }))
+        result = asyncio.run(
+            update_devicehub_tag(
+                request_obj,
+                {
+                    "device_name": device_name,
+                    "tag_name": tag_name,
+                    "description": "updated by integration test",
+                },
+            )
+        )
         data = json.loads(result[0].text)
         assert data.get("success") is True, f"update failed: {data}"
         assert data["tag_id"] == tag_id
     finally:
         # Delete (best-effort cleanup even if update fails)
-        result = asyncio.run(delete_devicehub_tag(request_obj, {
-            "device_name": device_name,
-            "tag_name": tag_name,
-        }))
+        result = asyncio.run(
+            delete_devicehub_tag(
+                request_obj,
+                {
+                    "device_name": device_name,
+                    "tag_name": tag_name,
+                },
+            )
+        )
         data = json.loads(result[0].text)
         assert data.get("success") is True, f"delete failed: {data}"
