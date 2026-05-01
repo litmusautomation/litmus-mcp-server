@@ -1,15 +1,17 @@
 import time
+from datetime import datetime, timezone
 from typing import Optional, Any
 from config import logger
-from utils.auth import get_litmus_connection
+from utils.auth import get_litmus_connection, get_influx_connection_params
 from utils.formatting import format_success_response, format_error_response
-from .data_tools import get_current_value_on_topic
+from .data_tools import get_current_value_on_topic, _make_influx_client
 
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 from mcp.types import TextContent
 from starlette.requests import Request
 from litmussdk.devicehub import devices, tags
+from litmussdk.devicehub.tags._models import Tag
 from litmussdk.devicehub.drivers import list_all_drivers
 from litmussdk.utils import api, api_paths, gql_queries
 
@@ -525,3 +527,360 @@ def _create_device_summary(device_data: list[dict]) -> dict:
     return {
         "by_driver": driver_counts,
     }
+
+
+# ── Device connection status, tag CRUD, tag status ───────────────────────────
+
+_CONNECTION_THRESHOLD_SECONDS = 60
+
+
+async def get_device_connection_status(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """
+    Check whether devices are actively publishing data by probing InfluxDB for recent records.
+    Connected = data seen within threshold_seconds; stale = older; no_data = no records found.
+    """
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        threshold = int(arguments.get("threshold_seconds", _CONNECTION_THRESHOLD_SECONDS))
+
+        connection = get_litmus_connection(request)
+        if device_name:
+            device_obj = _find_device_by_name(connection, device_name, request)
+            if not device_obj:
+                raise McpError(ErrorData(code=INVALID_PARAMS,
+                    message=f"Device '{device_name}' not found."))
+            device_list = [device_obj]
+        else:
+            device_list = devices.list_devices(le_connection=connection)
+
+        params = get_influx_connection_params(request)
+        client = _make_influx_client(params)
+        now_epoch = time.time()
+
+        results = []
+        for device in device_list:
+            output_topic = None
+            try:
+                tag_list = tags.list_registers_from_single_device(device, le_connection=connection)
+                for tag in tag_list:
+                    for tp in (tag.topics or []):
+                        if tp.direction == "Output":
+                            output_topic = tp.topic
+                            break
+                    if output_topic:
+                        break
+            except Exception:
+                pass
+
+            status = "no_data"
+            last_seen = None
+            if output_topic:
+                try:
+                    rs = client.query(f'SELECT last(*) FROM "{output_topic}"')
+                    pts = list(rs.get_points())
+                    if pts:
+                        ts_str = pts[0].get("time", "")
+                        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                        last_seen = ts_str
+                        age_s = now_epoch - ts.replace(tzinfo=timezone.utc).timestamp()
+                        status = "connected" if age_s <= threshold else "stale"
+                except Exception:
+                    pass
+
+            results.append({
+                "device_name": device.name,
+                "device_id": device.id,
+                "status": status,
+                "last_seen": last_seen,
+                "checked_topic": output_topic,
+            })
+
+        return format_success_response({
+            "count": len(results),
+            "threshold_seconds": threshold,
+            "devices": results,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking device connection status: {e}", exc_info=True)
+        return format_error_response("check_failed", str(e))
+
+
+def _get_register_property_defaults(device, register_name: str) -> dict:
+    """Pull default values for required properties of a driver register.
+
+    Drivers expose `supported_registers`; each register lists its properties
+    with `required` and `default_value`. We fill required-with-default fields
+    so callers don't need to know every driver's schema by heart.
+    """
+    try:
+        for sr in (getattr(device.driver, "supported_registers", None) or []):
+            if sr.name == register_name:
+                return {
+                    p.name: p.default_value
+                    for p in (sr.properties or [])
+                    if p.required and p.default_value is not None
+                }
+    except Exception:
+        pass
+    return {}
+
+
+async def create_devicehub_tag(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """
+    Create a new tag on a DeviceHub device.
+    register_name is the driver-specific register type (e.g. 'S' for Generator,
+    'HoldingRegister' for Modbus). Required driver properties (address, count,
+    pollingInterval, etc.) are auto-filled from driver defaults; user-provided
+    `properties` override the defaults.
+    """
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        register_name = (arguments.get("register_name") or "").strip()
+        tag_name = (arguments.get("tag_name") or "").strip()
+        value_type = (arguments.get("value_type") or "").strip()
+        description = arguments.get("description", "")
+        user_properties = arguments.get("properties") or {}
+
+        for field, val in [("device_name", device_name), ("register_name", register_name),
+                           ("tag_name", tag_name), ("value_type", value_type)]:
+            if not val:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message=f"'{field}' is required"))
+
+        connection = get_litmus_connection(request)
+        device = _find_device_by_name(connection, device_name, request)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        defaults = _get_register_property_defaults(device, register_name)
+        properties = {**defaults, **user_properties}
+
+        tag = Tag.model_validate({
+            "DeviceID": device,
+            "name": register_name,
+            "tag_name": tag_name,
+            "value_type": value_type,
+            "description": description,
+            "properties": properties,
+        }, context={"le_connection": connection})
+
+        created = tags.create_tags([tag], le_connection=connection)
+        result_tag = created[0] if created else tag
+
+        return format_success_response({
+            "tag_id": result_tag.id,
+            "tag_name": result_tag.tag_name,
+            "device_name": device_name,
+            "register_name": result_tag.name,
+            "value_type": result_tag.value_type,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating tag: {e}", exc_info=True)
+        return format_error_response("creation_failed", str(e))
+
+
+async def update_devicehub_tag(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """Update mutable fields of an existing tag (tag_name, description, properties)."""
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        tag_name = (arguments.get("tag_name") or "").strip()
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+        if not tag_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' is required"))
+
+        connection = get_litmus_connection(request)
+        device = _find_device_by_name(connection, device_name, request)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        tag_list = tags.list_registers_from_single_device(device, le_connection=connection)
+        existing = next((t for t in tag_list if t.tag_name == tag_name), None)
+        if not existing:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag '{tag_name}' not found on device '{device_name}'."))
+
+        updates = {k: arguments[k] for k in ("new_tag_name", "description", "properties")
+                   if k in arguments}
+        if not updates:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message="Provide at least one of: new_tag_name, description, properties"))
+
+        updated_tag = Tag.model_validate({
+            "ID": existing.id,
+            "DeviceID": device,
+            "name": existing.name,
+            "tag_name": updates.get("new_tag_name", existing.tag_name),
+            "description": updates.get("description", existing.description),
+            "value_type": existing.value_type,
+            "properties": updates.get("properties", existing.properties),
+            "PublishCoV": existing.publish_cov,
+            "MetaData": existing.metadata,
+        }, context={"le_connection": connection, "skip_property_validation": True})
+
+        result = tags.update_tags([updated_tag], le_connection=connection)
+        result_tag = result[0] if result else updated_tag
+
+        return format_success_response({
+            "tag_id": result_tag.id,
+            "tag_name": result_tag.tag_name,
+            "device_name": device_name,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating tag: {e}", exc_info=True)
+        return format_error_response("update_failed", str(e))
+
+
+async def delete_devicehub_tag(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """Delete a tag from a DeviceHub device. Destructive — cannot be undone."""
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        tag_name = (arguments.get("tag_name") or "").strip()
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+        if not tag_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' is required"))
+
+        connection = get_litmus_connection(request)
+        device = _find_device_by_name(connection, device_name, request)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        tag_list = tags.list_registers_from_single_device(device, le_connection=connection)
+        tag = next((t for t in tag_list if t.tag_name == tag_name), None)
+        if not tag:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Tag '{tag_name}' not found on device '{device_name}'."))
+
+        tags.delete_tag(tag, le_connection=connection)
+
+        return format_success_response({
+            "deleted": True,
+            "tag_name": tag_name,
+            "tag_id": tag.id,
+            "device_name": device_name,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting tag: {e}", exc_info=True)
+        return format_error_response("deletion_failed", str(e))
+
+
+async def get_tag_status(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """Get OK/ERROR status for tags on a device. Optionally filter to a single tag."""
+    try:
+        device_name = (arguments.get("device_name") or "").strip()
+        filter_tag = (arguments.get("tag_name") or "").strip()
+
+        if not device_name:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+
+        connection = get_litmus_connection(request)
+        device = _find_device_by_name(connection, device_name, request)
+        if not device:
+            raise McpError(ErrorData(code=INVALID_PARAMS,
+                message=f"Device '{device_name}' not found."))
+
+        tag_list = tags.list_registers_from_single_device(device, le_connection=connection)
+        if filter_tag:
+            tag_list = [t for t in tag_list if t.tag_name == filter_tag]
+            if not tag_list:
+                raise McpError(ErrorData(code=INVALID_PARAMS,
+                    message=f"Tag '{filter_tag}' not found on device '{device_name}'."))
+
+        if not tag_list:
+            return format_success_response({"device_name": device_name, "count": 0, "statuses": []})
+
+        raw_statuses = tags.tag_status(device, tag_list, le_connection=connection)
+        tag_map = {t.id: t.tag_name for t in tag_list}
+        statuses = [
+            {**s, "tag_name": tag_map.get(s.get("ID", ""), "unknown")}
+            for s in raw_statuses
+        ]
+
+        return format_success_response({
+            "device_name": device_name,
+            "count": len(statuses),
+            "statuses": statuses,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting tag status: {e}", exc_info=True)
+        return format_error_response("status_failed", str(e))
+
+
+async def get_all_tags_status(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """
+    Get tag status across all devices. Defaults to returning only non-OK tags.
+    Pass filter_status='' to see all statuses.
+    """
+    try:
+        filter_state = (arguments.get("filter_status", "not_ok") or "").strip().upper()
+
+        connection = get_litmus_connection(request)
+        device_list = devices.list_devices(le_connection=connection)
+
+        all_statuses = []
+        for device in device_list:
+            try:
+                tag_list = tags.list_registers_from_single_device(device, le_connection=connection)
+                if not tag_list:
+                    continue
+                raw = tags.tag_status(device, tag_list, le_connection=connection)
+                tag_map = {t.id: t.tag_name for t in tag_list}
+                for s in raw:
+                    all_statuses.append({
+                        **s,
+                        "tag_name": tag_map.get(s.get("ID", ""), "unknown"),
+                        "device_name": device.name,
+                        "device_id": device.id,
+                    })
+            except Exception as ex:
+                logger.warning(f"Could not get tag status for device '{device.name}': {ex}")
+
+        if filter_state == "NOT_OK":
+            all_statuses = [s for s in all_statuses if s.get("State", "OK").upper() != "OK"]
+        elif filter_state:
+            all_statuses = [s for s in all_statuses
+                            if s.get("State", "").upper() == filter_state]
+
+        return format_success_response({
+            "count": len(all_statuses),
+            "filter_status": filter_state or None,
+            "statuses": all_statuses,
+        })
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting all tag statuses: {e}", exc_info=True)
+        return format_error_response("status_failed", str(e))
