@@ -348,13 +348,21 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 
 ## Available Tools
 
-| Category                  | Function Name                         | Description |
+40 tools across 8 categories. Tools accept structured arguments and return JSON.
+
+| Category                  | Function Name                          | Description |
 |---------------------------|----------------------------------------|-------------|
-| **DeviceHub**             | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers (e.g., ModbusTCP, OPCUA, BACnet). |
+| **DeviceHub — Devices**   | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers (e.g., ModbusTCP, OPCUA, BACnet). |
 |                           | `get_devicehub_devices`                | List all configured DeviceHub devices with connection settings and status. |
 |                           | `create_devicehub_device`              | Create a new device with specified driver and default configuration. |
-|                           | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
+|                           | `get_device_connection_status` **      | Check whether devices are actively publishing data via InfluxDB heartbeat (connected/stale/no_data). |
+| **DeviceHub — Tags**      | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
 |                           | `get_current_value_of_devicehub_tag`   | Read the current real-time value of a specific device tag. |
+|                           | `create_devicehub_tag`                 | Create a new tag (register) on a device. Driver-required properties auto-fill from defaults. |
+|                           | `update_devicehub_tag`                 | Update mutable fields of an existing tag (display name, description, properties). |
+|                           | `delete_devicehub_tag`                 | Delete a tag from a device. Destructive. |
+|                           | `get_tag_status`                       | Return OK/ERROR status for tags on a specific device. Optionally filter to a single tag. |
+|                           | `get_all_tags_status`                  | Return tag status across all devices. Defaults to non-OK only so issues surface first. |
 | **Device Identity**       | `get_litmusedge_friendly_name`         | Get the human-readable name assigned to the Litmus Edge device. |
 |                           | `set_litmusedge_friendly_name`         | Update the friendly name of the Litmus Edge device. |
 | **LEM Integration**       | `get_cloud_activation_status`          | Check cloud registration and Litmus Edge Manager (LEM) connection status. |
@@ -362,7 +370,20 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `run_docker_container_on_litmusedge`   | Deploy and run a new Docker container on Litmus Edge Marketplace. |
 | **NATS Topics** *         | `get_current_value_from_topic`         | Subscribe to a NATS topic and return the next published message. |
 |                           | `get_multiple_values_from_topic`       | Collect multiple sequential values from a NATS topic for trend analysis. |
-| **InfluxDB** **           | `get_historical_data_from_influxdb`    | Query historical time-series data from InfluxDB by measurement and time range. |
+| **InfluxDB / Time Series** ** | `get_historical_data_from_influxdb` | Query historical time-series data from InfluxDB by measurement and time range. |
+|                           | `list_influxdb_measurements`           | List all measurement names in the `tsdata` database — discovery for downstream queries. |
+|                           | `get_device_historical_data`           | Fuzzy-match device names to InfluxDB measurements and pull historical data per match. |
+|                           | `query_tag_data`                       | Query historical data for a specific tag by resolving its output topic. Newest-first. |
+|                           | `get_tag_statistics`                   | Aggregate stats for a tag: mean, min, max, stddev, count, plus baseline range (mean ± 2σ). |
+|                           | `get_device_data_for_inference`        | Composite payload for AI inference: device metadata, all tags, per-tag stats, and recent samples. |
+| **System — Events**       | `get_device_logs`                      | Retrieve system events filtered by time range, component, and severity (INFO/WARN/ALERT/ERROR). |
+|                           | `get_system_event_stats`               | Event manager statistics: queue sizes, processing rates, memory, health indicators. |
+| **System — Network**      | `get_firewall_rules`                   | Return configured firewall rules: ports, protocols, ALLOW/DENY actions. |
+|                           | `get_network_interface_info`           | Network interface details: IP, MAC, gateway, link status, MTU, speed. Defaults to `eth0`. |
+|                           | `get_packet_capture_interfaces`        | List network interfaces available for packet capture. |
+|                           | `get_packet_capture_status`            | Current packet capture state and list of captured `.pcap` files with metadata. |
+|                           | `start_packet_capture`                 | Start a packet capture on an interface. Duration 1–30 minutes. |
+|                           | `stop_packet_capture`                  | Stop an in-progress packet capture. |
 | **Digital Twins**         | `list_digital_twin_models`             | List all Digital Twin models with ID, name, description, and version. |
 |                           | `list_digital_twin_instances`          | List all Digital Twin instances or filter by model ID. |
 |                           | `create_digital_twin_instance`         | Create a new Digital Twin instance from an existing model. |
@@ -380,11 +401,12 @@ To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you 
 2. Create or configure an access token with appropriate permissions
 3. Provide the token in your MCP client configuration headers
 
-**\*\* InfluxDB Tools Requirements:**
-To use `get_historical_data_from_influxdb`, you must allow InfluxDB port access:
+**\*\* InfluxDB / Time Series Tools Requirements:**
+To use any tool marked with `**` (`get_historical_data_from_influxdb`, `list_influxdb_measurements`, `get_device_historical_data`, `query_tag_data`, `get_tag_statistics`, `get_device_data_for_inference`, `get_device_connection_status`), you must allow InfluxDB port access:
 1. Navigate to: **Litmus Edge → System → Network → Firewall**
 2. Add a firewall rule to allow port **8086** on **TCP**
 3. Ensure InfluxDB is accessible from the MCP server host
+4. Provide `INFLUX_HOST`, `INFLUX_PORT`, `INFLUX_DB_NAME`, `INFLUX_USERNAME`, `INFLUX_PASSWORD` in your MCP client headers
 
 ---
 
