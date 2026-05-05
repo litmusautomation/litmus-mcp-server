@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from utils.auth import get_litmus_connection
 from mcp.shared.exceptions import McpError
 
-
 # ==================== Test: Valid Authentication ====================
 
 

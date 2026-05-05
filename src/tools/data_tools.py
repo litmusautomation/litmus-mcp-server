@@ -11,7 +11,11 @@ from config import logger, ssl_config
 from config import NATS_PORT, NATS_SOURCE
 
 from utils.formatting import format_success_response, format_error_response
-from utils.auth import get_nats_connection_params, get_influx_connection_params, get_litmus_connection
+from utils.auth import (
+    get_nats_connection_params,
+    get_influx_connection_params,
+    get_litmus_connection,
+)
 
 from numpy import zeros
 from starlette.requests import Request
@@ -55,7 +59,8 @@ async def get_current_value_on_topic(
             nats_password = None
             logger.warning(
                 "NATS params missing from request headers, using config defaults: %s:%s",
-                nats_source, nats_port,
+                nats_source,
+                nats_port,
             )
     else:
         # Use provided parameters or config defaults
@@ -151,7 +156,8 @@ async def get_multiple_values_from_topic_tool(
             nats_password = None
             logger.warning(
                 "NATS params missing from request headers, using config defaults: %s:%s",
-                nats_source, nats_port,
+                nats_source,
+                nats_port,
             )
 
         stop_event = asyncio.Event()
@@ -185,7 +191,9 @@ async def get_multiple_values_from_topic_tool(
         return format_error_response("collection_failed", str(e))
 
 
-def _get_connect_options(nats_source, nats_port, nats_user, nats_password, use_tls=True):
+def _get_connect_options(
+    nats_source, nats_port, nats_user, nats_password, use_tls=True
+):
     connect_options = {
         "servers": [f"nats://{nats_source}:{nats_port}"],
         "allow_reconnect": False,  # per-call connections; no background reconnect loop
@@ -365,14 +373,14 @@ async def get_historical_data_from_influxdb_tool(
             )
 
         # Validate inputs before interpolating into the query string
-        if not re.fullmatch(r'[\w][\w\-\.]*', measurement):
+        if not re.fullmatch(r"[\w][\w\-\.]*", measurement):
             raise McpError(
                 ErrorData(
                     code=INVALID_PARAMS,
                     message=f"Invalid measurement name '{measurement}'. Only alphanumeric characters, underscores, hyphens, and dots are allowed.",
                 )
             )
-        if not re.fullmatch(r'\d+(ms|[usmhdw])', time_range):
+        if not re.fullmatch(r"\d+(ms|[usmhdw])", time_range):
             raise McpError(
                 ErrorData(
                     code=INVALID_PARAMS,
@@ -442,6 +450,7 @@ async def get_historical_data_from_influxdb_tool(
 
 # ── InfluxDB helpers ──────────────────────────────────────────────────────────
 
+
 def _make_influx_client(params: dict) -> influxdb.InfluxDBClient:
     return influxdb.InfluxDBClient(
         host=params["INFLUX_HOST"],
@@ -461,7 +470,7 @@ def _find_device(connection, device_name: str):
 
 
 def _get_output_topic(tag) -> Optional[str]:
-    for tp in (tag.topics or []):
+    for tp in tag.topics or []:
         if tp.direction == "Output":
             return tp.topic
     return None
@@ -469,13 +478,16 @@ def _get_output_topic(tag) -> Optional[str]:
 
 def _validate_time_range(time_range: str) -> None:
     if not re.fullmatch(r"\d+(ms|[usmhdw])", time_range):
-        raise McpError(ErrorData(
-            code=INVALID_PARAMS,
-            message=f"Invalid time_range '{time_range}'. Use InfluxDB format e.g. '1h', '30m', '7d'.",
-        ))
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=f"Invalid time_range '{time_range}'. Use InfluxDB format e.g. '1h', '30m', '7d'.",
+            )
+        )
 
 
 # ── New tools ─────────────────────────────────────────────────────────────────
+
 
 async def list_influxdb_measurements(
     request: Request, arguments: dict
@@ -485,11 +497,13 @@ async def list_influxdb_measurements(
         client = _make_influx_client(params)
         rs = client.query("SHOW MEASUREMENTS")
         measurements = sorted(pt["name"] for pt in rs.get_points())
-        return format_success_response({
-            "database": params["INFLUX_DB_NAME"],
-            "count": len(measurements),
-            "measurements": measurements,
-        })
+        return format_success_response(
+            {
+                "database": params["INFLUX_DB_NAME"],
+                "count": len(measurements),
+                "measurements": measurements,
+            }
+        )
     except McpError:
         raise
     except Exception as e:
@@ -507,7 +521,9 @@ async def get_device_historical_data(
         limit = min(int(arguments.get("limit", 1000)), 100000)
 
         if not device_query:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_query' is required"))
+            raise McpError(
+                ErrorData(code=INVALID_PARAMS, message="'device_query' is required")
+            )
         _validate_time_range(time_range)
 
         params = get_influx_connection_params(request)
@@ -516,7 +532,9 @@ async def get_device_historical_data(
         rs = client.query("SHOW MEASUREMENTS")
         all_measurements = [pt["name"] for pt in rs.get_points()]
 
-        matches = difflib.get_close_matches(device_query, all_measurements, n=20, cutoff=0.35)
+        matches = difflib.get_close_matches(
+            device_query, all_measurements, n=20, cutoff=0.35
+        )
         if not matches:
             matches = [m for m in all_measurements if device_query.lower() in m.lower()]
 
@@ -524,12 +542,14 @@ async def get_device_historical_data(
             matches = [m for m in matches if tag_name_query.lower() in m.lower()]
 
         if not matches:
-            return format_success_response({
-                "device_query": device_query,
-                "matched_measurements": [],
-                "results": [],
-                "message": "No measurements matched the query. Use list_influxdb_measurements to see available names.",
-            })
+            return format_success_response(
+                {
+                    "device_query": device_query,
+                    "matched_measurements": [],
+                    "results": [],
+                    "message": "No measurements matched the query. Use list_influxdb_measurements to see available names.",
+                }
+            )
 
         results = []
         for measurement in matches[:5]:
@@ -537,17 +557,21 @@ async def get_device_historical_data(
                 q = f'SELECT * FROM "{measurement}" WHERE time > now() - {time_range} LIMIT {limit}'
                 r = client.query(q, chunked=True, chunk_size=10000)
                 pts = list(r.get_points())
-                results.append({"measurement": measurement, "count": len(pts), "data": pts})
+                results.append(
+                    {"measurement": measurement, "count": len(pts), "data": pts}
+                )
             except Exception as ex:
                 results.append({"measurement": measurement, "error": str(ex)})
 
-        return format_success_response({
-            "device_query": device_query,
-            "matched_measurements": matches,
-            "time_range": time_range,
-            "results": results,
-            "total_records": sum(r.get("count", 0) for r in results),
-        })
+        return format_success_response(
+            {
+                "device_query": device_query,
+                "matched_measurements": matches,
+                "time_range": time_range,
+                "results": results,
+                "total_records": sum(r.get("count", 0) for r in results),
+            }
+        )
 
     except McpError:
         raise
@@ -556,9 +580,7 @@ async def get_device_historical_data(
         return format_error_response("query_failed", str(e))
 
 
-async def query_tag_data(
-    request: Request, arguments: dict
-) -> list[TextContent]:
+async def query_tag_data(request: Request, arguments: dict) -> list[TextContent]:
     try:
         device_name = (arguments.get("device_name") or "").strip()
         tag_name = (arguments.get("tag_name") or "").strip()
@@ -567,18 +589,30 @@ async def query_tag_data(
         limit = min(int(arguments.get("limit", 500)), 500)
 
         if not device_name:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+            raise McpError(
+                ErrorData(code=INVALID_PARAMS, message="'device_name' is required")
+            )
         if not tag_name and not tag_id:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"
+                )
+            )
         _validate_time_range(time_range)
 
         connection = get_litmus_connection(request)
         device = _find_device(connection, device_name)
         if not device:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Device '{device_name}' not found. Use get_devicehub_devices to list devices."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Device '{device_name}' not found. Use get_devicehub_devices to list devices.",
+                )
+            )
 
-        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+        tag_list = dh_tags.list_registers_from_single_device(
+            device, le_connection=connection
+        )
         if tag_id:
             tag = next((t for t in tag_list if t.id == tag_id), None)
             identifier = f"ID '{tag_id}'"
@@ -587,13 +621,21 @@ async def query_tag_data(
             identifier = f"name '{tag_name}'"
 
         if not tag:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Tag with {identifier} not found on device '{device_name}'."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Tag with {identifier} not found on device '{device_name}'.",
+                )
+            )
 
         output_topic = _get_output_topic(tag)
         if not output_topic:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Tag '{tag.tag_name}' has no output topic — no data in InfluxDB."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Tag '{tag.tag_name}' has no output topic — no data in InfluxDB.",
+                )
+            )
 
         params = get_influx_connection_params(request)
         client = _make_influx_client(params)
@@ -601,15 +643,17 @@ async def query_tag_data(
         r = client.query(q, chunked=True, chunk_size=5000)
         pts = list(r.get_points())
 
-        return format_success_response({
-            "device_name": device_name,
-            "tag_name": tag.tag_name,
-            "tag_id": tag.id,
-            "measurement": output_topic,
-            "time_range": time_range,
-            "count": len(pts),
-            "data": pts,
-        })
+        return format_success_response(
+            {
+                "device_name": device_name,
+                "tag_name": tag.tag_name,
+                "tag_id": tag.id,
+                "measurement": output_topic,
+                "time_range": time_range,
+                "count": len(pts),
+                "data": pts,
+            }
+        )
 
     except McpError:
         raise
@@ -618,9 +662,7 @@ async def query_tag_data(
         return format_error_response("query_failed", str(e))
 
 
-async def get_tag_statistics(
-    request: Request, arguments: dict
-) -> list[TextContent]:
+async def get_tag_statistics(request: Request, arguments: dict) -> list[TextContent]:
     try:
         device_name = (arguments.get("device_name") or "").strip()
         tag_name = (arguments.get("tag_name") or "").strip()
@@ -628,31 +670,50 @@ async def get_tag_statistics(
         time_range = arguments.get("time_range", "1h")
 
         if not device_name:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+            raise McpError(
+                ErrorData(code=INVALID_PARAMS, message="'device_name' is required")
+            )
         if not tag_name and not tag_id:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS, message="'tag_name' or 'tag_id' is required"
+                )
+            )
         _validate_time_range(time_range)
 
         connection = get_litmus_connection(request)
         device = _find_device(connection, device_name)
         if not device:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Device '{device_name}' not found."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS, message=f"Device '{device_name}' not found."
+                )
+            )
 
-        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+        tag_list = dh_tags.list_registers_from_single_device(
+            device, le_connection=connection
+        )
         if tag_id:
             tag = next((t for t in tag_list if t.id == tag_id), None)
         else:
             tag = next((t for t in tag_list if t.tag_name == tag_name), None)
 
         if not tag:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Tag not found on device '{device_name}'."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Tag not found on device '{device_name}'.",
+                )
+            )
 
         output_topic = _get_output_topic(tag)
         if not output_topic:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Tag '{tag.tag_name}' has no output topic."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Tag '{tag.tag_name}' has no output topic.",
+                )
+            )
 
         params = get_influx_connection_params(request)
         client = _make_influx_client(params)
@@ -671,14 +732,16 @@ async def get_tag_statistics(
             stats["baseline_low"] = mean_v - 2 * std_v
             stats["baseline_high"] = mean_v + 2 * std_v
 
-        return format_success_response({
-            "device_name": device_name,
-            "tag_name": tag.tag_name,
-            "tag_id": tag.id,
-            "measurement": output_topic,
-            "time_range": time_range,
-            "statistics": stats,
-        })
+        return format_success_response(
+            {
+                "device_name": device_name,
+                "tag_name": tag.tag_name,
+                "tag_id": tag.id,
+                "measurement": output_topic,
+                "time_range": time_range,
+                "statistics": stats,
+            }
+        )
 
     except McpError:
         raise
@@ -697,19 +760,26 @@ async def get_device_data_for_inference(
         sample_size = min(int(arguments.get("sample_size", 20)), 100)
 
         if not device_name:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="'device_name' is required"))
+            raise McpError(
+                ErrorData(code=INVALID_PARAMS, message="'device_name' is required")
+            )
         _validate_time_range(time_range)
 
         connection = get_litmus_connection(request)
         device = _find_device(connection, device_name)
         if not device:
-            raise McpError(ErrorData(code=INVALID_PARAMS,
-                message=f"Device '{device_name}' not found."))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS, message=f"Device '{device_name}' not found."
+                )
+            )
 
         params = get_influx_connection_params(request)
         client = _make_influx_client(params)
 
-        tag_list = dh_tags.list_registers_from_single_device(device, le_connection=connection)
+        tag_list = dh_tags.list_registers_from_single_device(
+            device, le_connection=connection
+        )
 
         tags_data = []
         for tag in tag_list:
@@ -756,18 +826,20 @@ async def get_device_data_for_inference(
         except Exception:
             pass
 
-        return format_success_response({
-            "device": {
-                "name": device.name,
-                "id": device.id,
-                "driver": driver_name,
-                "description": device.description,
-            },
-            "time_range": time_range,
-            "sample_size": sample_size,
-            "tag_count": len(tags_data),
-            "tags": tags_data,
-        })
+        return format_success_response(
+            {
+                "device": {
+                    "name": device.name,
+                    "id": device.id,
+                    "driver": driver_name,
+                    "description": device.description,
+                },
+                "time_range": time_range,
+                "sample_size": sample_size,
+                "tag_count": len(tags_data),
+                "tags": tags_data,
+            }
+        )
 
     except McpError:
         raise

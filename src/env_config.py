@@ -10,7 +10,6 @@ import logging
 from typing import Tuple
 import dotenv
 
-
 # ── Path constants ──────────────────────────────────────────────────────────
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,6 +44,7 @@ ACTIVE_EDGE_INSTANCE = "ACTIVE_EDGE_INSTANCE"
 
 
 # ── .env I/O ────────────────────────────────────────────────────────────────
+
 
 def mcp_env_loader():
     global EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, VALIDATE_CERTIFICATE, ANTHROPIC_KEY
@@ -111,6 +111,7 @@ def mcp_env_updater(key: str, value: str | bool, env_file: str = ".env"):
 
 # ── Edge instance management ────────────────────────────────────────────────
 
+
 def get_edge_instances() -> list:
     """Read all EDGE_INSTANCE_{i}_* keys from os.environ. Allows gaps in numbering."""
     instances = []
@@ -144,7 +145,16 @@ def next_edge_instance_index() -> int:
 
 def remove_edge_instance(index: int):
     """Delete all keys for an instance index."""
-    for suffix in ("URL", "CLIENT_ID", "SECRET", "NAME", "TYPE", "API_TOKEN", "PROJECT_ID", "DEVICE_ID"):
+    for suffix in (
+        "URL",
+        "CLIENT_ID",
+        "SECRET",
+        "NAME",
+        "TYPE",
+        "API_TOKEN",
+        "PROJECT_ID",
+        "DEVICE_ID",
+    ):
         mcp_env_remover(f"EDGE_INSTANCE_{index}_{suffix}")
 
 
@@ -154,16 +164,29 @@ def activate_edge_instance(index: int):
     url = os.environ.get(f"EDGE_INSTANCE_{index}_URL", "")
     if inst_type == "lem":
         mcp_env_updater("EDGE_MANAGER_URL", url)
-        mcp_env_updater("EDGE_API_TOKEN", os.environ.get(f"EDGE_INSTANCE_{index}_API_TOKEN", ""))
-        mcp_env_updater("EDGE_MANAGER_PROJECT_ID", os.environ.get(f"EDGE_INSTANCE_{index}_PROJECT_ID", ""))
-        mcp_env_updater("EDGE_MANAGER_DEVICE_ID", os.environ.get(f"EDGE_INSTANCE_{index}_DEVICE_ID", ""))
+        mcp_env_updater(
+            "EDGE_API_TOKEN", os.environ.get(f"EDGE_INSTANCE_{index}_API_TOKEN", "")
+        )
+        mcp_env_updater(
+            "EDGE_MANAGER_PROJECT_ID",
+            os.environ.get(f"EDGE_INSTANCE_{index}_PROJECT_ID", ""),
+        )
+        mcp_env_updater(
+            "EDGE_MANAGER_DEVICE_ID",
+            os.environ.get(f"EDGE_INSTANCE_{index}_DEVICE_ID", ""),
+        )
         mcp_env_updater("EDGE_URL", "")
         mcp_env_updater("EDGE_API_CLIENT_ID", "")
         mcp_env_updater("EDGE_API_CLIENT_SECRET", "")
     else:
         mcp_env_updater("EDGE_URL", url)
-        mcp_env_updater("EDGE_API_CLIENT_ID", os.environ.get(f"EDGE_INSTANCE_{index}_CLIENT_ID", ""))
-        mcp_env_updater("EDGE_API_CLIENT_SECRET", os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", ""))
+        mcp_env_updater(
+            "EDGE_API_CLIENT_ID", os.environ.get(f"EDGE_INSTANCE_{index}_CLIENT_ID", "")
+        )
+        mcp_env_updater(
+            "EDGE_API_CLIENT_SECRET",
+            os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", ""),
+        )
         mcp_env_updater("EDGE_MANAGER_URL", "")
         mcp_env_updater("EDGE_API_TOKEN", "")
         mcp_env_updater("EDGE_MANAGER_PROJECT_ID", "")
@@ -173,6 +196,7 @@ def activate_edge_instance(index: int):
 
 
 # ── Model / API key selection ───────────────────────────────────────────────
+
 
 def check_model_key() -> Tuple[bool, str]:
     anthropic_exists = os.environ.get(key_of_anthropic_api_key)

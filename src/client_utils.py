@@ -46,6 +46,7 @@ def _get_model_id(provider: str) -> str:
         return "gemini-2.0-flash"
     return "gpt-4.1"
 
+
 _system_prompt = (
     "You are a helpful assistant for Litmus Edge, an industrial IoT platform. "
     "You have access to tools for querying devices, data streams, tags, and configuration. "
@@ -66,7 +67,9 @@ class MCPClient:
         url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
         headers = {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
         async with AsyncExitStack() as stack:
-            transport = await stack.enter_async_context(sse_client(url=url, headers=headers))
+            transport = await stack.enter_async_context(
+                sse_client(url=url, headers=headers)
+            )
             read, write = transport
             session = await stack.enter_async_context(ClientSession(read, write))
             await session.initialize()
@@ -158,11 +161,13 @@ class MCPClient:
                     result_text = "\n".join(
                         rc.text for rc in result.content if hasattr(rc, "text")
                     )
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result_text,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result_text,
+                        }
+                    )
 
                 messages.append({"role": "user", "content": tool_results})
 
@@ -227,11 +232,13 @@ class MCPClient:
                         result_text = "\n".join(
                             rc.text for rc in result.content if hasattr(rc, "text")
                         )
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result_text,
-                        })
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": result_text,
+                            }
+                        )
 
                 messages.append({"role": "user", "content": tool_results})
                 # Loop: stream the follow-up response after tool results

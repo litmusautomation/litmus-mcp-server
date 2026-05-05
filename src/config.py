@@ -12,6 +12,7 @@ DEFAULT_TIMEOUT = 600
 # Disable STDIO by default
 ENABLE_STDIO = os.getenv("ENABLE_STDIO", "false").lower() in ("true", "1", "yes")
 
+
 def ssl_config():
     """Configure SSL context for NATS connections"""
     ssl_ctx = ssl.create_default_context()

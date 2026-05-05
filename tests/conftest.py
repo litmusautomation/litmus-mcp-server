@@ -8,7 +8,7 @@ import os
 from unittest.mock import Mock, MagicMock
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 @pytest.fixture
@@ -34,11 +34,14 @@ def invalid_edge_headers():
 @pytest.fixture
 def mock_request_factory():
     """Factory to create mock requests with custom headers"""
+
     def _create_request(headers=None):
         from starlette.requests import Request
+
         request = Mock(spec=Request)
         request.headers = headers or {}
         return request
+
     return _create_request
 
 
@@ -61,7 +64,7 @@ def mock_device():
         "driver": "ModbusTCP",
         "enabled": True,
         "id": "device-123",
-        "properties": {"ip": "192.168.1.10", "port": 502}
+        "properties": {"ip": "192.168.1.10", "port": 502},
     }
     return device
 
@@ -87,7 +90,7 @@ def mock_tag():
         "address": "40001",
         "data_type": "FLOAT",
         "scaling": {"min": 0, "max": 100},
-        "unit": "°C"
+        "unit": "°C",
     }
     return tag
 
@@ -102,7 +105,7 @@ def mock_driver():
         "ip": "192.168.1.1",
         "port": 502,
         "slave_id": 1,
-        "timeout": 5000
+        "timeout": 5000,
     }
     return driver
 
@@ -116,7 +119,7 @@ def sample_nats_message():
         "quality": "good",
         "unit": "°C",
         "tag_id": "tag-456",
-        "device_id": "device-123"
+        "device_id": "device-123",
     }
 
 
@@ -130,7 +133,7 @@ def sample_container_list():
             "image": "nodered/node-red:latest",
             "status": "running",
             "ports": ["1880:1880"],
-            "created": "2025-01-10T10:00:00Z"
+            "created": "2025-01-10T10:00:00Z",
         },
         {
             "id": "container-2",
@@ -138,23 +141,19 @@ def sample_container_list():
             "image": "influxdb:2.0",
             "status": "running",
             "ports": ["8086:8086"],
-            "created": "2025-01-10T11:00:00Z"
-        }
+            "created": "2025-01-10T11:00:00Z",
+        },
     ]
 
 
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "unit: Unit tests that mock all dependencies"
-    )
+    config.addinivalue_line("markers", "unit: Unit tests that mock all dependencies")
     config.addinivalue_line(
         "markers", "integration: Integration tests that may require external services"
     )
-    config.addinivalue_line(
-        "markers", "slow: Tests that take longer to execute"
-    )
+    config.addinivalue_line("markers", "slow: Tests that take longer to execute")
     config.addinivalue_line(
         "markers", "auth: Tests related to authentication and authorization"
     )
