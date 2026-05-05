@@ -60,6 +60,7 @@ from tools.system_tools import (
 )
 from tools.digitaltwins_tools import (
     list_digital_twin_models_tool,
+    create_digital_twin_model_tool,
     list_digital_twin_instances_tool,
     create_digital_twin_instance_tool,
     list_static_attributes_tool,
@@ -362,6 +363,34 @@ def get_tool_definitions() -> list[Tool]:
                 "type": "object",
                 "properties": {},
                 "required": [],
+            },
+        ),
+        Tool(
+            name="create_digital_twin_model",
+            description=(
+                "Creates a new Digital Twin model on Litmus Edge. "
+                "A model is the schema/template; create instances from it with create_digital_twin_instance. "
+                "Only model_type 'ASSET' is supported."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "description": "Name of the model to create",
+                    },
+                    "model_description": {
+                        "type": "string",
+                        "description": "Optional description for the model",
+                    },
+                    "model_type": {
+                        "type": "string",
+                        "description": "Model type (only 'ASSET' is currently supported)",
+                        "enum": ["ASSET"],
+                        "default": "ASSET",
+                    },
+                },
+                "required": ["model_name"],
             },
         ),
         Tool(
@@ -917,6 +946,8 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         # Digital Twins tools
         elif name == "list_digital_twin_models":
             return await list_digital_twin_models_tool(request)
+        elif name == "create_digital_twin_model":
+            return await create_digital_twin_model_tool(request, args)
         elif name == "list_digital_twin_instances":
             return await list_digital_twin_instances_tool(request, args)
         elif name == "create_digital_twin_instance":
