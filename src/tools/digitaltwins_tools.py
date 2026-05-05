@@ -5,6 +5,7 @@ from mcp.types import TextContent
 
 from litmussdk.digital_twins import (
     list_models,
+    create_model,
     list_all_instances,
     create_instance,
     list_static_attributes,
@@ -42,6 +43,59 @@ async def list_digital_twin_models_tool(request: Request) -> list[TextContent]:
     except Exception as e:
         logger.error(f"Error listing digital twin models: {e}", exc_info=True)
         return format_error_response("list_models_failed", str(e))
+
+
+async def create_digital_twin_model_tool(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """
+    Creates a new digital twin model on Litmus Edge.
+
+    Requires model_name. Optional model_description and model_type ('ASSET' only).
+    """
+    try:
+        connection = get_litmus_connection(request)
+
+        model_name = arguments.get("model_name")
+        model_description = arguments.get("model_description", "")
+        model_type = arguments.get("model_type", "ASSET")
+
+        if not model_name:
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS, message="'model_name' parameter is required"
+                )
+            )
+
+        if model_type != "ASSET":
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="'model_type' must be 'ASSET' (only supported type)",
+                )
+            )
+
+        model = create_model(
+            model_name=model_name,
+            model_description=model_description,
+            model_type=model_type,
+            le_connection=connection,
+        )
+
+        logger.info(f"Created digital twin model '{model_name}'")
+
+        result = {
+            "model": model,
+            "message": f"Model '{model_name}' created successfully",
+        }
+
+        return format_success_response(result)
+
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating digital twin model: {e}", exc_info=True)
+        return format_error_response("create_model_failed", str(e))
 
 
 async def list_digital_twin_instances_tool(

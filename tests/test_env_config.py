@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from env_config import _get_env_vars
 
-
 # ── helpers ────────────────────────────────────────────────────────────────
 
 
@@ -128,10 +127,13 @@ class TestGetEnvVarsExistingFile:
     def test_reads_key_value_pairs_from_existing_file(self, tmp_path):
         """Key=value lines in .env are returned as a dict."""
         env_path = str(tmp_path / ".env")
-        _write_env(env_path, {
-            "EDGE_URL": "https://edge.local",
-            "EDGE_API_CLIENT_ID": "my-client",
-        })
+        _write_env(
+            env_path,
+            {
+                "EDGE_URL": "https://edge.local",
+                "EDGE_API_CLIENT_ID": "my-client",
+            },
+        )
 
         with patch("env_config.dotenv.find_dotenv", return_value=env_path):
             with patch("env_config.dotenv.load_dotenv"):

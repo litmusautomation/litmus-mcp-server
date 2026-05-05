@@ -165,7 +165,11 @@ async def api_models(provider: str):
             model_list = await asyncio.to_thread(_list_gemini_models)
             models = [
                 {
-                    "id": m.name.replace("models/", "") if m.name.startswith("models/") else m.name,
+                    "id": (
+                        m.name.replace("models/", "")
+                        if m.name.startswith("models/")
+                        else m.name
+                    ),
                     "name": m.display_name or m.name,
                 }
                 for m in model_list
@@ -430,7 +434,9 @@ async def api_add_edge_instance(
             name = await asyncio.to_thread(_fetch_name_lem)
         except Exception as exc:
             logger.exception(f"add-edge-instance (LEM): connection failed: {exc}")
-            return JSONResponse({"error": f"Could not connect via LEM bridge: {exc}"}, status_code=400)
+            return JSONResponse(
+                {"error": f"Could not connect via LEM bridge: {exc}"}, status_code=400
+            )
 
         idx = next_edge_instance_index()
         if not name:
@@ -448,7 +454,9 @@ async def api_add_edge_instance(
             activate_edge_instance(idx)
             mcp_env_loader()
 
-        return JSONResponse({"ok": True, "index": idx, "name": name, "url": manager_url, "type": "lem"})
+        return JSONResponse(
+            {"ok": True, "index": idx, "name": name, "url": manager_url, "type": "lem"}
+        )
 
     # Direct connection path
     if not url or not client_id or not client_secret:
@@ -508,7 +516,9 @@ async def api_add_edge_instance(
         activate_edge_instance(idx)
         mcp_env_loader()
 
-    return JSONResponse({"ok": True, "index": idx, "name": name, "url": url, "type": "direct"})
+    return JSONResponse(
+        {"ok": True, "index": idx, "name": name, "url": url, "type": "direct"}
+    )
 
 
 @app.post("/api/remove-edge-instance", name="api_remove_edge_instance")
@@ -797,11 +807,19 @@ def _run_health_checks(connection, base_url: str) -> dict:
         if not isinstance(data, dict):
             return "", ""
         version = (
-            data.get("version") or data.get("Version") or data.get("tag") or data.get("appVersion") or ""
+            data.get("version")
+            or data.get("Version")
+            or data.get("tag")
+            or data.get("appVersion")
+            or ""
         )
         git = (
-            data.get("git") or data.get("gitCommit") or data.get("git_commit")
-            or data.get("commit") or data.get("hash") or ""
+            data.get("git")
+            or data.get("gitCommit")
+            or data.get("git_commit")
+            or data.get("commit")
+            or data.get("hash")
+            or ""
         )
         if isinstance(git, str) and len(git) > 8:
             git = git[:8]
@@ -835,9 +853,15 @@ def _run_health_checks(connection, base_url: str) -> dict:
 
     code, data = _getver("/devicehub/version")
     v, g = _ver(data)
-    services["devicehub"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["devicehub"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
-    dt_code, dt_data = _gql("/digital-twins", "query Version { Version { Git Version } }")
+    dt_code, dt_data = _gql(
+        "/digital-twins", "query Version { Version { Git Version } }"
+    )
     v, g = "", ""
     if isinstance(dt_data, dict):
         ver = (dt_data.get("data") or {}).get("Version") or {}
@@ -845,16 +869,28 @@ def _run_health_checks(connection, base_url: str) -> dict:
         g = str(ver.get("Git", "") or "")
         if isinstance(g, str) and len(g) > 8:
             g = g[:8]
-    services["digital_twins"] = {"status": "ok" if _ok(dt_code) else "error", "version": v, "git": g}
+    services["digital_twins"] = {
+        "status": "ok" if _ok(dt_code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     code, _ = _get("/flows-manager/flows")
     _, vdata = _getver("/flows-manager/version")
     v, g = _ver(vdata)
-    services["flows_manager"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["flows_manager"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     code, data = _getver("/analytics/v2/version")
     v, g = _ver(data)
-    services["analytics"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["analytics"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     code, data = _get("/apps/dc/containers/?all=true")
     _, vdata = _getver("/apps/version")
@@ -869,12 +905,20 @@ def _run_health_checks(connection, base_url: str) -> dict:
     code, _ = _get("/cc/providers")
     _, vdata = _getver("/cc/version")
     v, g = _ver(vdata)
-    services["integration"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["integration"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     code, _ = _get("/opcua/service_conf")
     _, vdata = _getver("/opcua/version")
     v, g = _ver(vdata)
-    services["opcua"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["opcua"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     code, data = _get("/dm/host/info")
     if isinstance(data, dict):
@@ -883,16 +927,31 @@ def _run_health_checks(connection, base_url: str) -> dict:
     v, g = _ver(vdata)
     if not v and isinstance(data, dict):
         v = str(
-            data.get("firmwareVersion") or data.get("osVersion")
-            or data.get("kernelVersion") or data.get("version") or ""
+            data.get("firmwareVersion")
+            or data.get("osVersion")
+            or data.get("kernelVersion")
+            or data.get("version")
+            or ""
         )
-    services["system"] = {"status": "ok" if _ok(code) else "error", "version": v, "git": g}
+    services["system"] = {
+        "status": "ok" if _ok(code) else "error",
+        "version": v,
+        "git": g,
+    }
 
     hostname = (
-        host.get("description") or host.get("hostname")
-        or host.get("deviceName") or host.get("name") or ""
+        host.get("description")
+        or host.get("hostname")
+        or host.get("deviceName")
+        or host.get("name")
+        or ""
     )
-    return {"status": "connected", "url": base_url, "hostname": hostname, "services": services}
+    return {
+        "status": "connected",
+        "url": base_url,
+        "hostname": hostname,
+        "services": services,
+    }
 
 
 @app.get("/api/edge-health", name="api_edge_health")

@@ -60,6 +60,7 @@ from tools.system_tools import (
 )
 from tools.digitaltwins_tools import (
     list_digital_twin_models_tool,
+    create_digital_twin_model_tool,
     list_digital_twin_instances_tool,
     create_digital_twin_instance_tool,
     list_static_attributes_tool,
@@ -76,6 +77,7 @@ from tools.resource_tools import (
 # Set up logging
 import warnings
 import urllib3
+
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -365,6 +367,34 @@ def get_tool_definitions() -> list[Tool]:
             },
         ),
         Tool(
+            name="create_digital_twin_model",
+            description=(
+                "Creates a new Digital Twin model on Litmus Edge. "
+                "A model is the schema/template; create instances from it with create_digital_twin_instance. "
+                "Only model_type 'ASSET' is supported."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "description": "Name of the model to create",
+                    },
+                    "model_description": {
+                        "type": "string",
+                        "description": "Optional description for the model",
+                    },
+                    "model_type": {
+                        "type": "string",
+                        "description": "Model type (only 'ASSET' is currently supported)",
+                        "enum": ["ASSET"],
+                        "default": "ASSET",
+                    },
+                },
+                "required": ["model_name"],
+            },
+        ),
+        Tool(
             name="list_digital_twin_instances",
             description=(
                 "Lists all Digital Twin instances or instances for a specific model. "
@@ -387,14 +417,17 @@ def get_tool_definitions() -> list[Tool]:
             description=(
                 "Creates a new Digital Twin instance from an existing model. "
                 "An instance is a runtime representation of a model that processes and publishes data. "
-                "Requires model_id, instance name, and NATS topic for data publication."
+                "PREREQUISITE: a Digital Twin model MUST already exist — instances cannot be created "
+                "without one. Call list_digital_twin_models first to find an existing model_id, or "
+                "create_digital_twin_model to create one if none suits. "
+                "Requires model_id (from an existing model), instance name, and NATS topic for data publication."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "model_id": {
                         "type": "string",
-                        "description": "ID of the model to instantiate (from list_digital_twin_models)",
+                        "description": "ID of an EXISTING model to instantiate. Get this from list_digital_twin_models, or create a model first with create_digital_twin_model. Instance creation will fail if the model does not exist.",
                     },
                     "instance_name": {
                         "type": "string",
@@ -531,8 +564,15 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Specific device to check (omit for all devices)"},
-                    "threshold_seconds": {"type": "integer", "description": "Age threshold in seconds to consider connected (default 60)", "default": 60},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Specific device to check (omit for all devices)",
+                    },
+                    "threshold_seconds": {
+                        "type": "integer",
+                        "description": "Age threshold in seconds to consider connected (default 60)",
+                        "default": 60,
+                    },
                 },
                 "required": [],
             },
@@ -551,12 +591,30 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Name of the device to add the tag to"},
-                    "register_name": {"type": "string", "description": "Driver register type (e.g. 'S' for Generator, 'HoldingRegister' for Modbus)"},
-                    "tag_name": {"type": "string", "description": "Display name for the tag"},
-                    "value_type": {"type": "string", "description": "Data type (e.g. 'float64', 'int64', 'bit', 'string')"},
-                    "description": {"type": "string", "description": "Optional description"},
-                    "properties": {"type": "object", "description": "Optional driver-specific overrides (e.g. {\"address\": \"5\", \"pollingInterval\": \"500\"}). Missing required fields are filled from driver defaults."},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Name of the device to add the tag to",
+                    },
+                    "register_name": {
+                        "type": "string",
+                        "description": "Driver register type (e.g. 'S' for Generator, 'HoldingRegister' for Modbus)",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Display name for the tag",
+                    },
+                    "value_type": {
+                        "type": "string",
+                        "description": "Data type (e.g. 'float64', 'int64', 'bit', 'string')",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional description",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": 'Optional driver-specific overrides (e.g. {"address": "5", "pollingInterval": "500"}). Missing required fields are filled from driver defaults.',
+                    },
                 },
                 "required": ["device_name", "register_name", "tag_name", "value_type"],
             },
@@ -570,11 +628,26 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Name of the device owning the tag"},
-                    "tag_name": {"type": "string", "description": "Current display name of the tag to update"},
-                    "new_tag_name": {"type": "string", "description": "New display name (optional)"},
-                    "description": {"type": "string", "description": "New description (optional)"},
-                    "properties": {"type": "object", "description": "New properties dict (optional)"},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Name of the device owning the tag",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Current display name of the tag to update",
+                    },
+                    "new_tag_name": {
+                        "type": "string",
+                        "description": "New display name (optional)",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description (optional)",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": "New properties dict (optional)",
+                    },
                 },
                 "required": ["device_name", "tag_name"],
             },
@@ -588,8 +661,14 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Name of the device owning the tag"},
-                    "tag_name": {"type": "string", "description": "Display name of the tag to delete"},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Name of the device owning the tag",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Display name of the tag to delete",
+                    },
                 },
                 "required": ["device_name", "tag_name"],
             },
@@ -604,8 +683,14 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Name of the device to check"},
-                    "tag_name": {"type": "string", "description": "Optional: check a single tag by name"},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Name of the device to check",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Optional: check a single tag by name",
+                    },
                 },
                 "required": ["device_name"],
             },
@@ -649,10 +734,24 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_query": {"type": "string", "description": "Device or measurement name to search for (fuzzy matched)"},
-                    "tag_name_query": {"type": "string", "description": "Optional: further filter matches by tag name substring"},
-                    "time_range": {"type": "string", "description": "InfluxDB duration (e.g. '1h', '24h', '7d'). Default '1h'", "default": "1h"},
-                    "limit": {"type": "integer", "description": "Max records per measurement (default 1000, max 100000)", "default": 1000},
+                    "device_query": {
+                        "type": "string",
+                        "description": "Device or measurement name to search for (fuzzy matched)",
+                    },
+                    "tag_name_query": {
+                        "type": "string",
+                        "description": "Optional: further filter matches by tag name substring",
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "InfluxDB duration (e.g. '1h', '24h', '7d'). Default '1h'",
+                        "default": "1h",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max records per measurement (default 1000, max 100000)",
+                        "default": 1000,
+                    },
                 },
                 "required": ["device_query"],
             },
@@ -667,11 +766,28 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Device that owns the tag"},
-                    "tag_name": {"type": "string", "description": "Tag display name (use this or tag_id)"},
-                    "tag_id": {"type": "string", "description": "Tag UUID (alternative to tag_name)"},
-                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
-                    "limit": {"type": "integer", "description": "Max records (default 500, max 500)", "default": 500},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Device that owns the tag",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Tag display name (use this or tag_id)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "Tag UUID (alternative to tag_name)",
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "InfluxDB duration (default '1h')",
+                        "default": "1h",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max records (default 500, max 500)",
+                        "default": 500,
+                    },
                 },
                 "required": ["device_name"],
             },
@@ -686,10 +802,23 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Device that owns the tag"},
-                    "tag_name": {"type": "string", "description": "Tag display name (use this or tag_id)"},
-                    "tag_id": {"type": "string", "description": "Tag UUID (alternative to tag_name)"},
-                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Device that owns the tag",
+                    },
+                    "tag_name": {
+                        "type": "string",
+                        "description": "Tag display name (use this or tag_id)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "Tag UUID (alternative to tag_name)",
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "InfluxDB duration (default '1h')",
+                        "default": "1h",
+                    },
                 },
                 "required": ["device_name"],
             },
@@ -704,10 +833,25 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "device_name": {"type": "string", "description": "Device to gather data for"},
-                    "time_range": {"type": "string", "description": "InfluxDB duration (default '1h')", "default": "1h"},
-                    "include_statistics": {"type": "boolean", "description": "Include per-tag statistics (default true)", "default": True},
-                    "sample_size": {"type": "integer", "description": "Recent samples per tag (default 20, max 100)", "default": 20},
+                    "device_name": {
+                        "type": "string",
+                        "description": "Device to gather data for",
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "InfluxDB duration (default '1h')",
+                        "default": "1h",
+                    },
+                    "include_statistics": {
+                        "type": "boolean",
+                        "description": "Include per-tag statistics (default true)",
+                        "default": True,
+                    },
+                    "sample_size": {
+                        "type": "integer",
+                        "description": "Recent samples per tag (default 20, max 100)",
+                        "default": 20,
+                    },
                 },
                 "required": ["device_name"],
             },
@@ -723,11 +867,27 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "from_timestamp": {"type": "integer", "description": "Start time as Unix epoch seconds (default: 1 hour ago)"},
-                    "to_timestamp": {"type": "integer", "description": "End time as Unix epoch seconds (default: now)"},
-                    "component": {"type": "string", "description": "Filter by component name (optional)"},
-                    "severity": {"type": "string", "description": "Filter by severity: INFO, WARN, ALERT, or ERROR (optional)"},
-                    "limit": {"type": "integer", "description": "Max events to return (default 100, max 1000)", "default": 100},
+                    "from_timestamp": {
+                        "type": "integer",
+                        "description": "Start time as Unix epoch seconds (default: 1 hour ago)",
+                    },
+                    "to_timestamp": {
+                        "type": "integer",
+                        "description": "End time as Unix epoch seconds (default: now)",
+                    },
+                    "component": {
+                        "type": "string",
+                        "description": "Filter by component name (optional)",
+                    },
+                    "severity": {
+                        "type": "string",
+                        "description": "Filter by severity: INFO, WARN, ALERT, or ERROR (optional)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max events to return (default 100, max 1000)",
+                        "default": 100,
+                    },
                 },
                 "required": [],
             },
@@ -760,7 +920,11 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "interface": {"type": "string", "description": "Interface name (default 'eth0')", "default": "eth0"},
+                    "interface": {
+                        "type": "string",
+                        "description": "Interface name (default 'eth0')",
+                        "default": "eth0",
+                    },
                 },
                 "required": [],
             },
@@ -792,8 +956,16 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "interface": {"type": "string", "description": "Interface to capture on (default 'eth0')", "default": "eth0"},
-                    "duration": {"type": "integer", "description": "Capture duration in minutes (1–30, default 1)", "default": 1},
+                    "interface": {
+                        "type": "string",
+                        "description": "Interface to capture on (default 'eth0')",
+                        "default": "eth0",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Capture duration in minutes (1–30, default 1)",
+                        "default": 1,
+                    },
                 },
                 "required": [],
             },
@@ -834,7 +1006,9 @@ async def handle_read_resource(uri):
     from mcp.server.lowlevel.helper_types import ReadResourceContents
 
     text_contents = await read_documentation_resource(uri)
-    return [ReadResourceContents(content=t, mime_type="text/plain") for t in text_contents]
+    return [
+        ReadResourceContents(content=t, mime_type="text/plain") for t in text_contents
+    ]
 
 
 @mcp.list_tools()
@@ -917,6 +1091,8 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         # Digital Twins tools
         elif name == "list_digital_twin_models":
             return await list_digital_twin_models_tool(request)
+        elif name == "create_digital_twin_model":
+            return await create_digital_twin_model_tool(request, args)
         elif name == "list_digital_twin_instances":
             return await list_digital_twin_instances_tool(request, args)
         elif name == "create_digital_twin_instance":
@@ -1010,7 +1186,9 @@ async def run_stdio_server():
 
     # Log startup
     logger.info("Starting Litmus MCP Server in STDIO mode")
-    logger.info("Configuration from environment variables: EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, NATS_*, INFLUX_*")
+    logger.info(
+        "Configuration from environment variables: EDGE_URL, EDGE_API_CLIENT_ID, EDGE_API_CLIENT_SECRET, NATS_*, INFLUX_*"
+    )
 
     # Run with stdio transport
     async with stdio_server() as (read_stream, write_stream):
@@ -1066,21 +1244,23 @@ class StdioRequestContext:
     """Request context for STDIO mode that reads credentials from environment variables."""
 
     def __init__(self):
-        self.headers = HeaderDict({
-            "EDGE_API_CLIENT_ID": os.getenv("EDGE_API_CLIENT_ID", ""),
-            "EDGE_API_CLIENT_SECRET": os.getenv("EDGE_API_CLIENT_SECRET", ""),
-            "EDGE_URL": os.getenv("EDGE_URL", ""),
-            "NATS_SOURCE": os.getenv("NATS_SOURCE", ""),
-            "NATS_PORT": os.getenv("NATS_PORT", ""),
-            "NATS_USER": os.getenv("NATS_USER", ""),
-            "NATS_PASSWORD": os.getenv("NATS_PASSWORD", ""),
-            "NATS_TLS": os.getenv("NATS_TLS", "true"),
-            "INFLUX_HOST": os.getenv("INFLUX_HOST", ""),
-            "INFLUX_PORT": os.getenv("INFLUX_PORT", ""),
-            "INFLUX_DB_NAME": os.getenv("INFLUX_DB_NAME", ""),
-            "INFLUX_USERNAME": os.getenv("INFLUX_USERNAME", ""),
-            "INFLUX_PASSWORD": os.getenv("INFLUX_PASSWORD", "")
-        })
+        self.headers = HeaderDict(
+            {
+                "EDGE_API_CLIENT_ID": os.getenv("EDGE_API_CLIENT_ID", ""),
+                "EDGE_API_CLIENT_SECRET": os.getenv("EDGE_API_CLIENT_SECRET", ""),
+                "EDGE_URL": os.getenv("EDGE_URL", ""),
+                "NATS_SOURCE": os.getenv("NATS_SOURCE", ""),
+                "NATS_PORT": os.getenv("NATS_PORT", ""),
+                "NATS_USER": os.getenv("NATS_USER", ""),
+                "NATS_PASSWORD": os.getenv("NATS_PASSWORD", ""),
+                "NATS_TLS": os.getenv("NATS_TLS", "true"),
+                "INFLUX_HOST": os.getenv("INFLUX_HOST", ""),
+                "INFLUX_PORT": os.getenv("INFLUX_PORT", ""),
+                "INFLUX_DB_NAME": os.getenv("INFLUX_DB_NAME", ""),
+                "INFLUX_USERNAME": os.getenv("INFLUX_USERNAME", ""),
+                "INFLUX_PASSWORD": os.getenv("INFLUX_PASSWORD", ""),
+            }
+        )
         self.scope = {}  # Empty scope for compatibility
 
 
@@ -1110,6 +1290,7 @@ class ContextCapturingMiddleware:
 # These return JSON responses indicating OAuth is not supported
 # This prevents MCP clients from getting 404 plain text errors when attempting OAuth discovery
 
+
 async def oauth_not_supported(request: Request):
     """Return JSON error indicating OAuth is not supported by this server."""
     return JSONResponse(
@@ -1117,14 +1298,16 @@ async def oauth_not_supported(request: Request):
         content={
             "error": "unsupported_oauth",
             "error_description": "This MCP server does not support OAuth authentication. "
-                               "Please use SSE transport with header-based authentication "
-                               "(EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET)."
-        }
+            "Please use SSE transport with header-based authentication "
+            "(EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).",
+        },
     )
+
 
 async def health_check(request: Request):
     """Basic health check endpoint."""
     return JSONResponse({"status": "ok", "service": "litmus-mcp-server"})
+
 
 # Wrap the SSE POST handler with our context-capturing middleware
 wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
@@ -1135,13 +1318,41 @@ app = Starlette(
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=wrapped_post_handler),
         # OAuth discovery endpoints - return proper JSON errors
-        Route("/.well-known/oauth-authorization-server", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/.well-known/oauth-authorization-server/sse", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/.well-known/openid-configuration/sse", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/sse/.well-known/openid-configuration", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/.well-known/oauth-protected-resource", endpoint=oauth_not_supported, methods=["GET"]),
-        Route("/.well-known/oauth-protected-resource/sse", endpoint=oauth_not_supported, methods=["GET"]),
+        Route(
+            "/.well-known/oauth-authorization-server",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-authorization-server/sse",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/openid-configuration",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/openid-configuration/sse",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/sse/.well-known/openid-configuration",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/oauth-protected-resource/sse",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
         Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
         # Health check endpoint
         Route("/health", endpoint=health_check, methods=["GET"]),

@@ -19,10 +19,12 @@ async def get_device_logs(request: Request, arguments: dict) -> list[TextContent
         limit = min(int(arguments.get("limit", 100)), 1000)
 
         if severity and severity.upper() not in ("INFO", "WARN", "ALERT", "ERROR"):
-            raise McpError(ErrorData(
-                code=INVALID_PARAMS,
-                message=f"Invalid severity '{severity}'. Must be INFO, WARN, ALERT, or ERROR",
-            ))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=f"Invalid severity '{severity}'. Must be INFO, WARN, ALERT, or ERROR",
+                )
+            )
 
         connection = get_litmus_connection(request)
         result = sys_events.get_events(
@@ -34,18 +36,22 @@ async def get_device_logs(request: Request, arguments: dict) -> list[TextContent
             le_connection=connection,
         )
 
-        events_list = result.get("events", result) if isinstance(result, dict) else result
+        events_list = (
+            result.get("events", result) if isinstance(result, dict) else result
+        )
         severity_list = result.get("severityList") if isinstance(result, dict) else None
 
-        return format_success_response({
-            "from_timestamp": from_ts,
-            "to_timestamp": to_ts,
-            "component": component,
-            "severity_filter": severity,
-            "count": len(events_list) if isinstance(events_list, list) else None,
-            "severity_list": severity_list,
-            "events": events_list,
-        })
+        return format_success_response(
+            {
+                "from_timestamp": from_ts,
+                "to_timestamp": to_ts,
+                "component": component,
+                "severity_filter": severity,
+                "count": len(events_list) if isinstance(events_list, list) else None,
+                "severity_list": severity_list,
+                "events": events_list,
+            }
+        )
 
     except McpError:
         raise
@@ -54,11 +60,15 @@ async def get_device_logs(request: Request, arguments: dict) -> list[TextContent
         return format_error_response("query_failed", str(e))
 
 
-async def get_system_event_stats(request: Request, arguments: dict) -> list[TextContent]:
+async def get_system_event_stats(
+    request: Request, arguments: dict
+) -> list[TextContent]:
     try:
         connection = get_litmus_connection(request)
         result = sys_events.event_management_stats(le_connection=connection)
-        return format_success_response(result if isinstance(result, dict) else {"stats": result})
+        return format_success_response(
+            result if isinstance(result, dict) else {"stats": result}
+        )
 
     except McpError:
         raise
@@ -71,10 +81,12 @@ async def get_firewall_rules(request: Request, arguments: dict) -> list[TextCont
     try:
         connection = get_litmus_connection(request)
         rules = sys_network.firewall_rules(le_connection=connection)
-        return format_success_response({
-            "count": len(rules),
-            "rules": rules,
-        })
+        return format_success_response(
+            {
+                "count": len(rules),
+                "rules": rules,
+            }
+        )
 
     except McpError:
         raise
@@ -83,17 +95,21 @@ async def get_firewall_rules(request: Request, arguments: dict) -> list[TextCont
         return format_error_response("query_failed", str(e))
 
 
-async def get_network_interface_info(request: Request, arguments: dict) -> list[TextContent]:
+async def get_network_interface_info(
+    request: Request, arguments: dict
+) -> list[TextContent]:
     try:
         interface = arguments.get("interface", "eth0")
         connection = get_litmus_connection(request)
         details = sys_network.network_interface_details(
             network_name=interface, le_connection=connection
         )
-        return format_success_response({
-            "interface": interface,
-            "details": details,
-        })
+        return format_success_response(
+            {
+                "interface": interface,
+                "details": details,
+            }
+        )
 
     except McpError:
         raise
@@ -102,11 +118,15 @@ async def get_network_interface_info(request: Request, arguments: dict) -> list[
         return format_error_response("query_failed", str(e))
 
 
-async def get_packet_capture_interfaces(request: Request, arguments: dict) -> list[TextContent]:
+async def get_packet_capture_interfaces(
+    request: Request, arguments: dict
+) -> list[TextContent]:
     try:
         connection = get_litmus_connection(request)
         result = sys_network.get_packet_capture_interfaces(le_connection=connection)
-        return format_success_response(result if isinstance(result, dict) else {"interfaces": result})
+        return format_success_response(
+            result if isinstance(result, dict) else {"interfaces": result}
+        )
 
     except McpError:
         raise
@@ -115,11 +135,15 @@ async def get_packet_capture_interfaces(request: Request, arguments: dict) -> li
         return format_error_response("query_failed", str(e))
 
 
-async def get_packet_capture_status(request: Request, arguments: dict) -> list[TextContent]:
+async def get_packet_capture_status(
+    request: Request, arguments: dict
+) -> list[TextContent]:
     try:
         connection = get_litmus_connection(request)
         result = sys_network.packet_capture_status(le_connection=connection)
-        return format_success_response(result if isinstance(result, dict) else {"status": result})
+        return format_success_response(
+            result if isinstance(result, dict) else {"status": result}
+        )
 
     except McpError:
         raise
@@ -134,10 +158,12 @@ async def start_packet_capture(request: Request, arguments: dict) -> list[TextCo
         duration = int(arguments.get("duration", 1))
 
         if not 1 <= duration <= 30:
-            raise McpError(ErrorData(
-                code=INVALID_PARAMS,
-                message="'duration' must be between 1 and 30 minutes",
-            ))
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="'duration' must be between 1 and 30 minutes",
+                )
+            )
 
         connection = get_litmus_connection(request)
         sys_network.start_stop_packet_capture(
@@ -146,11 +172,13 @@ async def start_packet_capture(request: Request, arguments: dict) -> list[TextCo
             duration=str(duration),
             le_connection=connection,
         )
-        return format_success_response({
-            "action": "started",
-            "interface": interface,
-            "duration_minutes": duration,
-        })
+        return format_success_response(
+            {
+                "action": "started",
+                "interface": interface,
+                "duration_minutes": duration,
+            }
+        )
 
     except McpError:
         raise

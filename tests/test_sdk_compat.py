@@ -36,14 +36,18 @@ def test_load_dh_record_recovers_from_cold_cache():
             raise MissingRecordVersionError(version)
         return fake_record
 
-    with patch(
-        "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
-    ), patch(
-        "litmussdk.devicehub.record._functions.DriverRecord",
-        side_effect=fake_driver_record,
-    ), patch(
-        "litmussdk.devicehub.record._functions.create_dh_cache"
-    ) as mock_create_cache:
+    with (
+        patch(
+            "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
+        ),
+        patch(
+            "litmussdk.devicehub.record._functions.DriverRecord",
+            side_effect=fake_driver_record,
+        ),
+        patch(
+            "litmussdk.devicehub.record._functions.create_dh_cache"
+        ) as mock_create_cache,
+    ):
         result = load_dh_record(le_connection=conn)
 
     assert result is fake_record
@@ -58,13 +62,18 @@ def test_load_dh_record_warm_cache_does_not_download():
     conn = MagicMock()
     fake_record = MagicMock(name="DriverRecord")
 
-    with patch(
-        "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
-    ), patch(
-        "litmussdk.devicehub.record._functions.DriverRecord", return_value=fake_record
-    ), patch(
-        "litmussdk.devicehub.record._functions.create_dh_cache"
-    ) as mock_create_cache:
+    with (
+        patch(
+            "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
+        ),
+        patch(
+            "litmussdk.devicehub.record._functions.DriverRecord",
+            return_value=fake_record,
+        ),
+        patch(
+            "litmussdk.devicehub.record._functions.create_dh_cache"
+        ) as mock_create_cache,
+    ):
         result = load_dh_record(le_connection=conn)
 
     assert result is fake_record
@@ -78,12 +87,13 @@ def test_create_dh_cache_idempotent_on_existing_cache():
     that has already populated the cache."""
     conn = MagicMock()
 
-    with patch(
-        "litmussdk.devicehub.record._utils.dh_cache_dir",
-        return_value="/already/cached",
-    ), patch(
-        "litmussdk.devicehub.record._utils.download_dh_cache"
-    ) as mock_download:
+    with (
+        patch(
+            "litmussdk.devicehub.record._utils.dh_cache_dir",
+            return_value="/already/cached",
+        ),
+        patch("litmussdk.devicehub.record._utils.download_dh_cache") as mock_download,
+    ):
         create_dh_cache("4.0.0", le_connection=conn)
 
     mock_download.assert_not_called()

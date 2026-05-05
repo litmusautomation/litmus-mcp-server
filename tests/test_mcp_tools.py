@@ -37,7 +37,6 @@ from tools.marketplace_tools import (
     run_docker_container_on_litmusedge,
 )
 
-
 # ── helpers ─────────────────────────────────────────────────────────────────
 
 
@@ -132,7 +131,9 @@ def test_get_devices_filter_by_driver(mock_list_devices, mock_connection):
     dev2.id = dev2.metadata = dev2.description = dev2.properties = None
     mock_list_devices.return_value = [dev1, dev2]
 
-    result = _run(get_devicehub_devices(_make_request(), {"filter_by_driver": "ModbusTCP"}))
+    result = _run(
+        get_devicehub_devices(_make_request(), {"filter_by_driver": "ModbusTCP"})
+    )
     data = _parse(result)
 
     assert data["count"] == 1
@@ -146,7 +147,9 @@ def test_get_devices_filter_by_driver(mock_list_devices, mock_connection):
 @patch("tools.devicehub_tools.list_all_drivers")
 @patch("tools.devicehub_tools.devices.create_device")
 @patch("tools.devicehub_tools.devices.Device")
-def test_create_device_success(mock_Device, mock_create, mock_list_drivers, mock_connection):
+def test_create_device_success(
+    mock_Device, mock_create, mock_list_drivers, mock_connection
+):
     """Creates device and returns success."""
     mock_connection.return_value = MagicMock()
     driver = MagicMock()
@@ -170,7 +173,11 @@ def test_create_device_missing_name():
     """Missing 'name' raises McpError."""
     with patch("tools.devicehub_tools.get_litmus_connection"):
         with pytest.raises(McpError):
-            _run(create_devicehub_device(_make_request(), {"selected_driver": "ModbusTCP"}))
+            _run(
+                create_devicehub_device(
+                    _make_request(), {"selected_driver": "ModbusTCP"}
+                )
+            )
 
 
 def test_create_device_missing_driver():
@@ -192,7 +199,11 @@ def test_create_device_invalid_driver(mock_list_drivers, mock_connection):
     mock_list_drivers.return_value = [driver]
 
     with pytest.raises(McpError) as exc_info:
-        _run(create_devicehub_device(_make_request(), {"name": "Dev", "selected_driver": "BadDriver"}))
+        _run(
+            create_devicehub_device(
+                _make_request(), {"name": "Dev", "selected_driver": "BadDriver"}
+            )
+        )
 
     assert "not found" in str(exc_info.value).lower()
 
@@ -216,7 +227,9 @@ def test_get_device_tags_success(mock_gql_query, mock_list_devices, mock_connect
         {"data": {"ListRegisters": {"Registers": [{"TagName": "Temperature"}]}}},
     ]
 
-    result = _run(get_devicehub_device_tags(_make_request(), {"device_name": "TestDevice"}))
+    result = _run(
+        get_devicehub_device_tags(_make_request(), {"device_name": "TestDevice"})
+    )
     data = _parse(result)
 
     assert data["success"] is True
@@ -230,7 +243,11 @@ def test_get_device_tags_missing_device_name(mock_gql_query, mock_connection):
     mock_connection.return_value = MagicMock()
     mock_gql_query.side_effect = [
         {"data": {"ListRegistersFromAllDevices": {"TotalCount": 1}}},
-        {"data": {"ListRegistersFromAllDevices": {"Registers": [{"TagName": "Pressure"}]}}},
+        {
+            "data": {
+                "ListRegistersFromAllDevices": {"Registers": [{"TagName": "Pressure"}]}
+            }
+        },
     ]
 
     result = _run(get_devicehub_device_tags(_make_request(), {}))
@@ -260,14 +277,22 @@ def test_get_tag_value_missing_device_name():
     """Missing 'device_name' raises McpError."""
     with patch("tools.devicehub_tools.get_litmus_connection"):
         with pytest.raises(McpError):
-            _run(get_current_value_of_devicehub_tag(_make_request(), {"tag_name": "Temp"}))
+            _run(
+                get_current_value_of_devicehub_tag(
+                    _make_request(), {"tag_name": "Temp"}
+                )
+            )
 
 
 def test_get_tag_value_missing_both_identifiers():
     """Missing both tag_name and tag_id raises McpError."""
     with patch("tools.devicehub_tools.get_litmus_connection"):
         with pytest.raises(McpError):
-            _run(get_current_value_of_devicehub_tag(_make_request(), {"device_name": "Dev"}))
+            _run(
+                get_current_value_of_devicehub_tag(
+                    _make_request(), {"device_name": "Dev"}
+                )
+            )
 
 
 # ── get_litmusedge_friendly_name ────────────────────────────────────────────
@@ -297,7 +322,9 @@ def test_set_friendly_name_success(mock_set_name, mock_connection):
     mock_connection.return_value = MagicMock()
     mock_set_name.return_value = None
 
-    result = _run(set_litmusedge_friendly_name(_make_request(), {"new_friendly_name": "NewName"}))
+    result = _run(
+        set_litmusedge_friendly_name(_make_request(), {"new_friendly_name": "NewName"})
+    )
     data = _parse(result)
 
     assert data["success"] is True
