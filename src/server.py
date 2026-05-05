@@ -416,14 +416,17 @@ def get_tool_definitions() -> list[Tool]:
             description=(
                 "Creates a new Digital Twin instance from an existing model. "
                 "An instance is a runtime representation of a model that processes and publishes data. "
-                "Requires model_id, instance name, and NATS topic for data publication."
+                "PREREQUISITE: a Digital Twin model MUST already exist — instances cannot be created "
+                "without one. Call list_digital_twin_models first to find an existing model_id, or "
+                "create_digital_twin_model to create one if none suits. "
+                "Requires model_id (from an existing model), instance name, and NATS topic for data publication."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "model_id": {
                         "type": "string",
-                        "description": "ID of the model to instantiate (from list_digital_twin_models)",
+                        "description": "ID of an EXISTING model to instantiate. Get this from list_digital_twin_models, or create a model first with create_digital_twin_model. Instance creation will fail if the model does not exist.",
                     },
                     "instance_name": {
                         "type": "string",
