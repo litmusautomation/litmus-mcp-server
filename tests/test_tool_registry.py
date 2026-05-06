@@ -3,8 +3,6 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 # Make `src/` importable the same way other tests do.
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:

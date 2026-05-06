@@ -1,8 +1,11 @@
 import logging
 import asyncio
 import os
+import warnings
 
 from contextvars import ContextVar
+
+import urllib3
 from mcp.server import Server
 
 from mcp.server.sse import SseServerTransport
@@ -35,9 +38,6 @@ for _tool in ALL_TOOLS:
     TOOL_BY_NAME[_tool["name"]] = _tool
 
 # Set up logging
-import warnings
-import urllib3
-
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
