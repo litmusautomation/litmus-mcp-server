@@ -337,9 +337,17 @@ class MCPClient:
         url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
         headers = {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
 
+        try:
+            timeout_s = int(
+                os.environ.get("CLIENT_SESSION_TIMEOUT_SECONDS", "60") or "60"
+            )
+        except ValueError:
+            timeout_s = 60
+
         async with MCPServerSse(
             name="SseServer",
             params={"url": url, "headers": headers},
+            client_session_timeout_seconds=timeout_s,
         ) as server:
             trace_id = gen_trace_id()
             with trace(workflow_name="SseServer", trace_id=trace_id):

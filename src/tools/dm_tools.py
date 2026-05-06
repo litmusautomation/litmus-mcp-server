@@ -9,7 +9,9 @@ from starlette.requests import Request
 from litmussdk.system import network, device_management
 
 
-async def get_litmusedge_friendly_name(request: Request) -> list[TextContent]:
+async def get_litmusedge_friendly_name(
+    request: Request, arguments: dict | None = None
+) -> list[TextContent]:
     """Gets the human-readable name of this Litmus Edge device."""
     try:
         connection = get_litmus_connection(request)
@@ -60,7 +62,9 @@ async def set_litmusedge_friendly_name(
         return format_error_response("update_failed", str(e))
 
 
-async def get_cloud_activation_status(request: Request) -> list[TextContent]:
+async def get_cloud_activation_status(
+    request: Request, arguments: dict | None = None
+) -> list[TextContent]:
     """Checks cloud registration and activation status with Litmus Edge Manager."""
     try:
         connection = get_litmus_connection(request)
@@ -78,3 +82,56 @@ async def get_cloud_activation_status(request: Request) -> list[TextContent]:
     except Exception as e:
         logger.error(f"Error retrieving cloud status: {e}", exc_info=True)
         return format_error_response("retrieval_failed", str(e))
+
+
+TOOLS = [
+    {
+        "name": "get_litmusedge_friendly_name",
+        "category": "system.identity",
+        "description": (
+            "Gets the human-readable name assigned to this Litmus Edge device. "
+            "Use this to identify which Edge device you're working with."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": get_litmusedge_friendly_name,
+    },
+    {
+        "name": "set_litmusedge_friendly_name",
+        "category": "system.identity",
+        "description": (
+            "Changes the human-readable name of this Litmus Edge device. "
+            "Use this to give the device a more descriptive name or update naming "
+            "after device relocation."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "new_friendly_name": {
+                    "type": "string",
+                    "description": "New descriptive name (e.g., 'Building_A_Gateway')",
+                },
+            },
+            "required": ["new_friendly_name"],
+        },
+        "handler": set_litmusedge_friendly_name,
+    },
+    {
+        "name": "get_cloud_activation_status",
+        "category": "system.cloud",
+        "description": (
+            "Checks the cloud registration and activation status with Litmus Edge Manager. "
+            "Returns connection state, last sync time, and any error messages. "
+            "Use this to verify cloud connectivity and troubleshoot sync issues."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": get_cloud_activation_status,
+    },
+]

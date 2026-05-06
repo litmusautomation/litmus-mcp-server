@@ -54,6 +54,7 @@ from conversation import (
 )
 from client_utils import MCPClient
 from tools.resource_tools import DOCUMENTATION_RESOURCES
+from server import ALL_TOOLS
 
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
@@ -308,12 +309,17 @@ async def update_env_form(request: Request):
         "validate_cert": os.environ.get("VALIDATE_CERTIFICATE", "false"),
     }
 
+    current_client_timeout = os.environ.get(
+        "CLIENT_SESSION_TIMEOUT_SECONDS", "60"
+    ) or "60"
+
     return templates.TemplateResponse(
         "update_env.html",
         {
             "request": request,
             "current_model": model_type,
             "current_model_id": current_model_id,
+            "current_client_timeout": current_client_timeout,
             "edge_instances": edge_instances,
             "active_edge_instance": active_edge_instance,
             "mcp_config": mcp_config,
@@ -703,7 +709,6 @@ async def streaming_redirect(request: Request):
 @app.get("/mcp-info", name="mcp_info")
 async def mcp_info(request: Request):
     client = _get_client(request)
-    tools = await client._list_tools()
     try:
         resources = await client._list_resources()
     except Exception:
@@ -711,7 +716,13 @@ async def mcp_info(request: Request):
     return JSONResponse(
         {
             "tools": [
-                {"name": t["name"], "description": t["description"]} for t in tools
+                {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "category": t["category"],
+                    "deprecated": bool(t.get("deprecated")),
+                }
+                for t in ALL_TOOLS
             ],
             "resources": [
                 {

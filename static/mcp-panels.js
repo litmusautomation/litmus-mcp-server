@@ -128,33 +128,90 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeToolMod
 
 // ── Load tools + resources (cached per session) ─────────────────────────────
 
+const MCP_INFO_CACHE_KEY = "mcp_info_v2";
+
+const TOOL_GROUP_ORDER = [
+    "devicehub", "datahub", "nats",
+    "digitaltwins", "system", "marketplace",
+];
+
+function groupToolsByTopLevel(tools) {
+    const groups = {};
+    for (const t of tools) {
+        const top = (t.category || "other").split(".")[0];
+        (groups[top] ||= []).push(t);
+    }
+    const known = TOOL_GROUP_ORDER.filter(k => groups[k]);
+    const unknown = Object.keys(groups)
+        .filter(k => !TOOL_GROUP_ORDER.includes(k))
+        .sort();
+    return [...known, ...unknown].map(k => ({ key: k, tools: groups[k] }));
+}
+
 (async function loadMcpInfo() {
     try {
         let data;
-        const cached = sessionStorage.getItem("mcp_info");
+        const cached = sessionStorage.getItem(MCP_INFO_CACHE_KEY);
         if (cached) {
             data = JSON.parse(cached);
         } else {
             const res = await fetch("/mcp-info");
             data = await res.json();
-            sessionStorage.setItem("mcp_info", JSON.stringify(data));
+            sessionStorage.setItem(MCP_INFO_CACHE_KEY, JSON.stringify(data));
         }
 
         const toolsBody  = document.getElementById("tools-body");
         const toolsCount = document.getElementById("tools-count");
-        toolsCount.textContent = data.tools.length;
-        toolsBody.innerHTML = data.tools.length
-            ? data.tools.map(t => `
-                <div class="mcp-item"
-                     data-name="${escAttr(t.name)}"
-                     data-desc="${escAttr(t.description || "")}"
-                     onmouseenter="showDescToast(event, this.dataset.desc)"
-                     onmouseleave="hideDescToast()"
-                     onclick="openToolModal(this.dataset.name, this.dataset.desc)">
-                    <span class="mcp-item-dot"></span>
-                    <span class="mcp-item-name">${escHtml(t.name)}</span>
-                </div>`).join("")
-            : `<div class="mcp-panel-empty">No tools found</div>`;
+
+        const visibleTools = (data.tools || []).filter(t => !t.deprecated);
+        toolsCount.textContent = visibleTools.length;
+
+        if (!visibleTools.length) {
+            toolsBody.innerHTML = `<div class="mcp-panel-empty">No tools found</div>`;
+        } else {
+            const groups = groupToolsByTopLevel(visibleTools);
+            toolsBody.innerHTML = `
+                <input type="search" id="tools-search" class="mcp-search" placeholder="Search tools...">
+                <div id="tools-groups">
+                    ${groups.map(g => `
+                        <details class="mcp-group" open>
+                            <summary class="mcp-group-summary">
+                                <span class="mcp-group-name">${escHtml(g.key)}</span>
+                                <span class="mcp-group-count">${g.tools.length}</span>
+                            </summary>
+                            <div class="mcp-group-body">
+                                ${g.tools.map(t => `
+                                    <div class="mcp-item"
+                                         data-name="${escAttr(t.name)}"
+                                         data-desc="${escAttr(t.description || "")}"
+                                         onmouseenter="showDescToast(event, this.dataset.desc)"
+                                         onmouseleave="hideDescToast()"
+                                         onclick="openToolModal(this.dataset.name, this.dataset.desc)">
+                                        <span class="mcp-item-dot"></span>
+                                        <span class="mcp-item-name">${escHtml(t.name)}</span>
+                                    </div>`).join("")}
+                            </div>
+                        </details>
+                    `).join("")}
+                </div>
+            `;
+
+            const searchInput = document.getElementById("tools-search");
+            searchInput.addEventListener("input", () => {
+                const q = searchInput.value.trim().toLowerCase();
+                document.querySelectorAll(".mcp-group").forEach(group => {
+                    let anyVisible = false;
+                    group.querySelectorAll(".mcp-item").forEach(item => {
+                        const hay = (item.dataset.name + " " + (item.dataset.desc || "")).toLowerCase();
+                        const match = !q || hay.includes(q);
+                        item.style.display = match ? "" : "none";
+                        if (match) anyVisible = true;
+                    });
+                    group.style.display = anyVisible ? "" : "none";
+                    if (q && anyVisible) group.open = true;
+                });
+            });
+        }
 
         const resBody  = document.getElementById("resources-body");
         const resCount = document.getElementById("resources-count");
