@@ -198,3 +198,163 @@ async def stop_packet_capture(request: Request, arguments: dict) -> list[TextCon
     except Exception as e:
         logger.error(f"Error stopping packet capture: {e}", exc_info=True)
         return format_error_response("capture_failed", str(e))
+
+
+_GET_SYSTEM_EVENTS_DESC = (
+    "Retrieves system events and logs from Litmus Edge. "
+    "Filter by time range, component, and severity. "
+    "Use get_system_event_stats for queue health and throughput metrics instead."
+)
+
+_GET_SYSTEM_EVENTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "from_timestamp": {
+            "type": "integer",
+            "description": "Start time as Unix epoch seconds (default: 1 hour ago)",
+        },
+        "to_timestamp": {
+            "type": "integer",
+            "description": "End time as Unix epoch seconds (default: now)",
+        },
+        "component": {
+            "type": "string",
+            "description": "Filter by component name (optional)",
+        },
+        "severity": {
+            "type": "string",
+            "description": "Filter by severity: INFO, WARN, ALERT, or ERROR (optional)",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Max events to return (default 100, max 1000)",
+            "default": 100,
+        },
+    },
+    "required": [],
+}
+
+
+TOOLS = [
+    {
+        "name": "get_system_events",
+        "category": "system.events",
+        "description": _GET_SYSTEM_EVENTS_DESC,
+        "schema": _GET_SYSTEM_EVENTS_SCHEMA,
+        "handler": get_device_logs,
+    },
+    {
+        "name": "get_device_logs",
+        "category": "system.events",
+        "description": (
+            "(DEPRECATED, use `get_system_events`. Will be removed in next minor release.) "
+            + _GET_SYSTEM_EVENTS_DESC
+        ),
+        "schema": _GET_SYSTEM_EVENTS_SCHEMA,
+        "handler": get_device_logs,
+        "deprecated": True,
+    },
+    {
+        "name": "get_system_event_stats",
+        "category": "system.events",
+        "description": (
+            "Returns event manager statistics: queue sizes, processing rates, memory, health indicators. "
+            "Use this to check system health and event pipeline throughput. "
+            "Use get_system_events to read actual event messages."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": get_system_event_stats,
+    },
+    {
+        "name": "get_firewall_rules",
+        "category": "system.network",
+        "description": (
+            "Returns the firewall rules configured on this Litmus Edge device: "
+            "ports, protocols, and ALLOW/DENY actions. "
+            "Use this to diagnose network connectivity or security configuration."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": get_firewall_rules,
+    },
+    {
+        "name": "get_network_interface_info",
+        "category": "system.network",
+        "description": (
+            "Returns network interface details for the Litmus Edge device: "
+            "IP address, MAC, gateway, link status, MTU, and speed. "
+            "Defaults to eth0. Use this to check network configuration."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "interface": {
+                    "type": "string",
+                    "description": "Interface name (default 'eth0')",
+                    "default": "eth0",
+                },
+            },
+            "required": [],
+        },
+        "handler": get_network_interface_info,
+    },
+    {
+        "name": "get_packet_capture_interfaces",
+        "category": "system.pcap",
+        "description": (
+            "Lists network interfaces available for packet capture on Litmus Edge "
+            "(e.g. eth0, wlan0). Use this before starting a capture to pick the right interface."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": get_packet_capture_interfaces,
+    },
+    {
+        "name": "get_packet_capture_status",
+        "category": "system.pcap",
+        "description": (
+            "Returns the current packet capture state and list of captured .pcap files with metadata. "
+            "Use start_packet_capture / stop_packet_capture to control capture."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": get_packet_capture_status,
+    },
+    {
+        "name": "start_packet_capture",
+        "category": "system.pcap",
+        "description": (
+            "Starts a packet capture on a Litmus Edge network interface. "
+            "Duration is 1-30 minutes. Let it run to completion - the pcap file "
+            "is only retained when the capture finishes naturally. Use "
+            "get_packet_capture_status to check progress."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "interface": {
+                    "type": "string",
+                    "description": "Interface to capture on (default 'eth0')",
+                    "default": "eth0",
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Capture duration in minutes (1-30, default 1)",
+                    "default": 1,
+                },
+            },
+            "required": [],
+        },
+        "handler": start_packet_capture,
+    },
+    {
+        "name": "stop_packet_capture",
+        "category": "system.pcap",
+        "description": (
+            "Stops an in-progress packet capture on Litmus Edge. "
+            "WARNING: stopping early discards the pcap file - only use this to abort "
+            "a capture you don't want. To keep the pcap, let start_packet_capture run "
+            "to completion instead. "
+            "Use get_packet_capture_status to confirm state before and after."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": stop_packet_capture,
+    },
+]

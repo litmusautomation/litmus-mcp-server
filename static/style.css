@@ -378,6 +378,39 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     flex: 1;
 }
 
+/* ── Client session timeout ─────────────────────────────────────────────── */
+.subhead {
+    font-size: 15px;
+    font-weight: 600;
+    color: #2c4a3e;
+    margin: 18px 0 6px;
+}
+.hint {
+    font-size: 13px;
+    color: #6b8a7d;
+    margin: 0 0 10px 0;
+    line-height: 1.5;
+}
+.timeout-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.timeout-input {
+    width: 100px;
+    padding: 6px 10px;
+    border: 1px solid #d6e3dc;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+}
+.timeout-input:focus { outline: none; border-color: #4fb896; }
+.timeout-unit { font-size: 13px; color: #6b8a7d; }
+.timeout-hint { font-size: 13px; flex: 1; }
+.timeout-hint--ok { color: #2c8a5c; }
+.timeout-hint--error { color: #c0392b; }
+
 /* ── Models toast (setup page) ────────────────────────────────────────────── */
 .models-toast {
     margin-top: 20px;
@@ -774,6 +807,58 @@ textarea.config-json {
     font-size: 13px;
     color: #9ab8b0;
 }
+
+/* ── Tools panel: search + category groups ──────────────────────────────── */
+.mcp-search {
+    width: calc(100% - 16px);
+    box-sizing: border-box;
+    padding: 6px 10px;
+    margin: 6px 8px 8px 8px;
+    border: 1px solid #d6e3dc;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+}
+.mcp-search:focus { outline: none; border-color: #4fb896; }
+
+.mcp-group { margin: 0 4px 2px 4px; }
+.mcp-group-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4a6c5e;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 4px;
+    list-style: none;
+}
+.mcp-group-summary::-webkit-details-marker { display: none; }
+.mcp-group-summary::before {
+    content: "\25B8";
+    display: inline-block;
+    width: 10px;
+    margin-right: 4px;
+    color: #9ab8b0;
+    transition: transform 0.15s ease;
+}
+.mcp-group[open] > .mcp-group-summary::before { transform: rotate(90deg); }
+.mcp-group-summary:hover { background: #eef5f1; }
+.mcp-group[open] > .mcp-group-summary { color: #2c4a3e; }
+.mcp-group-name { flex: 1; }
+.mcp-group-count {
+    background: #d6e8df;
+    color: #2c4a3e;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.mcp-group-body { padding: 2px 0 4px 6px; }
 
 /* ── Tool detail modal ───────────────────────────────────────────────────── */
 .tool-modal-backdrop {

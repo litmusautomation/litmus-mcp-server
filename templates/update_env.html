@@ -149,6 +149,58 @@ function escHtml(s) {
 loadModels(_initProvider);
 </script>
 
+<!-- Client session timeout -->
+<h3 class="subhead">Client session timeout</h3>
+<p class="hint">
+    Maximum time (in seconds) the chat client will wait for a single MCP tool call to return.
+    Tools that hit a real Litmus Edge can take several seconds; the OpenAI agents SDK defaults to 5,
+    which is too tight. Default: 60.
+</p>
+
+<div class="timeout-row">
+    <input type="number" id="client-timeout-input" min="5" max="600" step="1"
+           value="{{ current_client_timeout }}" class="timeout-input">
+    <span class="timeout-unit">seconds</span>
+    <button type="button" class="side-button" id="save-timeout-btn" onclick="saveClientTimeout()">Save timeout</button>
+    <span class="timeout-hint" id="timeout-hint"></span>
+</div>
+
+<script>
+async function saveClientTimeout() {
+    const input = document.getElementById('client-timeout-input');
+    const hint = document.getElementById('timeout-hint');
+    const btn = document.getElementById('save-timeout-btn');
+    const v = parseInt(input.value, 10);
+    if (isNaN(v) || v < 5 || v > 600) {
+        hint.textContent = 'Enter a value between 5 and 600';
+        hint.className = 'timeout-hint timeout-hint--error';
+        return;
+    }
+    btn.disabled = true;
+    hint.textContent = '';
+    try {
+        const resp = await fetch('/api/save-settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({CLIENT_SESSION_TIMEOUT_SECONDS: String(v)}),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            hint.textContent = 'Saved';
+            hint.className = 'timeout-hint timeout-hint--ok';
+        } else {
+            hint.textContent = 'Save failed';
+            hint.className = 'timeout-hint timeout-hint--error';
+        }
+    } catch (e) {
+        hint.textContent = 'Save failed';
+        hint.className = 'timeout-hint timeout-hint--error';
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+
 <hr>
 
 <!-- Edge Instances -->

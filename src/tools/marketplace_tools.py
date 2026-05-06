@@ -9,7 +9,9 @@ from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
 
 
-async def get_all_containers_on_litmusedge(request: Request) -> list[TextContent]:
+async def get_all_containers_on_litmusedge(
+    request: Request, arguments: dict | None = None
+) -> list[TextContent]:
     """Lists all Docker containers running in the Litmus Edge marketplace."""
     try:
         connection = get_litmus_connection(request)
@@ -68,3 +70,42 @@ async def run_docker_container_on_litmusedge(
     except Exception as e:
         logger.error(f"Error running container: {e}", exc_info=True)
         return format_error_response("deployment_failed", str(e))
+
+
+TOOLS = [
+    {
+        "name": "get_all_containers_on_litmusedge",
+        "category": "marketplace.containers",
+        "description": (
+            "Lists all Docker containers running in the Litmus Edge marketplace. "
+            "Returns container details including name, image, status, ports, and resource usage. "
+            "Use this to see what applications are running on the Edge."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": get_all_containers_on_litmusedge,
+    },
+    {
+        "name": "run_docker_container_on_litmusedge",
+        "category": "marketplace.containers",
+        "description": (
+            "Deploys and runs a new Docker container on the Litmus Edge marketplace. "
+            "IMPORTANT: This runs on the Edge device, not the MCP server host. "
+            "SECURITY NOTE: Ensure the container image is trusted and command is validated."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "docker_run_command": {
+                    "type": "string",
+                    "description": "Complete docker run command (e.g., 'docker run -d --name myapp -p 8080:8080 myimage:latest')",
+                },
+            },
+            "required": ["docker_run_command"],
+        },
+        "handler": run_docker_container_on_litmusedge,
+    },
+]

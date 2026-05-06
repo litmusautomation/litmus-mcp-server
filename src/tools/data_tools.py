@@ -846,3 +846,244 @@ async def get_device_data_for_inference(
     except Exception as e:
         logger.error(f"Error in get_device_data_for_inference: {e}", exc_info=True)
         return format_error_response("query_failed", str(e))
+
+
+TOOLS = [
+    {
+        "name": "get_current_value_from_topic",
+        "category": "nats.topics",
+        "description": (
+            "Gets the current value from a NATS topic. "
+            "Subscribes to the topic and returns the next published message. "
+            "Note: User may refer to NATS topics as 'datahub subscribe topic' or 'pubsub topic'."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": "NATS topic to subscribe to (also called datahub subscribe topic or pubsub topic)",
+                },
+            },
+            "required": ["topic"],
+        },
+        "handler": get_current_value_on_topic_tool,
+    },
+    {
+        "name": "get_multiple_values_from_topic",
+        "category": "nats.topics",
+        "description": (
+            "Collects multiple sequential values from a NATS topic for trend analysis or plotting. "
+            "WARNING: This function blocks until num_samples messages are received. "
+            "Use this for time-series data collection, trend analysis, or creating charts. "
+            "Does NOT retrieve historical data - waits for new messages. "
+            "Note: User may refer to NATS topics as 'datahub subscribe topic' or 'pubsub topic'."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": "NATS topic to monitor (also called datahub subscribe topic or pubsub topic)",
+                },
+                "num_samples": {
+                    "type": "integer",
+                    "description": "Number of messages to collect (default: 10, max: 100)",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 100,
+                },
+                "nats_source": {
+                    "type": "string",
+                    "description": "Optional: NATS broker IP (default: 10.30.50.1)",
+                },
+                "nats_port": {
+                    "type": "string",
+                    "description": "Optional: NATS broker port (default: 4222)",
+                },
+            },
+            "required": ["topic"],
+        },
+        "handler": get_multiple_values_from_topic_tool,
+    },
+    {
+        "name": "get_historical_data_from_influxdb",
+        "category": "datahub.influx",
+        "description": (
+            "Queries historical time-series data from InfluxDB. "
+            "Retrieve past data, historic trends, or perform data analysis on stored values. "
+            "User provides the measurement name and how much historical data they want. "
+            "Note: This retrieves PAST data already stored in the database, "
+            "unlike get_multiple_values_from_topic which waits for NEW messages."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "measurement": {
+                    "type": "string",
+                    "description": "Measurement/variable name in InfluxDB (e.g., 'variable0', 'temperature', 'pressure'). "
+                    "This is the name of the data series you want to retrieve.",
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "How much historical data to retrieve (e.g., '5m', '1h', '24h', '7d', '30d'). "
+                    "Examples: '5m' = last 5 minutes, '1h' = last hour, '24h' = last day. Default: '1h'",
+                    "default": "1h",
+                },
+            },
+            "required": ["measurement"],
+        },
+        "handler": get_historical_data_from_influxdb_tool,
+    },
+    {
+        "name": "list_influxdb_measurements",
+        "category": "datahub.influx",
+        "description": (
+            "Lists all measurement names in the InfluxDB tsdata database. "
+            "Use this to discover available data series before querying historical data. "
+            "Measurement names are typically NATS topic strings."
+        ),
+        "schema": {"type": "object", "properties": {}, "required": []},
+        "handler": list_influxdb_measurements,
+    },
+    {
+        "name": "get_device_historical_data",
+        "category": "datahub.queries",
+        "description": (
+            "Queries historical InfluxDB data using fuzzy device name matching. "
+            "Use this when you know a device name but not the exact InfluxDB measurement. "
+            "For precise measurement queries use get_historical_data_from_influxdb instead."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_query": {
+                    "type": "string",
+                    "description": "Device or measurement name to search for (fuzzy matched)",
+                },
+                "tag_name_query": {
+                    "type": "string",
+                    "description": "Optional: further filter matches by tag name substring",
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "InfluxDB duration (e.g. '1h', '24h', '7d'). Default '1h'",
+                    "default": "1h",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records per measurement (default 1000, max 100000)",
+                    "default": 1000,
+                },
+            },
+            "required": ["device_query"],
+        },
+        "handler": get_device_historical_data,
+    },
+    {
+        "name": "query_tag_data",
+        "category": "datahub.queries",
+        "description": (
+            "Queries historical time-series data for a specific tag by looking up its InfluxDB topic. "
+            "Returns data ordered newest first. "
+            "Use get_tag_statistics for aggregated stats instead of raw samples."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Device that owns the tag",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Tag display name (use this or tag_id)",
+                },
+                "tag_id": {
+                    "type": "string",
+                    "description": "Tag UUID (alternative to tag_name)",
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "InfluxDB duration (default '1h')",
+                    "default": "1h",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records (default 500, max 500)",
+                    "default": 500,
+                },
+            },
+            "required": ["device_name"],
+        },
+        "handler": query_tag_data,
+    },
+    {
+        "name": "get_tag_statistics",
+        "category": "datahub.queries",
+        "description": (
+            "Returns aggregate statistics for a tag: mean, min, max, stddev, count, and baseline range (mean +/- 2sigma). "
+            "Use this for anomaly detection or understanding normal operating range. "
+            "Use query_tag_data to get raw samples instead."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Device that owns the tag",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Tag display name (use this or tag_id)",
+                },
+                "tag_id": {
+                    "type": "string",
+                    "description": "Tag UUID (alternative to tag_name)",
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "InfluxDB duration (default '1h')",
+                    "default": "1h",
+                },
+            },
+            "required": ["device_name"],
+        },
+        "handler": get_tag_statistics,
+    },
+    {
+        "name": "get_device_data_for_inference",
+        "category": "datahub.queries",
+        "description": (
+            "Comprehensive data package for AI inference: device metadata, all tags, per-tag statistics, "
+            "and recent samples in one call. Preferred when asking the AI to analyze or diagnose a device. "
+            "Use get_tag_statistics or query_tag_data for single-tag queries."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Device to gather data for",
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "InfluxDB duration (default '1h')",
+                    "default": "1h",
+                },
+                "include_statistics": {
+                    "type": "boolean",
+                    "description": "Include per-tag statistics (default true)",
+                    "default": True,
+                },
+                "sample_size": {
+                    "type": "integer",
+                    "description": "Recent samples per tag (default 20, max 100)",
+                    "default": 20,
+                },
+            },
+            "required": ["device_name"],
+        },
+        "handler": get_device_data_for_inference,
+    },
+]

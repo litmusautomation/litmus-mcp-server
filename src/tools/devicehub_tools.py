@@ -22,7 +22,9 @@ _device_list_cache: dict[str, tuple[list, float]] = {}
 _DEVICE_LIST_TTL = 10  # seconds
 
 
-async def get_litmusedge_driver_list(request: Request) -> list[TextContent]:
+async def get_litmusedge_driver_list(
+    request: Request, arguments: dict | None = None
+) -> list[TextContent]:
     """
     Retrieves all available drivers supported by Litmus Edge DeviceHub.
 
@@ -984,3 +986,290 @@ async def get_all_tags_status(request: Request, arguments: dict) -> list[TextCon
     except Exception as e:
         logger.error(f"Error getting all tag statuses: {e}", exc_info=True)
         return format_error_response("status_failed", str(e))
+
+
+TOOLS = [
+    {
+        "name": "get_litmusedge_driver_list",
+        "category": "devicehub.drivers",
+        "description": (
+            "Retrieves all available drivers supported by Litmus Edge DeviceHub. "
+            "Returns a list of supported industrial protocols and device drivers "
+            "(e.g., ModbusTCP, OPCUA, BACnet, MQTT). Use this before creating new "
+            "devices to see what drivers are available."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": get_litmusedge_driver_list,
+    },
+    {
+        "name": "get_devicehub_devices",
+        "category": "devicehub.devices",
+        "description": (
+            "Retrieves all configured devices in the DeviceHub module on Litmus Edge. "
+            "Returns detailed information about each device including name, driver type, "
+            "connection settings, and status. Supports filtering by driver."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "filter_by_driver": {
+                    "type": "string",
+                    "description": "Optional: Filter devices by driver name (e.g., 'ModbusTCP')",
+                },
+            },
+            "required": [],
+        },
+        "handler": get_devicehub_devices,
+    },
+    {
+        "name": "create_devicehub_device",
+        "category": "devicehub.devices",
+        "description": (
+            "Creates a new device in DeviceHub with specified driver and default configuration. "
+            "IMPORTANT: This only creates the device with default settings. You'll need to: "
+            "1) Update connection properties (IP, port, slave ID, etc.), "
+            "2) Configure tags/registers, and 3) Enable the device."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Descriptive name for the device (e.g., 'ProductionLine_PLC1')",
+                },
+                "selected_driver": {
+                    "type": "string",
+                    "description": "Driver name from get_litmusedge_driver_list() (e.g., 'ModbusTCP')",
+                },
+            },
+            "required": ["name", "selected_driver"],
+        },
+        "handler": create_devicehub_device,
+    },
+    {
+        "name": "get_device_connection_status",
+        "category": "devicehub.devices",
+        "description": (
+            "Checks whether DeviceHub devices are actively publishing data by probing InfluxDB "
+            "for recent records. Returns connected/stale/no_data per device. "
+            "Use this to diagnose disconnected or silent devices."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Specific device to check (omit for all devices)",
+                },
+                "threshold_seconds": {
+                    "type": "integer",
+                    "description": "Age threshold in seconds to consider connected (default 60)",
+                    "default": 60,
+                },
+            },
+            "required": [],
+        },
+        "handler": get_device_connection_status,
+    },
+    {
+        "name": "get_devicehub_device_tags",
+        "category": "devicehub.tags",
+        "description": (
+            "Retrieves tags (data points/registers) with their configuration. "
+            "If device_name is provided, returns tags for that device only. "
+            "If device_name is omitted, returns tags across ALL devices. "
+            "Always performs a count check first - if the total exceeds 1000 the "
+            "tags are NOT returned and you should inform the user of the count and "
+            "ask them to specify a device_name to narrow the query."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device to filter by (omit to query all devices)",
+                },
+            },
+            "required": [],
+        },
+        "handler": get_devicehub_device_tags,
+    },
+    {
+        "name": "get_current_value_of_devicehub_tag",
+        "category": "devicehub.tags",
+        "description": (
+            "Reads the current real-time value of a specific tag from a device. "
+            "Returns the value along with timestamp and quality. "
+            "You must provide either tag_name OR tag_id (not both)."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device containing the tag",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Human-readable name of the tag (preferred method)",
+                },
+                "tag_id": {
+                    "type": "string",
+                    "description": "Unique ID of the tag (alternative if tag_name unknown)",
+                },
+            },
+            "required": ["device_name"],
+        },
+        "handler": get_current_value_of_devicehub_tag,
+    },
+    {
+        "name": "create_devicehub_tag",
+        "category": "devicehub.tags",
+        "description": (
+            "Creates a new tag (register) on a DeviceHub device. "
+            "register_name is the driver-specific register type (e.g. 'S' for Generator, "
+            "'HoldingRegister' for Modbus). Required driver properties (address, count, "
+            "pollingInterval, etc.) auto-fill from driver defaults; pass `properties` to "
+            "override individual fields. Use get_litmusedge_driver_list to find drivers "
+            "and get_devicehub_device_tags to see existing tags."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device to add the tag to",
+                },
+                "register_name": {
+                    "type": "string",
+                    "description": "Driver register type (e.g. 'S' for Generator, 'HoldingRegister' for Modbus)",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Display name for the tag",
+                },
+                "value_type": {
+                    "type": "string",
+                    "description": "Data type (e.g. 'float64', 'int64', 'bit', 'string')",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional description",
+                },
+                "properties": {
+                    "type": "object",
+                    "description": 'Optional driver-specific overrides (e.g. {"address": "5", "pollingInterval": "500"}). Missing required fields are filled from driver defaults.',
+                },
+            },
+            "required": ["device_name", "register_name", "tag_name", "value_type"],
+        },
+        "handler": create_devicehub_tag,
+    },
+    {
+        "name": "update_devicehub_tag",
+        "category": "devicehub.tags",
+        "description": (
+            "Updates mutable fields of an existing DeviceHub tag: display name, description, or properties. "
+            "The device and tag must already exist. Use get_devicehub_device_tags to find tag names."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device owning the tag",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Current display name of the tag to update",
+                },
+                "new_tag_name": {
+                    "type": "string",
+                    "description": "New display name (optional)",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "New description (optional)",
+                },
+                "properties": {
+                    "type": "object",
+                    "description": "New properties dict (optional)",
+                },
+            },
+            "required": ["device_name", "tag_name"],
+        },
+        "handler": update_devicehub_tag,
+    },
+    {
+        "name": "delete_devicehub_tag",
+        "category": "devicehub.tags",
+        "description": (
+            "Deletes a tag from a DeviceHub device. This is destructive and cannot be undone. "
+            "Use get_devicehub_device_tags to confirm the tag name before deleting."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device owning the tag",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Display name of the tag to delete",
+                },
+            },
+            "required": ["device_name", "tag_name"],
+        },
+        "handler": delete_devicehub_tag,
+    },
+    {
+        "name": "get_tag_status",
+        "category": "devicehub.tags",
+        "description": (
+            "Returns OK/ERROR status for tags on a specific device. "
+            "Optionally filter to a single tag by name. "
+            "Use this to diagnose which tags are failing on a device."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Name of the device to check",
+                },
+                "tag_name": {
+                    "type": "string",
+                    "description": "Optional: check a single tag by name",
+                },
+            },
+            "required": ["device_name"],
+        },
+        "handler": get_tag_status,
+    },
+    {
+        "name": "get_all_tags_status",
+        "category": "devicehub.tags",
+        "description": (
+            "Returns tag status across ALL devices. Defaults to returning only non-OK tags "
+            "so the LLM sees actionable issues first. Pass filter_status='' to see all. "
+            "Use get_tag_status for a single device."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "filter_status": {
+                    "type": "string",
+                    "description": "Filter by state: 'not_ok' (default), 'OK', 'ERROR', or '' for all",
+                    "default": "not_ok",
+                },
+            },
+            "required": [],
+        },
+        "handler": get_all_tags_status,
+    },
+]
