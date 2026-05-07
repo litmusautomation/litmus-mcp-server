@@ -43,6 +43,30 @@ PREFERRED_MODEL_ID = "PREFERRED_MODEL_ID"
 ACTIVE_EDGE_INSTANCE = "ACTIVE_EDGE_INSTANCE"
 CLIENT_SESSION_TIMEOUT_SECONDS = "CLIENT_SESSION_TIMEOUT_SECONDS"
 DEFAULT_CLIENT_SESSION_TIMEOUT_SECONDS = 60
+CLIENT_SESSION_TIMEOUT_SECONDS_MIN = 5
+CLIENT_SESSION_TIMEOUT_SECONDS_MAX = 600
+
+# Keys writable through POST /api/save-settings. Anything outside this set is
+# rejected with 400. Keep in sync with the inputs in templates/update_env.html.
+SAVE_SETTINGS_ALLOWED_KEYS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "NATS_SOURCE",
+        "NATS_PORT",
+        "NATS_USER",
+        "NATS_PASSWORD",
+        "NATS_TLS",
+        "INFLUX_HOST",
+        "INFLUX_PORT",
+        "INFLUX_DB_NAME",
+        "INFLUX_USERNAME",
+        "INFLUX_PASSWORD",
+        "VALIDATE_CERTIFICATE",
+        "CLIENT_SESSION_TIMEOUT_SECONDS",
+    }
+)
 
 
 # ── .env I/O ────────────────────────────────────────────────────────────────
