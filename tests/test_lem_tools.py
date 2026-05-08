@@ -467,21 +467,17 @@ def test_lem_system_time_success(mock_sdk, mock_conn):
 
 
 @patch("tools.lem_tools.new_lem_bridge_connection")
-@patch("tools.lem_tools.sdk_api")
-def test_lem_bridge_list_devicehub_devices_success(mock_api, mock_bridge):
+@patch("tools.lem_tools.devicehub_devices.list_devices")
+def test_lem_bridge_list_devicehub_devices_success(mock_list, mock_bridge):
     mock_bridge.return_value = MagicMock()
-    mock_api.gql_query.return_value = {
-        "data": {
-            "ListDevices": [
-                {
-                    "ID": "d1",
-                    "Name": "modbus-1",
-                    "DriverID": "drv-modbus",
-                    "Description": None,
-                },
-            ]
-        }
-    }
+    mock_list.return_value = [
+        {
+            "ID": "d1",
+            "Name": "modbus-1",
+            "DriverID": "drv-modbus",
+            "Description": None,
+        },
+    ]
 
     result = _run(
         lem_bridge_list_devicehub_devices_tool(
@@ -494,6 +490,8 @@ def test_lem_bridge_list_devicehub_devices_success(mock_api, mock_bridge):
     assert data["count"] == 1
     assert data["devicehub_devices"][0]["name"] == "modbus-1"
     assert data["devicehub_devices"][0]["driver_id"] == "drv-modbus"
+    # SDK was invoked with raw=True so quirky records don't blow up validation.
+    assert mock_list.call_args.kwargs["raw"] is True
     # Bridge was built with the correct ids.
     kwargs = mock_bridge.call_args.kwargs
     assert kwargs["project_id"] == "p1"
@@ -501,16 +499,16 @@ def test_lem_bridge_list_devicehub_devices_success(mock_api, mock_bridge):
 
 
 @patch("tools.lem_tools.new_lem_bridge_connection")
-@patch("tools.lem_tools.sdk_api")
+@patch("tools.lem_tools.devicehub_devices.list_devices")
 def test_lem_bridge_list_devicehub_devices_empty_response_classified(
-    mock_api, mock_bridge
+    mock_list, mock_bridge
 ):
     """An offline edge typically yields a JSON parse failure; surface it as
     edge_unreachable so the LLM can distinguish it from a real bridge bug."""
     import json
 
     mock_bridge.return_value = MagicMock()
-    mock_api.gql_query.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+    mock_list.side_effect = json.JSONDecodeError("Expecting value", "", 0)
 
     result = _run(
         lem_bridge_list_devicehub_devices_tool(

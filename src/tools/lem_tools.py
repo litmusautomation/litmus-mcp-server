@@ -25,8 +25,6 @@ from litmussdk.lem.companies import (
 from litmussdk.utils.conn import new_lem_bridge_connection
 from litmussdk.devicehub import devices as devicehub_devices
 from litmussdk.system import network, device_management
-from litmussdk.utils import api as sdk_api, api_paths as sdk_api_paths
-from litmussdk.utils.gql_queries.devicehub import LIST_DEVICES_COMPLETE
 from config import DEFAULT_TIMEOUT
 
 from utils.auth import get_lem_connection, get_lem_project_id
@@ -433,20 +431,15 @@ async def lem_bridge_list_devicehub_devices_tool(
 ) -> list[TextContent]:
     """List devicehub devices on a specific LE through LEM bridge.
 
-    Uses a raw GQL query (no pydantic validation) so quirky edge data still
-    yields a usable count instead of a serialization failure.
+    Uses `raw=True` on the SDK list call so quirky edge data still yields a
+    usable count instead of a pydantic serialization failure.
     """
     try:
         project_id, device_id = _require_bridge_args(arguments)
         bridge = _build_bridge_connection(request, project_id, device_id)
         try:
-            # TODO(sdk): swap to `devicehub_devices.list_devices(le_connection=bridge, raw=True)`
-            # once the litmussdk release with raw=True on devicehub list functions ships
-            # (currently pinned to 2.5.6 in pyproject.toml, which lacks the flag).
-            response = sdk_api.gql_query(
-                api_used=sdk_api_paths.DH_GRAPHQL,
-                query={"query": LIST_DEVICES_COMPLETE, "variables": {}},
-                connection=bridge,
+            raw_items = (
+                devicehub_devices.list_devices(le_connection=bridge, raw=True) or []
             )
         except Exception as e:
             reason = _classify_bridge_error(e)
@@ -459,7 +452,6 @@ async def lem_bridge_list_devicehub_devices_tool(
                 f"Could not reach edge through LEM bridge: {e}",
             )
 
-        raw_items = (response or {}).get("data", {}).get("ListDevices") or []
         items = [
             {
                 "id": d.get("ID"),
