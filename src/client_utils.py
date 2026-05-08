@@ -11,6 +11,29 @@ from agents import Agent, Runner, gen_trace_id, trace
 from agents.mcp import MCPServerSse
 from agents import ModelSettings
 
+from env_config import (
+    CLIENT_SESSION_TIMEOUT_SECONDS,
+    CLIENT_SESSION_TIMEOUT_SECONDS_MAX,
+    CLIENT_SESSION_TIMEOUT_SECONDS_MIN,
+    DEFAULT_CLIENT_SESSION_TIMEOUT_SECONDS,
+)
+
+
+def _read_client_session_timeout() -> int:
+    raw = os.environ.get(CLIENT_SESSION_TIMEOUT_SECONDS, "")
+    try:
+        seconds = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_CLIENT_SESSION_TIMEOUT_SECONDS
+    if not (
+        CLIENT_SESSION_TIMEOUT_SECONDS_MIN
+        <= seconds
+        <= CLIENT_SESSION_TIMEOUT_SECONDS_MAX
+    ):
+        return DEFAULT_CLIENT_SESSION_TIMEOUT_SECONDS
+    return seconds
+
+
 _anthropic_display_name = "Claude Sonnet 4.6"
 _openai_display_name = "OpenAI GPT-4.1"
 _gemini_display_name = "Google Gemini"
@@ -337,12 +360,7 @@ class MCPClient:
         url = os.environ.get("MCP_SSE_URL", "http://localhost:8000/sse")
         headers = {k: v for k in _CREDENTIAL_KEYS if (v := os.environ.get(k, ""))}
 
-        try:
-            timeout_s = int(
-                os.environ.get("CLIENT_SESSION_TIMEOUT_SECONDS", "60") or "60"
-            )
-        except ValueError:
-            timeout_s = 60
+        timeout_s = _read_client_session_timeout()
 
         async with MCPServerSse(
             name="SseServer",

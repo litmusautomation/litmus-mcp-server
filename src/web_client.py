@@ -39,6 +39,10 @@ from env_config import (
     PREFERRED_MODEL_ID,
     ACTIVE_EDGE_INSTANCE,
     ACTIVE_LEM_CONNECTION,
+    CLIENT_SESSION_TIMEOUT_SECONDS,
+    CLIENT_SESSION_TIMEOUT_SECONDS_MIN,
+    CLIENT_SESSION_TIMEOUT_SECONDS_MAX,
+    SAVE_SETTINGS_ALLOWED_KEYS,
     get_edge_instances,
     next_edge_instance_index,
     remove_edge_instance,
@@ -263,6 +267,48 @@ async def switch_model(
 @app.post("/api/save-settings", name="api_save_settings")
 async def api_save_settings(request: Request):
     data = await request.json()
+    if not isinstance(data, dict):
+        return JSONResponse(
+            {"ok": False, "error": "expected a JSON object"}, status_code=400
+        )
+
+    unknown = set(data.keys()) - SAVE_SETTINGS_ALLOWED_KEYS
+    if unknown:
+        return JSONResponse(
+            {"ok": False, "error": f"unknown setting(s): {sorted(unknown)}"},
+            status_code=400,
+        )
+
+    if CLIENT_SESSION_TIMEOUT_SECONDS in data:
+        raw = data[CLIENT_SESSION_TIMEOUT_SECONDS]
+        try:
+            seconds = int(raw)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": f"{CLIENT_SESSION_TIMEOUT_SECONDS} must be an integer",
+                },
+                status_code=400,
+            )
+        if not (
+            CLIENT_SESSION_TIMEOUT_SECONDS_MIN
+            <= seconds
+            <= CLIENT_SESSION_TIMEOUT_SECONDS_MAX
+        ):
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": (
+                        f"{CLIENT_SESSION_TIMEOUT_SECONDS} must be between "
+                        f"{CLIENT_SESSION_TIMEOUT_SECONDS_MIN} and "
+                        f"{CLIENT_SESSION_TIMEOUT_SECONDS_MAX}"
+                    ),
+                },
+                status_code=400,
+            )
+        data[CLIENT_SESSION_TIMEOUT_SECONDS] = str(seconds)
+
     for key, value in data.items():
         if value:  # only write non-empty values
             mcp_env_updater(key, value)
@@ -314,9 +360,9 @@ async def update_env_form(request: Request):
         "validate_cert": os.environ.get("VALIDATE_CERTIFICATE", "false"),
     }
 
-    current_client_timeout = os.environ.get(
-        "CLIENT_SESSION_TIMEOUT_SECONDS", "60"
-    ) or "60"
+    current_client_timeout = (
+        os.environ.get("CLIENT_SESSION_TIMEOUT_SECONDS", "60") or "60"
+    )
 
     return templates.TemplateResponse(
         "update_env.html",

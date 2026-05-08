@@ -16,7 +16,7 @@ dependencies = [
     "numpy>=2.3.4",
     "pandas>=2.3.3",
     "python-dotenv>=1.2.2",
-    "python-multipart>=0.0.26",
+    "python-multipart>=0.0.27",
 ]
 
 [dependency-groups]
@@ -40,7 +40,7 @@ test = [
 
 
 [tool.uv.sources]
-litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.5.6/litmussdk-2.5.6-py3-none-any.whl" }
+litmussdk = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.0/litmussdk-2.6.0-py3-none-any.whl" }
 
 [tool.ruff]
 exclude = [
