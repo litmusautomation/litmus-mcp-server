@@ -94,6 +94,19 @@
             </div>
         </div>
 
+        <!-- LEM connection selector -->
+        <div class="chat-instance-selector" id="chat-lem-selector">
+            <button type="button" class="chat-instance-btn" id="chat-lem-btn">
+                <span class="chat-instance-btn-label" id="chat-lem-btn-label">{{ ('LEM: ' + active_lem_name) if active_lem_name else 'No LEM' }}</span>
+                <svg class="chat-model-chevron" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="chat-instance-dropdown" id="chat-lem-dropdown">
+                <div id="chat-lem-list">
+                    <div class="chat-model-loading">Loading…</div>
+                </div>
+            </div>
+        </div>
+
         <nav class="chat-nav">
             <a href="{{ url_for('query_handler') }}" class="{{ 'active' if active_page == 'home' else '' }}">Home</a>
             <a href="{{ url_for('update_env_form') }}" class="{{ 'active' if active_page == 'config' else '' }}">Config</a>
@@ -372,6 +385,107 @@
 
     // Dim the button if no instances configured
     if (!_initInstances || _initInstances.length === 0) {
+        btnLabel.style.color = '#9ab8b0';
+    }
+})();
+
+// ── LEM connection selector ──────────────────────────────────────────────
+(function () {
+    const _initLemConnections = {{ lem_connections | tojson }};
+    const _initActiveLemIndex = {{ active_lem_connection }};
+
+    let activeIndex = _initActiveLemIndex;
+    let connectionsLoaded = false;
+
+    const selector = document.getElementById('chat-lem-selector');
+    const btn      = document.getElementById('chat-lem-btn');
+    const btnLabel = document.getElementById('chat-lem-btn-label');
+    const dropdown = document.getElementById('chat-lem-dropdown');
+    const listEl   = document.getElementById('chat-lem-list');
+    const sendBtn  = document.getElementById('send-btn');
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const isOpen = selector.classList.toggle('open');
+        if (isOpen && !connectionsLoaded) {
+            await loadLemConnections();
+            connectionsLoaded = true;
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) selector.classList.remove('open');
+    });
+
+    async function loadLemConnections() {
+        listEl.innerHTML = '<div class="chat-model-loading">Loading…</div>';
+        try {
+            const resp = await fetch('/api/lem-connections');
+            const data = await resp.json();
+            renderLemList(data.connections, data.active);
+        } catch (e) {
+            listEl.innerHTML = '<div class="chat-model-error">Could not load LEM connections</div>';
+        }
+    }
+
+    function renderLemList(connections, active) {
+        listEl.innerHTML = '';
+        // "None" option lets the user explicitly drop the active LEM connection.
+        const noneOpt = document.createElement('div');
+        const noneActive = !active || active === 0;
+        noneOpt.className = 'chat-model-option' + (noneActive ? ' active' : '');
+        noneOpt.innerHTML =
+            '<span class="chat-model-option-check">' + (noneActive ? '✓' : '') + '</span>' +
+            '<span class="chat-model-option-name">No LEM</span>';
+        noneOpt.addEventListener('click', () => selectLem(0, ''));
+        listEl.appendChild(noneOpt);
+
+        if (!connections || connections.length === 0) {
+            const hint = document.createElement('div');
+            hint.className = 'chat-model-error';
+            hint.innerHTML = 'No LEM connections — <a href="/update-env" style="color:#1a7a56;">add one in Config</a>';
+            listEl.appendChild(hint);
+            return;
+        }
+        connections.forEach(conn => {
+            const opt = document.createElement('div');
+            const isActive = conn.index === active;
+            opt.className = 'chat-model-option' + (isActive ? ' active' : '');
+            opt.innerHTML =
+                '<span class="chat-model-option-check">' + (isActive ? '✓' : '') + '</span>' +
+                '<span class="chat-model-option-name">' + escHtml(conn.name) + '</span>';
+            opt.addEventListener('click', () => selectLem(conn.index, conn.name));
+            listEl.appendChild(opt);
+        });
+    }
+
+    async function selectLem(index, name) {
+        selector.classList.remove('open');
+        if (sendBtn) sendBtn.disabled = true;
+        const prevLabel = btnLabel.textContent;
+        btnLabel.textContent = 'Switching…';
+
+        const fd = new FormData();
+        fd.append('index', index);
+        try {
+            const resp = await fetch('/api/switch-lem-connection', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (data.ok) {
+                window.location.href = '/';
+                return;
+            }
+            btnLabel.textContent = prevLabel;
+        } catch (e) {
+            btnLabel.textContent = prevLabel;
+        }
+        if (sendBtn) sendBtn.disabled = false;
+    }
+
+    if (!_initLemConnections || _initLemConnections.length === 0) {
         btnLabel.style.color = '#9ab8b0';
     }
 })();

@@ -23,11 +23,19 @@ from utils.auth import (  # noqa: E402
     get_lem_project_id,
 )
 from tools.lem_tools import (  # noqa: E402
+    lem_bridge_get_le_info_tool,
+    lem_bridge_list_devicehub_devices_tool,
     lem_dashboard_usage_tool,
+    lem_deployment_info_tool,
+    lem_get_company_details_tool,
     lem_get_device_details_tool,
     lem_get_expired_licenses_tool,
     lem_get_license_expiry_tool,
     lem_get_project_alerts_tool,
+    lem_get_project_details_tool,
+    lem_get_system_time_tool,
+    lem_list_companies_tool,
+    lem_list_company_projects_tool,
     lem_list_device_groups_tool,
     lem_list_device_versions_tool,
     lem_list_devices_tool,
@@ -163,13 +171,24 @@ def test_project_id_missing_from_both_raises():
 @patch("tools.lem_tools.get_devices_paginated")
 def test_lem_list_devices_success(mock_sdk, mock_conn):
     mock_conn.return_value = MagicMock()
-    mock_sdk.return_value = {"items": [{"id": "d1"}], "total": 1}
+    mock_sdk.return_value = {
+        "pageNum": 0,
+        "pagesCount": 1,
+        "size": 5,
+        "totalSize": 1,
+        "elements": [{"id": "d1", "name": "edge-A"}],
+    }
 
     result = _run(lem_list_devices_tool(_make_request(), {"limit": 5}))
     data = _parse(result)
 
     assert data["success"] is True
-    assert data["page"]["total"] == 1
+    # Normalized convenience fields surfaced at top level.
+    assert data["count"] == 1
+    assert data["total_size"] == 1
+    assert data["devices"][0]["id"] == "d1"
+    # Raw page is still nested for callers that need it.
+    assert data["page"]["pagesCount"] == 1
     kwargs = mock_sdk.call_args.kwargs
     assert kwargs["project_id"] == "proj-1"
     assert kwargs["limit"] == 5
@@ -329,3 +348,243 @@ def test_lem_project_alerts_success(mock_sdk, mock_conn):
 
     assert data["success"] is True
     assert data["alerts"][0]["id"] == "a1"
+
+
+# ── lem_list_companies ──────────────────────────────────────────────────────
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.list_all_company_stats")
+def test_lem_list_companies_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = [
+        {"companyName": "acme", "totalNumOfProjects": 2, "totalNumOfDevices": 14},
+        {"companyName": "foo", "totalNumOfProjects": 1, "totalNumOfDevices": 3},
+    ]
+
+    result = _run(lem_list_companies_tool(_make_request()))
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["count"] == 2
+    assert data["companies"][0]["companyName"] == "acme"
+    assert mock_sdk.call_args.kwargs["raw"] is True
+
+
+# ── lem_get_company_details ─────────────────────────────────────────────────
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.get_company_details")
+def test_lem_company_details_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = {"name": "acme", "realName": "Acme Corp"}
+
+    result = _run(
+        lem_get_company_details_tool(_make_request(), {"company_name": "acme"})
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["company"]["realName"] == "Acme Corp"
+    assert mock_sdk.call_args.kwargs["company_name"] == "acme"
+
+
+def test_lem_company_details_missing_name_raises():
+    with pytest.raises(McpError):
+        _run(lem_get_company_details_tool(_make_request(), {}))
+
+
+# ── lem_list_company_projects ───────────────────────────────────────────────
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.get_company_projects")
+def test_lem_company_projects_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+
+    result = _run(
+        lem_list_company_projects_tool(_make_request(), {"company_name": "acme"})
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["count"] == 3
+
+
+def test_lem_company_projects_missing_name_raises():
+    with pytest.raises(McpError):
+        _run(lem_list_company_projects_tool(_make_request(), {}))
+
+
+# ── lem_get_project_details ─────────────────────────────────────────────────
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.get_project_details")
+def test_lem_project_details_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = {"id": "proj-1", "name": "production"}
+
+    result = _run(lem_get_project_details_tool(_make_request(), {}))
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["project"]["id"] == "proj-1"
+
+
+# ── lem_deployment_info / lem_get_system_time ───────────────────────────────
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.deployment_info")
+def test_lem_deployment_info_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = {"version": "4.2.0", "build": "abc123"}
+
+    result = _run(lem_deployment_info_tool(_make_request(), {}))
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["deployment"]["version"] == "4.2.0"
+
+
+@patch("tools.lem_tools.get_lem_connection")
+@patch("tools.lem_tools.get_system_time")
+def test_lem_system_time_success(mock_sdk, mock_conn):
+    mock_conn.return_value = MagicMock()
+    mock_sdk.return_value = {"time": "2026-05-07T15:30:00Z"}
+
+    result = _run(lem_get_system_time_tool(_make_request(), {}))
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["system_time"]["time"] == "2026-05-07T15:30:00Z"
+
+
+# ── lem_bridge_list_devicehub_devices ───────────────────────────────────────
+
+
+@patch("tools.lem_tools.new_lem_bridge_connection")
+@patch("tools.lem_tools.sdk_api")
+def test_lem_bridge_list_devicehub_devices_success(mock_api, mock_bridge):
+    mock_bridge.return_value = MagicMock()
+    mock_api.gql_query.return_value = {
+        "data": {
+            "ListDevices": [
+                {
+                    "ID": "d1",
+                    "Name": "modbus-1",
+                    "DriverID": "drv-modbus",
+                    "Description": None,
+                },
+            ]
+        }
+    }
+
+    result = _run(
+        lem_bridge_list_devicehub_devices_tool(
+            _make_request(), {"project_id": "p1", "device_id": "d1"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["count"] == 1
+    assert data["devicehub_devices"][0]["name"] == "modbus-1"
+    assert data["devicehub_devices"][0]["driver_id"] == "drv-modbus"
+    # Bridge was built with the correct ids.
+    kwargs = mock_bridge.call_args.kwargs
+    assert kwargs["project_id"] == "p1"
+    assert kwargs["device_id"] == "d1"
+
+
+@patch("tools.lem_tools.new_lem_bridge_connection")
+@patch("tools.lem_tools.sdk_api")
+def test_lem_bridge_list_devicehub_devices_empty_response_classified(
+    mock_api, mock_bridge
+):
+    """An offline edge typically yields a JSON parse failure; surface it as
+    edge_unreachable so the LLM can distinguish it from a real bridge bug."""
+    import json
+
+    mock_bridge.return_value = MagicMock()
+    mock_api.gql_query.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+
+    result = _run(
+        lem_bridge_list_devicehub_devices_tool(
+            _make_request(), {"project_id": "p1", "device_id": "d1"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is False
+    assert data["error"] == "lem_bridge_edge_unreachable"
+
+
+def test_lem_bridge_devicehub_missing_device_id_raises():
+    with pytest.raises(McpError):
+        _run(
+            lem_bridge_list_devicehub_devices_tool(
+                _make_request(), {"project_id": "p1"}
+            )
+        )
+
+
+def test_lem_bridge_devicehub_missing_manager_url_raises():
+    headers = dict(_LEM_HEADERS)
+    headers.pop("EDGE_MANAGER_URL")
+    with pytest.raises(McpError):
+        _run(
+            lem_bridge_list_devicehub_devices_tool(
+                _make_request(headers),
+                {"project_id": "p1", "device_id": "d1"},
+            )
+        )
+
+
+# ── lem_bridge_get_le_info ──────────────────────────────────────────────────
+
+
+@patch("tools.lem_tools.new_lem_bridge_connection")
+@patch("tools.lem_tools.network")
+@patch("tools.lem_tools.device_management")
+def test_lem_bridge_le_info_success(mock_dm, mock_network, mock_bridge):
+    mock_bridge.return_value = MagicMock()
+    mock_network.get_friendly_name.return_value = "edge-A"
+    mock_dm.show_cloud_registration_status.return_value = {"activated": True}
+
+    result = _run(
+        lem_bridge_get_le_info_tool(
+            _make_request(), {"project_id": "p1", "device_id": "d1"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["le_info"]["friendly_name"] == "edge-A"
+    assert data["le_info"]["cloud_status"] == {"activated": True}
+
+
+@patch("tools.lem_tools.new_lem_bridge_connection")
+@patch("tools.lem_tools.network")
+@patch("tools.lem_tools.device_management")
+def test_lem_bridge_le_info_partial_failure_still_succeeds(
+    mock_dm, mock_network, mock_bridge
+):
+    """If one sub-call fails, the other is still returned with an error field."""
+    mock_bridge.return_value = MagicMock()
+    mock_network.get_friendly_name.side_effect = RuntimeError("name 500")
+    mock_dm.show_cloud_registration_status.return_value = {"activated": False}
+
+    result = _run(
+        lem_bridge_get_le_info_tool(
+            _make_request(), {"project_id": "p1", "device_id": "d1"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    assert data["le_info"]["friendly_name_error"] == "name 500"
+    assert data["le_info"]["cloud_status"] == {"activated": False}

@@ -30,9 +30,12 @@ ALLOWED_CATEGORIES = {
     "lem.fleet",
     "lem.licensing",
     "lem.dashboard",
+    "lem.companies",
+    "lem.tenant",
+    "lem.bridge",
 }
 
-EXPECTED_CANONICAL_COUNT = 49
+EXPECTED_CANONICAL_COUNT = 57
 
 
 def test_every_entry_well_formed():
