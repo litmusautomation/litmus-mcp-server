@@ -1655,6 +1655,44 @@ button.clear-chat-btn:hover {
     flex-shrink: 0;
 }
 
+.lem-info-card {
+    margin-top: 8px;
+    padding: 12px 14px;
+    background: #f4f8f6;
+    border: 1px solid #d8e7e1;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #2d4540;
+}
+
+.lem-info-card.lem-info-err {
+    background: #fdecea;
+    border-color: #f0c4be;
+    color: #8a2a1a;
+}
+
+.lem-info-line {
+    display: flex;
+    gap: 8px;
+    line-height: 1.6;
+}
+
+.lem-info-label {
+    font-weight: 600;
+    color: #4d6b65;
+    min-width: 100px;
+}
+
+.lem-info-companies {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    color: #2d4540;
+}
+
+.lem-info-companies li {
+    margin-bottom: 2px;
+}
+
 .conn-type-btn {
     background: #f4f8f6;
     color: #4d6b65;

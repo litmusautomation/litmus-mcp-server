@@ -441,6 +441,166 @@ loadInstances();
     <button type="button" class="side-button" onclick="saveConnSettings()">Save settings</button>
 </div>
 
+<hr>
+
+<!-- LEM Connections -->
+<h2>LEM Connections</h2>
+<p class="config-section-hint">Standalone connections to Litmus Edge Manager. Used by the lem_* tools. Project id and device id are not needed here, they are passed per tool call. Activating a bridge-mode edge instance temporarily overrides the active LEM connection.</p>
+
+<div class="edge-add-form">
+    <input type="text" id="lem-conn-url" placeholder="LEM Manager URL (https://...)" style="margin-bottom:0;">
+    <input type="password" id="lem-conn-token" placeholder="API Token" style="margin-bottom:0;">
+    <input type="text" id="lem-conn-name" placeholder="Display name (optional)" style="margin-bottom:0;">
+    <button type="button" id="lem-conn-add-btn" onclick="addLemConnection()">Add LEM connection</button>
+</div>
+
+<div id="lem-conn-status" style="font-size:13px; margin-bottom:8px; min-height:18px;"></div>
+<div class="inst-list" id="lem-conn-list">
+    <div class="mcp-panel-loading">Loading…</div>
+</div>
+
+<div id="lem-info-panel" style="margin-top:12px;"></div>
+
+<script>
+async function loadLemConnections() {
+    const list = document.getElementById('lem-conn-list');
+    try {
+        const resp = await fetch('/api/lem-connections');
+        const data = await resp.json();
+        renderLemConnections(data.connections, data.active);
+        // Trigger info refresh if there is an active connection
+        if (data.active) {
+            loadLemInfoPanel();
+        } else {
+            document.getElementById('lem-info-panel').innerHTML = '';
+        }
+    } catch (e) {
+        list.innerHTML = '<div class="mcp-panel-empty">Could not load LEM connections.</div>';
+    }
+}
+
+function renderLemConnections(connections, active) {
+    const list = document.getElementById('lem-conn-list');
+    if (!connections || connections.length === 0) {
+        list.innerHTML = '<div class="mcp-panel-empty">No LEM connections configured yet.</div>';
+        return;
+    }
+    list.innerHTML = connections.map(c => {
+        const isActive = c.index === active;
+        const actionBtn = isActive
+            ? '<span style="font-size:12px;color:#5ba89a;font-weight:600;">Active</span>'
+            : `<button type="button" class="side-button" onclick="switchLemConnection(${c.index})">Make active</button>`;
+        return `<div class="inst-item${isActive ? ' active-inst' : ''}">
+            <div class="inst-dot${isActive ? ' active' : ''}"></div>
+            <span class="inst-name">${escInstHtml(c.name)}</span>
+            <span class="inst-type-badge">LEM</span>
+            <span class="inst-url">${escInstHtml(c.url)}</span>
+            <div class="inst-actions">
+                ${actionBtn}
+                <button type="button" class="md-icon-btn" onclick="removeLemConnection(${c.index})" title="Remove">
+                    <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function addLemConnection() {
+    const status = document.getElementById('lem-conn-status');
+    const url   = document.getElementById('lem-conn-url').value.trim();
+    const token = document.getElementById('lem-conn-token').value.trim();
+    const name  = document.getElementById('lem-conn-name').value.trim();
+    if (!url || !token) {
+        status.textContent = 'Manager URL and API token are required.';
+        status.style.color = '#c0392b';
+        return;
+    }
+    const btn = document.getElementById('lem-conn-add-btn');
+    btn.disabled = true;
+    status.textContent = 'Connecting to LEM…';
+    status.style.color = '#4d6b65';
+
+    const fd = new FormData();
+    fd.append('manager_url', url);
+    fd.append('api_token', token);
+    if (name) fd.append('name', name);
+    try {
+        const resp = await fetch('/api/add-lem-connection', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.error) {
+            status.textContent = data.error;
+            status.style.color = '#c0392b';
+        } else {
+            status.textContent = `Added: ${data.name}`;
+            status.style.color = '#059669';
+            document.getElementById('lem-conn-url').value   = '';
+            document.getElementById('lem-conn-token').value = '';
+            document.getElementById('lem-conn-name').value  = '';
+            await loadLemConnections();
+        }
+    } catch (e) {
+        status.textContent = 'Connection error.';
+        status.style.color = '#c0392b';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function switchLemConnection(index) {
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/switch-lem-connection', { method: 'POST', body: fd });
+    await loadLemConnections();
+}
+
+async function removeLemConnection(index) {
+    if (!confirm('Remove this LEM connection?')) return;
+    const fd = new FormData();
+    fd.append('index', index);
+    await fetch('/api/remove-lem-connection', { method: 'POST', body: fd });
+    await loadLemConnections();
+}
+
+async function loadLemInfoPanel() {
+    const panel = document.getElementById('lem-info-panel');
+    panel.innerHTML = '<div class="mcp-panel-loading">Probing LEM…</div>';
+    try {
+        const resp = await fetch('/api/lem/test');
+        const data = await resp.json();
+        if (data.status === 'not_configured') {
+            panel.innerHTML = '';
+            return;
+        }
+        if (data.status === 'error') {
+            panel.innerHTML = `<div class="lem-info-card lem-info-err">LEM probe failed: ${escInstHtml(data.message || '')}</div>`;
+            return;
+        }
+        const ver = (data.deployment && (data.deployment.version || data.deployment.releaseVersion)) || '?';
+        const time = (data.system_time && (data.system_time.time || data.system_time.systemTime || JSON.stringify(data.system_time))) || '?';
+        const companyCount = data.company_count != null ? data.company_count : '?';
+        const top = (data.companies_top || []).map(c => {
+            const n = c.companyRealName || c.companyName || c.name || '?';
+            const np = c.totalNumOfProjects ?? 0;
+            const nd = c.totalNumOfDevices ?? 0;
+            return `<li><b>${escInstHtml(n)}</b> &middot; ${np} projects &middot; ${nd} devices</li>`;
+        }).join('');
+        panel.innerHTML = `<div class="lem-info-card">
+            <div class="lem-info-line"><span class="lem-info-label">LEM version</span> ${escInstHtml(String(ver))}</div>
+            <div class="lem-info-line"><span class="lem-info-label">System time</span> ${escInstHtml(String(time))}</div>
+            <div class="lem-info-line"><span class="lem-info-label">Companies</span> ${companyCount}</div>
+            ${top ? `<ul class="lem-info-companies">${top}</ul>` : ''}
+        </div>`;
+    } catch (e) {
+        panel.innerHTML = `<div class="lem-info-card lem-info-err">Could not probe LEM.</div>`;
+    }
+}
+
+loadLemConnections();
+</script>
+
 <script>
 // ── Settings save helpers ──────────────────────────────────────────────────
 

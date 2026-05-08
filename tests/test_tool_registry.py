@@ -27,9 +27,15 @@ ALLOWED_CATEGORIES = {
     "digitaltwins.instances",
     "digitaltwins.attributes",
     "digitaltwins.hierarchy",
+    "lem.fleet",
+    "lem.licensing",
+    "lem.dashboard",
+    "lem.companies",
+    "lem.tenant",
+    "lem.bridge",
 }
 
-EXPECTED_CANONICAL_COUNT = 41
+EXPECTED_CANONICAL_COUNT = 57
 
 
 def test_every_entry_well_formed():

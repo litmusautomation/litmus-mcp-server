@@ -25,12 +25,21 @@ from tools.marketplace_tools import TOOLS as _MKT_TOOLS
 from tools.data_tools import TOOLS as _DATA_TOOLS
 from tools.digitaltwins_tools import TOOLS as _DT_TOOLS
 from tools.system_tools import TOOLS as _SYS_TOOLS
+from tools.lem_tools import TOOLS as _LEM_TOOLS
 from tools.resource_tools import (
     get_documentation_resource_list,
     read_documentation_resource,
 )
 
-ALL_TOOLS = _DH_TOOLS + _DM_TOOLS + _MKT_TOOLS + _DATA_TOOLS + _DT_TOOLS + _SYS_TOOLS
+ALL_TOOLS = (
+    _DH_TOOLS
+    + _DM_TOOLS
+    + _MKT_TOOLS
+    + _DATA_TOOLS
+    + _DT_TOOLS
+    + _SYS_TOOLS
+    + _LEM_TOOLS
+)
 TOOL_BY_NAME: dict = {}
 for _tool in ALL_TOOLS:
     if _tool["name"] in TOOL_BY_NAME:

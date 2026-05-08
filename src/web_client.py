@@ -38,6 +38,7 @@ from env_config import (
     MODEL_PREFERENCE,
     PREFERRED_MODEL_ID,
     ACTIVE_EDGE_INSTANCE,
+    ACTIVE_LEM_CONNECTION,
     CLIENT_SESSION_TIMEOUT_SECONDS,
     CLIENT_SESSION_TIMEOUT_SECONDS_MIN,
     CLIENT_SESSION_TIMEOUT_SECONDS_MAX,
@@ -46,6 +47,10 @@ from env_config import (
     next_edge_instance_index,
     remove_edge_instance,
     activate_edge_instance,
+    get_lem_connections,
+    next_lem_connection_index,
+    remove_lem_connection,
+    activate_lem_connection,
     JINJA_TEMPLATE_DIR,
     STATIC_DIR,
 )
@@ -599,6 +604,197 @@ async def api_switch_edge_instance(request: Request, index: int = Form(...)):
     return JSONResponse({"ok": True, "index": index, "name": name})
 
 
+# ── LEM standalone connections ─────────────────────────────────────────────
+
+
+def _default_lem_admin_url(manager_url: str) -> str:
+    """Replace the URL host's port with 8446. Mirrors utils.auth._default_admin_url."""
+    from urllib.parse import urlparse
+
+    raw = manager_url if "://" in manager_url else f"https://{manager_url}"
+    parsed = urlparse(raw)
+    scheme = parsed.scheme or "https"
+    host = parsed.hostname or manager_url.split("/")[0].split(":")[0]
+    return f"{scheme}://{host}:8446"
+
+
+def _build_lem_connection(
+    manager_url: str, api_token: str, validate_certificate: bool, timeout: int = 10
+):
+    from litmussdk.utils.conn import new_lem_connection
+
+    return new_lem_connection(
+        edge_manager_url=manager_url,
+        edge_manager_admin_url=_default_lem_admin_url(manager_url),
+        edge_api_token=api_token,
+        validate_certificate=validate_certificate,
+        timeout_seconds=timeout,
+    )
+
+
+@app.get("/api/lem-connections", name="api_lem_connections")
+async def api_lem_connections():
+    mcp_env_loader()
+    connections = get_lem_connections()
+    # Strip tokens before returning to the browser; never echo secrets.
+    safe = [{k: v for k, v in c.items() if k != "token"} for c in connections]
+    active = int(os.environ.get(ACTIVE_LEM_CONNECTION, 0))
+    return JSONResponse({"connections": safe, "active": active})
+
+
+@app.post("/api/add-lem-connection", name="api_add_lem_connection")
+async def api_add_lem_connection(
+    request: Request,
+    manager_url: str = Form(default=""),
+    api_token: str = Form(default=""),
+    name: str = Form(default=""),
+):
+    mcp_env_loader()
+    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    manager_url = manager_url.strip().rstrip("/")
+    api_token = api_token.strip()
+    name = name.strip()
+    if not manager_url or not api_token:
+        return JSONResponse(
+            {"error": "Manager URL and API token are required."}, status_code=400
+        )
+
+    def _verify():
+        from litmussdk.lem.lifecycle.dashboard import deployment_info as _deploy
+
+        conn = _build_lem_connection(manager_url, api_token, validate_cert)
+        return _deploy(raw=True, connection=conn)
+
+    try:
+        deployment = await asyncio.to_thread(_verify)
+    except Exception as exc:
+        logger.exception(f"add-lem-connection: connection failed: {exc}")
+        return JSONResponse(
+            {"error": f"Could not reach LEM: {exc}"}, status_code=400
+        )
+
+    idx = next_lem_connection_index()
+    if not name:
+        from urllib.parse import urlparse
+
+        host = urlparse(manager_url).hostname or f"LEM {idx}"
+        name = host
+    mcp_env_updater(f"LEM_CONNECTION_{idx}_URL", manager_url)
+    mcp_env_updater(f"LEM_CONNECTION_{idx}_TOKEN", api_token)
+    mcp_env_updater(f"LEM_CONNECTION_{idx}_NAME", name)
+    mcp_env_loader()
+
+    active = int(os.environ.get(ACTIVE_LEM_CONNECTION, 0))
+    if not active:
+        activate_lem_connection(idx)
+        mcp_env_loader()
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "index": idx,
+            "name": name,
+            "url": manager_url,
+            "deployment": deployment,
+        }
+    )
+
+
+@app.post("/api/remove-lem-connection", name="api_remove_lem_connection")
+async def api_remove_lem_connection(request: Request, index: int = Form(...)):
+    mcp_env_loader()
+    active = int(os.environ.get(ACTIVE_LEM_CONNECTION, 0))
+    remove_lem_connection(index)
+    mcp_env_loader()
+    if active == index:
+        connections = get_lem_connections()
+        if connections:
+            activate_lem_connection(connections[0]["index"])
+            mcp_env_loader()
+        else:
+            mcp_env_updater(ACTIVE_LEM_CONNECTION, "0")
+            # Also clear EDGE_MANAGER_URL/TOKEN: the connection that owned them
+            # is gone and no other connection exists to take over.
+            mcp_env_updater("EDGE_MANAGER_URL", "")
+            mcp_env_updater("EDGE_API_TOKEN", "")
+            mcp_env_loader()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/switch-lem-connection", name="api_switch_lem_connection")
+async def api_switch_lem_connection(request: Request, index: int = Form(...)):
+    mcp_env_loader()
+    if int(index) == 0:
+        # Explicit "none": clear active LEM and the mirrored env vars.
+        mcp_env_updater(ACTIVE_LEM_CONNECTION, "0")
+        mcp_env_updater("EDGE_MANAGER_URL", "")
+        mcp_env_updater("EDGE_API_TOKEN", "")
+        mcp_env_updater("EDGE_MANAGER_PROJECT_ID", "")
+        mcp_env_updater("EDGE_MANAGER_DEVICE_ID", "")
+        mcp_env_loader()
+        clear_all_sessions()
+        return JSONResponse({"ok": True, "index": 0, "name": ""})
+    activate_lem_connection(index)
+    mcp_env_loader()
+    clear_all_sessions()
+    name = os.environ.get(f"LEM_CONNECTION_{index}_NAME", f"LEM {index}")
+    return JSONResponse({"ok": True, "index": index, "name": name})
+
+
+@app.get("/api/lem/test", name="api_lem_test")
+async def api_lem_test():
+    """Probe the currently active LEM credentials and return summary info for the config page."""
+    mcp_env_loader()
+    manager_url = os.environ.get("EDGE_MANAGER_URL", "").rstrip("/")
+    api_token = os.environ.get("EDGE_API_TOKEN", "")
+    if not manager_url or not api_token:
+        return JSONResponse({"status": "not_configured"})
+    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+
+    def _probe():
+        from litmussdk.lem.lifecycle.dashboard import (
+            deployment_info as _deploy,
+            get_system_time as _time,
+        )
+        from litmussdk.lem.companies import list_all_company_stats as _stats
+
+        conn = _build_lem_connection(manager_url, api_token, validate_cert)
+        out = {"status": "ok"}
+        try:
+            out["deployment"] = _deploy(raw=True, connection=conn)
+        except Exception as e:
+            out["deployment_error"] = str(e)
+        try:
+            out["system_time"] = _time(raw=True, connection=conn)
+        except Exception as e:
+            out["system_time_error"] = str(e)
+        try:
+            companies = _stats(raw=True, connection=conn) or []
+            # Trim to a small summary (top by num_devices).
+            try:
+                companies = sorted(
+                    companies,
+                    key=lambda c: c.get("totalNumOfDevices", 0)
+                    if isinstance(c, dict)
+                    else 0,
+                    reverse=True,
+                )
+            except Exception:
+                pass
+            out["company_count"] = len(companies)
+            out["companies_top"] = companies[:5]
+        except Exception as e:
+            out["companies_error"] = str(e)
+        return out
+
+    try:
+        result = await asyncio.to_thread(_probe)
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception(f"lem/test failed: {exc}")
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+
 # ── Main chat ──────────────────────────────────────────────────────────────
 
 
@@ -620,6 +816,15 @@ async def chat_get(request: Request):
         if active_edge_instance > 0
         else ""
     )
+    lem_connections = [
+        {k: v for k, v in c.items() if k != "token"} for c in get_lem_connections()
+    ]
+    active_lem_connection = int(os.environ.get(ACTIVE_LEM_CONNECTION, 0))
+    active_lem_name = (
+        os.environ.get(f"LEM_CONNECTION_{active_lem_connection}_NAME", "")
+        if active_lem_connection > 0
+        else ""
+    )
 
     response = templates.TemplateResponse(
         "query.html",
@@ -639,6 +844,9 @@ async def chat_get(request: Request):
             "edge_instances": edge_instances,
             "active_edge_instance": active_edge_instance,
             "active_instance_name": active_instance_name,
+            "lem_connections": lem_connections,
+            "active_lem_connection": active_lem_connection,
+            "active_lem_name": active_lem_name,
             "active_page": "home",
         },
     )

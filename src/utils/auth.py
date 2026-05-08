@@ -4,7 +4,13 @@ from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 import logging
 
-from litmussdk.utils.conn import new_le_connection, new_lem_bridge_connection
+from urllib.parse import urlparse
+
+from litmussdk.utils.conn import (
+    new_le_connection,
+    new_lem_bridge_connection,
+    new_lem_connection,
+)
 from config import DEFAULT_TIMEOUT, NATS_PORT
 
 logger = logging.getLogger(__name__)
@@ -80,6 +86,91 @@ def get_litmus_connection(request: Request) -> Any:
                 message=f"Failed to connect to Litmus Edge: {str(e)}",
             )
         ) from e
+
+
+def _default_admin_url(manager_url: str) -> str:
+    """Derive the LEM admin URL from the manager URL by replacing the port with 8446."""
+    raw = manager_url if "://" in manager_url else f"https://{manager_url}"
+    parsed = urlparse(raw)
+    scheme = parsed.scheme or "https"
+    host = parsed.hostname or manager_url.split("/")[0].split(":")[0]
+    return f"{scheme}://{host}:8446"
+
+
+def get_lem_connection(request: Request) -> Any:
+    """
+    Build a Litmus Edge Manager (LEM) SDK connection from request headers.
+
+    Required headers:
+      - EDGE_MANAGER_URL: LEM cloud URL
+      - EDGE_API_TOKEN:   LEM API token (sent as X-AuthToken)
+
+    Optional headers:
+      - EDGE_MANAGER_ADMIN_URL: defaults to EDGE_MANAGER_URL host with port 8446
+      - VALIDATE_CERTIFICATE:   defaults to false
+    """
+    manager_url = request.headers.get("EDGE_MANAGER_URL", "")
+    api_token = request.headers.get("EDGE_API_TOKEN", "")
+    admin_url = request.headers.get("EDGE_MANAGER_ADMIN_URL", "")
+    validate_certificate = (
+        request.headers.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    )
+
+    if not manager_url:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS, message="EDGE_MANAGER_URL header is required"
+            )
+        )
+    if not api_token:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS, message="EDGE_API_TOKEN header is required"
+            )
+        )
+
+    if not admin_url:
+        admin_url = _default_admin_url(manager_url)
+
+    try:
+        connection = new_lem_connection(
+            edge_manager_url=manager_url,
+            edge_manager_admin_url=admin_url,
+            edge_api_token=api_token,
+            validate_certificate=validate_certificate,
+            timeout_seconds=DEFAULT_TIMEOUT,
+        )
+        logger.debug(f"LEM connection established to {manager_url}")
+        return connection
+    except Exception as e:
+        logger.error(f"LEM connection failed: {e}", exc_info=True)
+        raise McpError(
+            ErrorData(
+                code=INTERNAL_ERROR,
+                message=f"Failed to connect to Litmus Edge Manager: {str(e)}",
+            )
+        ) from e
+
+
+def get_lem_project_id(request: Request, arguments: dict | None) -> str:
+    """
+    Resolve the LEM project_id from tool arguments, falling back to the
+    EDGE_MANAGER_PROJECT_ID header.
+    """
+    project_id = (arguments or {}).get("project_id") or request.headers.get(
+        "EDGE_MANAGER_PROJECT_ID", ""
+    )
+    if not project_id:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    "'project_id' is required (pass it as a tool argument or set the "
+                    "EDGE_MANAGER_PROJECT_ID header)"
+                ),
+            )
+        )
+    return project_id
 
 
 def _validate_auth_headers(edge_url: str, client_id: str, client_secret: str) -> None:

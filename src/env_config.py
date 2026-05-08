@@ -41,6 +41,7 @@ MODEL_NAME_GEMINI = "gemini"
 MODEL_PREFERENCE = "PREFERRED_MODEL"
 PREFERRED_MODEL_ID = "PREFERRED_MODEL_ID"
 ACTIVE_EDGE_INSTANCE = "ACTIVE_EDGE_INSTANCE"
+ACTIVE_LEM_CONNECTION = "ACTIVE_LEM_CONNECTION"
 CLIENT_SESSION_TIMEOUT_SECONDS = "CLIENT_SESSION_TIMEOUT_SECONDS"
 DEFAULT_CLIENT_SESSION_TIMEOUT_SECONDS = 60
 CLIENT_SESSION_TIMEOUT_SECONDS_MIN = 5
@@ -89,6 +90,10 @@ def mcp_env_loader():
     EDGE_API_CLIENT_SECRET = os.environ.get("EDGE_API_CLIENT_SECRET", "")
     VALIDATE_CERTIFICATE = os.environ.get("VALIDATE_CERTIFICATE", "false")
     ANTHROPIC_KEY = os.environ.get(key_of_anthropic_api_key, "")
+
+    # One-time migration: lift legacy single-LEM EDGE_MANAGER_URL/EDGE_API_TOKEN
+    # into a LEM_CONNECTION_1 entry. Idempotent.
+    migrate_legacy_lem_settings()
 
 
 def _get_env_vars(env_file, override):
@@ -213,12 +218,100 @@ def activate_edge_instance(index: int):
             "EDGE_API_CLIENT_SECRET",
             os.environ.get(f"EDGE_INSTANCE_{index}_SECRET", ""),
         )
-        mcp_env_updater("EDGE_MANAGER_URL", "")
-        mcp_env_updater("EDGE_API_TOKEN", "")
+        # Preserve EDGE_MANAGER_URL / EDGE_API_TOKEN: those are owned by the
+        # standalone LEM Settings panel and must survive instance switches.
+        # Only project/device id are bridge-specific and get cleared.
         mcp_env_updater("EDGE_MANAGER_PROJECT_ID", "")
         mcp_env_updater("EDGE_MANAGER_DEVICE_ID", "")
     mcp_env_updater(ACTIVE_EDGE_INSTANCE, str(index))
+    # If activating a bridge instance, the EDGE_MANAGER_URL/TOKEN now reflect
+    # that instance, not a standalone LEM connection. Clear the active LEM
+    # pointer so the home-page pill reflects "managed by edge instance".
+    if inst_type == "lem":
+        mcp_env_updater(ACTIVE_LEM_CONNECTION, "0")
     mcp_env_loader()
+
+
+# ── LEM standalone connections ─────────────────────────────────────────────
+
+
+def get_lem_connections() -> list:
+    """Read all LEM_CONNECTION_{i}_* keys from os.environ. Allows gaps in numbering."""
+    connections = []
+    for i in range(1, 50):
+        url = os.environ.get(f"LEM_CONNECTION_{i}_URL", "")
+        if not url:
+            continue
+        connections.append(
+            {
+                "index": i,
+                "url": url,
+                "token": os.environ.get(f"LEM_CONNECTION_{i}_TOKEN", ""),
+                "name": os.environ.get(f"LEM_CONNECTION_{i}_NAME", f"LEM {i}"),
+            }
+        )
+    return connections
+
+
+def next_lem_connection_index() -> int:
+    """Return the lowest unused LEM connection index."""
+    for i in range(1, 50):
+        if not os.environ.get(f"LEM_CONNECTION_{i}_URL", ""):
+            return i
+    return 50
+
+
+def remove_lem_connection(index: int):
+    """Delete all keys for a LEM connection index."""
+    for suffix in ("URL", "TOKEN", "NAME"):
+        mcp_env_remover(f"LEM_CONNECTION_{index}_{suffix}")
+
+
+def activate_lem_connection(index: int):
+    """Copy LEM connection credentials to EDGE_MANAGER_URL / EDGE_API_TOKEN.
+    Clears bridge-only project/device ids, since standalone LEM does not target
+    a specific edge.
+    """
+    url = os.environ.get(f"LEM_CONNECTION_{index}_URL", "")
+    token = os.environ.get(f"LEM_CONNECTION_{index}_TOKEN", "")
+    mcp_env_updater("EDGE_MANAGER_URL", url)
+    mcp_env_updater("EDGE_API_TOKEN", token)
+    mcp_env_updater("EDGE_MANAGER_PROJECT_ID", "")
+    mcp_env_updater("EDGE_MANAGER_DEVICE_ID", "")
+    mcp_env_updater(ACTIVE_LEM_CONNECTION, str(index))
+    mcp_env_loader()
+
+
+def migrate_legacy_lem_settings():
+    """One-time import: if EDGE_MANAGER_URL / EDGE_API_TOKEN are set but no
+    LEM_CONNECTION_{i} entries exist, create LEM_CONNECTION_1 from them and
+    mark it active. Idempotent: a no-op if any LEM_CONNECTION_{i} already
+    exists, regardless of whether EDGE_MANAGER_URL is set.
+    """
+    if get_lem_connections():
+        return
+    legacy_url = os.environ.get("EDGE_MANAGER_URL", "").strip()
+    legacy_token = os.environ.get("EDGE_API_TOKEN", "").strip()
+    if not legacy_url or not legacy_token:
+        return
+    # Heuristic name: hostname of the URL, or "LEM 1" as fallback.
+    try:
+        from urllib.parse import urlparse
+
+        host = urlparse(
+            legacy_url if "://" in legacy_url else f"https://{legacy_url}"
+        ).hostname
+        name = host or "LEM 1"
+    except Exception:
+        name = "LEM 1"
+    mcp_env_updater("LEM_CONNECTION_1_URL", legacy_url)
+    mcp_env_updater("LEM_CONNECTION_1_TOKEN", legacy_token)
+    mcp_env_updater("LEM_CONNECTION_1_NAME", name)
+    # Only auto-activate if no bridge-mode edge instance is active. A bridge
+    # instance sets EDGE_MANAGER_PROJECT_ID; if that is set, the LEM creds
+    # belong to that instance, not a standalone connection.
+    if not os.environ.get("EDGE_MANAGER_PROJECT_ID", ""):
+        mcp_env_updater(ACTIVE_LEM_CONNECTION, "1")
 
 
 # ── Model / API key selection ───────────────────────────────────────────────
