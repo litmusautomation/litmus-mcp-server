@@ -348,15 +348,15 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 
 ## Available Tools
 
-40 tools across 8 categories. Tools accept structured arguments and return JSON.
+57 tools across 11 categories. Tools accept structured arguments and return JSON.
 
 | Category                  | Function Name                          | Description |
 |---------------------------|----------------------------------------|-------------|
-| **DeviceHub — Devices**   | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers (e.g., ModbusTCP, OPCUA, BACnet). |
+| **DeviceHub, Devices**    | `get_litmusedge_driver_list`           | List supported Litmus Edge drivers (e.g., ModbusTCP, OPCUA, BACnet). |
 |                           | `get_devicehub_devices`                | List all configured DeviceHub devices with connection settings and status. |
 |                           | `create_devicehub_device`              | Create a new device with specified driver and default configuration. |
 |                           | `get_device_connection_status` **      | Check whether devices are actively publishing data via InfluxDB heartbeat (connected/stale/no_data). |
-| **DeviceHub — Tags**      | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
+| **DeviceHub, Tags**       | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
 |                           | `get_current_value_of_devicehub_tag`   | Read the current real-time value of a specific device tag. |
 |                           | `create_devicehub_tag`                 | Create a new tag (register) on a device. Driver-required properties auto-fill from defaults. |
 |                           | `update_devicehub_tag`                 | Update mutable fields of an existing tag (display name, description, properties). |
@@ -365,26 +365,27 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `get_all_tags_status`                  | Return tag status across all devices. Defaults to non-OK only so issues surface first. |
 | **Device Identity**       | `get_litmusedge_friendly_name`         | Get the human-readable name assigned to the Litmus Edge device. |
 |                           | `set_litmusedge_friendly_name`         | Update the friendly name of the Litmus Edge device. |
-| **LEM Integration**       | `get_cloud_activation_status`          | Check cloud registration and Litmus Edge Manager (LEM) connection status. |
+| **Cloud / LEM Activation**| `get_cloud_activation_status`          | Check cloud registration and Litmus Edge Manager (LEM) connection status. |
 | **Docker Management**     | `get_all_containers_on_litmusedge`     | List all Docker containers running on Litmus Edge Marketplace. |
 |                           | `run_docker_container_on_litmusedge`   | Deploy and run a new Docker container on Litmus Edge Marketplace. |
 | **NATS Topics** *         | `get_current_value_from_topic`         | Subscribe to a NATS topic and return the next published message. |
 |                           | `get_multiple_values_from_topic`       | Collect multiple sequential values from a NATS topic for trend analysis. |
 | **InfluxDB / Time Series** ** | `get_historical_data_from_influxdb` | Query historical time-series data from InfluxDB by measurement and time range. |
-|                           | `list_influxdb_measurements`           | List all measurement names in the `tsdata` database — discovery for downstream queries. |
+|                           | `list_influxdb_measurements`           | List all measurement names in the `tsdata` database, discovery for downstream queries. |
 |                           | `get_device_historical_data`           | Fuzzy-match device names to InfluxDB measurements and pull historical data per match. |
 |                           | `query_tag_data`                       | Query historical data for a specific tag by resolving its output topic. Newest-first. |
-|                           | `get_tag_statistics`                   | Aggregate stats for a tag: mean, min, max, stddev, count, plus baseline range (mean ± 2σ). |
+|                           | `get_tag_statistics`                   | Aggregate stats for a tag: mean, min, max, stddev, count, plus baseline range (mean +/- 2 sigma). |
 |                           | `get_device_data_for_inference`        | Composite payload for AI inference: device metadata, all tags, per-tag stats, and recent samples. |
-| **System — Events**       | `get_device_logs`                      | Retrieve system events filtered by time range, component, and severity (INFO/WARN/ALERT/ERROR). |
+| **System, Events**        | `get_system_events`                    | Retrieve system events filtered by time range, component, and severity (INFO/WARN/ALERT/ERROR). |
 |                           | `get_system_event_stats`               | Event manager statistics: queue sizes, processing rates, memory, health indicators. |
-| **System — Network**      | `get_firewall_rules`                   | Return configured firewall rules: ports, protocols, ALLOW/DENY actions. |
+| **System, Network**       | `get_firewall_rules`                   | Return configured firewall rules: ports, protocols, ALLOW/DENY actions. |
 |                           | `get_network_interface_info`           | Network interface details: IP, MAC, gateway, link status, MTU, speed. Defaults to `eth0`. |
 |                           | `get_packet_capture_interfaces`        | List network interfaces available for packet capture. |
 |                           | `get_packet_capture_status`            | Current packet capture state and list of captured `.pcap` files with metadata. |
-|                           | `start_packet_capture`                 | Start a packet capture on an interface. Duration 1–30 minutes. |
+|                           | `start_packet_capture`                 | Start a packet capture on an interface. Duration 1-30 minutes. |
 |                           | `stop_packet_capture`                  | Stop an in-progress packet capture. |
 | **Digital Twins**         | `list_digital_twin_models`             | List all Digital Twin models with ID, name, description, and version. |
+|                           | `create_digital_twin_model`            | Create a new Digital Twin model. |
 |                           | `list_digital_twin_instances`          | List all Digital Twin instances or filter by model ID. |
 |                           | `create_digital_twin_instance`         | Create a new Digital Twin instance from an existing model. |
 |                           | `list_static_attributes`               | List static attributes (fixed key-value pairs) for a model or instance. |
@@ -392,6 +393,22 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `list_transformations`                 | List data transformation rules configured for a Digital Twin model. |
 |                           | `get_digital_twin_hierarchy`           | Get the hierarchy configuration for a Digital Twin model. |
 |                           | `save_digital_twin_hierarchy`          | Save a new hierarchy configuration to a Digital Twin model. |
+| **Litmus Edge Manager (LEM)** *** | `lem_list_devices`             | List edge devices registered in a LEM project (paginated). |
+|                           | `lem_get_device_details`               | Full LEM-side record for a single edge device (versions, license, last seen, config). |
+|                           | `lem_list_device_versions`             | List Litmus Edge versions registered in a LEM project. |
+|                           | `lem_list_device_groups`               | List device group labels (project-level groupings) defined in a LEM project. |
+|                           | `lem_get_license_expiry`               | List devices whose license expires within the next N days. |
+|                           | `lem_get_expired_licenses`             | List devices in a LEM project whose license has already expired. |
+|                           | `lem_dashboard_usage`                  | Project usage summary (device counts, license usage, deployment stats). |
+|                           | `lem_get_project_alerts`               | List active project-level alerts (device offline, license issues, etc.). |
+|                           | `lem_list_companies`                   | List all companies on the LEM tenant with project/device/model counts. |
+|                           | `lem_get_company_details`              | Full details for a single company by name (teams, license, quotas). |
+|                           | `lem_list_company_projects`            | List all projects belonging to a given company. |
+|                           | `lem_get_project_details`              | Single-project details (timezone, data TTL, allocated slots, billing plan). |
+|                           | `lem_deployment_info`                  | LEM tenant deployment info (version, build, release metadata). |
+|                           | `lem_get_system_time`                  | LEM server clock; useful when comparing edge timestamps. |
+| **LEM Bridge** ***        | `lem_bridge_list_devicehub_devices`    | List devicehub devices on a specific edge by tunneling through LEM (no active-instance switch). |
+|                           | `lem_bridge_get_le_info`               | Identity info (friendly name, cloud activation) for an edge via the LEM bridge. |
 
 ### Tool Use Notes
 
@@ -403,10 +420,20 @@ To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you 
 
 **\*\* InfluxDB / Time Series Tools Requirements:**
 To use any tool marked with `**` (`get_historical_data_from_influxdb`, `list_influxdb_measurements`, `get_device_historical_data`, `query_tag_data`, `get_tag_statistics`, `get_device_data_for_inference`, `get_device_connection_status`), you must allow InfluxDB port access:
-1. Navigate to: **Litmus Edge → System → Network → Firewall**
+1. Navigate to: **Litmus Edge -> System -> Network -> Firewall**
 2. Add a firewall rule to allow port **8086** on **TCP**
 3. Ensure InfluxDB is accessible from the MCP server host
 4. Provide `INFLUX_HOST`, `INFLUX_PORT`, `INFLUX_DB_NAME`, `INFLUX_USERNAME`, `INFLUX_PASSWORD` in your MCP client headers
+
+**\*\*\* LEM Tools Requirements:**
+LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge. To use any tool marked with `***`, provide these headers in your MCP client configuration:
+- `EDGE_MANAGER_URL`: Litmus Edge Manager base URL (include `https://`)
+- `EDGE_API_TOKEN`: API token issued by LEM
+- `EDGE_MANAGER_PROJECT_ID` (optional): default project id, used when a tool's `project_id` argument is omitted
+- `EDGE_MANAGER_ADMIN_URL` (optional): admin URL, defaults to the EDGE_MANAGER_URL host on port `8446`
+- `VALIDATE_CERTIFICATE` (optional): `true` to verify TLS certs on the LEM bridge (default `false`)
+
+`lem_bridge_*` tools additionally tunnel through LEM to a specific edge and require both `project_id` and `device_id` as call arguments. The Web UI's **Config -> Litmus Edge Manager** page manages multiple LEM connections and writes these headers automatically.
 
 ---
 
