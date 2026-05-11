@@ -1,0 +1,74 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/atoolg-le/catalog-mcp-server
+  pullPolicy: IfNotPresent
+  # Override with the exact image tag on deploy, e.g. the git short SHA
+  tag: "9c312d41"
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8001
+
+# Ingress: optionally expose MCP server externally (usually only needed for AI tools outside cluster)
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: mcp-catalog.example.litmus.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mcp-catalog-tls
+      hosts:
+        - mcp-catalog.example.litmus.dev
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# DataHub GMS connection
+datahub:
+  gmsUrl: "http://datahub-datahub-gms:8080"
+  # Name of the K8s Secret that holds the GMS personal access token.
+  # The secret must have a key named "token".
+  # Create with: kubectl create secret generic datahub-gms-token --from-literal=token=<TOKEN> -n <namespace>
+  gmsTokenSecret: "datahub-gms-token"
+
+# MCP server URL (used by clients / AI tools to reach this service)
+mcpServerUrl: "http://mcp-server-datahub:8001/mcp"
+
+# Extra environment variables
+extraEnvs: []

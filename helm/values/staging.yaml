@@ -1,0 +1,33 @@
+image:
+  repository: ghcr.io/litmusautomation/catalog-mcp-server
+  tag: "9c312d4"
+
+datahub:
+  gmsUrl: "http://datahub-datahub-gms:8080"
+  gmsTokenSecret: "datahub-gms-token"
+
+mcpServerUrl: "http://mcp-server-datahub:8001/mcp"
+
+resources:
+  requests:
+    cpu: "1m"
+    memory: 128Mi
+  limits:
+    cpu: "500m"
+    memory: 256Mi
+
+ingress:
+  enabled: true
+  className: "nginxvpn"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-dev"
+  hosts:
+    - host: mcp-catalog-staging.litmus.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mcp-catalog-staging-tls
+      hosts:
+        - mcp-catalog-staging.litmus.dev

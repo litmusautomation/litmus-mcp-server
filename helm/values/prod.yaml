@@ -1,0 +1,19 @@
+image:
+  tag: "9c312d41"
+
+datahub:
+  gmsUrl: "http://datahub-datahub-gms:8080"
+  gmsTokenSecret: "datahub-gms-token"
+
+mcpServerUrl: "http://mcp-server-datahub:8001/mcp"
+
+resources:
+  requests:
+    cpu: "1m"
+    memory: 128Mi
+  limits:
+    cpu: "500m"
+    memory: 256Mi
+
+ingress:
+  enabled: false

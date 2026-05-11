@@ -1,0 +1,13 @@
+apiVersion: v2
+name: mcp-server-datahub
+description: Model Context Protocol Server for DataHub catalog API, callable via AI tools (Claude Code)
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - datahub
+  - mcp
+  - catalog
+  - ai
+maintainers:
+  - name: Litmus Automation

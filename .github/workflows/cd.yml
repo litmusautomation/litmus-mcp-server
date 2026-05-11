@@ -1,0 +1,61 @@
+name: CD — Deploy to Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (git short SHA from CI run)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - staging
+          - demo
+          - cs
+          - sales
+          - prod
+
+env:
+  ORG: ghcr.io/litmusautomation
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Resolve namespace
+        id: vars
+        run: |
+          case "${{ inputs.environment }}" in
+            dev)     echo "namespace=dev-datahub-env" ;;
+            qa)      echo "namespace=qa-datahub-env" ;;
+            staging) echo "namespace=staging-datahub-env" ;;
+            prod)    echo "namespace=litmus-datacatalog" ;;
+            cs)      echo "namespace=cs-datahub-env" ;;
+            demo)    echo "namespace=demo-datahub-env" ;;
+            sales)   echo "namespace=sales-datahub-env" ;;
+            *)       echo "Unknown environment: ${{ inputs.environment }}"; exit 1 ;;
+          esac >> $GITHUB_OUTPUT
+
+      - name: Helm deploy
+        run: |
+          TAG=${{ inputs.image_tag }}
+          ENV=${{ inputs.environment }}
+          NS=${{ steps.vars.outputs.namespace }}
+
+          helm upgrade --install mcp-server-datahub helm/chart \
+            --namespace $NS \
+            -f helm/values/${ENV}.yaml \
+            --set image.repository=$ORG/litmus-mcp-server \
+            --set image.tag="$TAG" \
+            --wait --timeout 5m
+
+          echo "Deployed litmus-mcp-server:$TAG → $ENV ($NS)"
+          kubectl get pods -n $NS -l app.kubernetes.io/name=mcp-server-datahub

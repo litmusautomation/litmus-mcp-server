@@ -1,0 +1,11 @@
+image:
+  tag: "3c84301"
+
+datahub:
+  gmsUrl: "http://datahub-datahub-gms:8080"
+  gmsTokenSecret: "datahub-gms-token"
+
+mcpServerUrl: "http://mcp-server-datahub:8001/mcp"
+
+ingress:
+  enabled: false   # internal-only for dev; enable if external AI tools need access
