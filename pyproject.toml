@@ -22,7 +22,7 @@ dependencies = [
 [dependency-groups]
 cve-patches = [
     "h11>=0.16.0",
-    "cryptography>=46.0.5"
+    "cryptography>=48.0.1"
 ]
 lint = [
     "black>=25.9.0",
