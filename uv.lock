@@ -673,7 +673,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "influxdb", specifier = ">=5.3.2" },
     { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "litmussdk", url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.5/litmussdk-2.6.5-py3-none-any.whl" },
+    { name = "litmussdk", url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.6/litmussdk-2.6.6-py3-none-any.whl" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.17.0" },
     { name = "nats-py", specifier = ">=2.11.0" },
     { name = "numpy", specifier = ">=2.3.4" },
@@ -701,8 +701,8 @@ test = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "litmussdk"
-version = "2.6.5"
-source = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.5/litmussdk-2.6.5-py3-none-any.whl" }
+version = "2.6.6"
+source = { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.6/litmussdk-2.6.6-py3-none-any.whl" }
 dependencies = [
     { name = "appdirs" },
     { name = "argcomplete" },
@@ -717,7 +717,7 @@ dependencies = [
     { name = "urllib3" },
 ]
 wheels = [
-    { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.5/litmussdk-2.6.5-py3-none-any.whl", hash = "sha256:40a4cb5f4c5ae7aa3c341d00af82b913fc583c3623342ee024cd2e5d8cc4de9e" },
+    { url = "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/2.6.6/litmussdk-2.6.6-py3-none-any.whl", hash = "sha256:5c3e4fc38c0183a8baf9d67e5b6fdf284391e22a5b8691823e3e0195d8e67c8f" },
 ]
 
 [package.metadata]
