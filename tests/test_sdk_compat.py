@@ -17,7 +17,10 @@ Background — fixed in litmussdk 2.5.6:
 
 from unittest.mock import MagicMock, patch
 
-from litmussdk.devicehub.record._functions import load_dh_record
+from litmussdk.devicehub.record._functions import (
+    clear_dh_record_cache,
+    load_dh_record,
+)
 from litmussdk.devicehub.record._utils import create_dh_cache
 from litmussdk.utils.errors.devicehub import MissingRecordVersionError
 
@@ -25,7 +28,9 @@ from litmussdk.utils.errors.devicehub import MissingRecordVersionError
 def test_load_dh_record_recovers_from_cold_cache():
     """First DriverRecord lookup raises (cache miss) → create_dh_cache is
     called with the live connection → second lookup succeeds."""
+    clear_dh_record_cache()
     conn = MagicMock()
+    conn.get_le_version.return_value = "4.0.0"
     fake_record = MagicMock(name="DriverRecord")
 
     calls = []
@@ -37,9 +42,6 @@ def test_load_dh_record_recovers_from_cold_cache():
         return fake_record
 
     with (
-        patch(
-            "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
-        ),
         patch(
             "litmussdk.devicehub.record._functions.DriverRecord",
             side_effect=fake_driver_record,
@@ -59,13 +61,12 @@ def test_load_dh_record_warm_cache_does_not_download():
     """Warm cache path: DriverRecord returns immediately, create_dh_cache
     is never invoked. Guards against an over-eager fix that always
     downloads."""
+    clear_dh_record_cache()
     conn = MagicMock()
+    conn.get_le_version.return_value = "4.0.0"
     fake_record = MagicMock(name="DriverRecord")
 
     with (
-        patch(
-            "litmussdk.devicehub.record._functions.get_version", return_value="4.0.0"
-        ),
         patch(
             "litmussdk.devicehub.record._functions.DriverRecord",
             return_value=fake_record,
