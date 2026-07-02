@@ -11,7 +11,7 @@ from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 from mcp.types import TextContent
 from starlette.requests import Request
 from litmussdk.devicehub import devices, tags
-from litmussdk.devicehub.tags._models import Tag
+from litmussdk.devicehub.tags import Tag
 from litmussdk.devicehub.drivers import list_all_drivers
 from litmussdk.utils import api, api_paths, gql_queries
 
