@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# macOS
+.DS_Store
+
 # local env
 .env
 .idea
