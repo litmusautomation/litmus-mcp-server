@@ -98,3 +98,22 @@ def test_create_dh_cache_idempotent_on_existing_cache():
         create_dh_cache("4.0.0", le_connection=conn)
 
     mock_download.assert_not_called()
+
+
+def test_web_client_lazy_sdk_imports_resolve():
+    """src/web_client.py (the production entry point via run.sh / Docker CMD)
+    imports these litmussdk symbols lazily inside request handlers, so no
+    other test touches them at collection time. Mirror those imports here so
+    an SDK bump that moves or removes any of them fails CI instead of
+    surfacing at runtime in the web UI."""
+    from litmussdk.lem.companies import list_all_company_stats  # noqa: F401
+    from litmussdk.lem.lifecycle.dashboard import (  # noqa: F401
+        deployment_info,
+        get_system_time,
+    )
+    from litmussdk.utils.api import direct_request  # noqa: F401
+    from litmussdk.utils.conn import (  # noqa: F401
+        new_le_connection,
+        new_lem_bridge_connection,
+        new_lem_connection,
+    )
