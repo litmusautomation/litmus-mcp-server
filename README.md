@@ -348,7 +348,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 
 ## Available Tools
 
-57 tools across 11 categories. Tools accept structured arguments and return JSON.
+59 tools across 12 categories. Tools accept structured arguments and return JSON.
 
 | Category                  | Function Name                          | Description |
 |---------------------------|----------------------------------------|-------------|
@@ -409,6 +409,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `lem_get_system_time`                  | LEM server clock; useful when comparing edge timestamps. |
 | **LEM Bridge** ***        | `lem_bridge_list_devicehub_devices`    | List devicehub devices on a specific edge by tunneling through LEM (no active-instance switch). |
 |                           | `lem_bridge_get_le_info`               | Identity info (friendly name, cloud activation) for an edge via the LEM bridge. |
+| **SDK Fallback (CLI)** ****| `litmus_sdk_discover`                 | Browse the full generated SDK catalog (~570 functions) by dotted-path prefix. |
+|                           | `litmus_sdk_call`                      | Invoke any SDK function by dotted path. Approval-gated; potentially destructive. |
 
 ### Tool Use Notes
 
@@ -431,6 +433,12 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `EDGE_API_TOKEN`: API token issued by LEM
 - `EDGE_MANAGER_PROJECT_ID` (optional): default project id, used when a tool's `project_id` argument is omitted
 - `EDGE_MANAGER_ADMIN_URL` (optional): admin URL, defaults to the EDGE_MANAGER_URL host on port `8446`
+
+**\*\*\*\* SDK Fallback Tools Requirements:**
+`litmus_sdk_discover` and `litmus_sdk_call` are backed by the standalone `litmus-sdk-cli` Go binary (installed in the Docker image; for local runs install it from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH, or set `LITMUS_SDK_CLI_PATH`). They expose the full generated SDK surface beyond the curated tools above. Notes:
+- Connection headers are forwarded to the CLI per call; no CLI profile is read or written.
+- `litmus_sdk_call` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
+- Prefer the dedicated tools above when one covers the operation.
 - `VALIDATE_CERTIFICATE` (optional): `true` to verify TLS certs on the LEM bridge (default `false`)
 
 `lem_bridge_*` tools additionally tunnel through LEM to a specific edge and require both `project_id` and `device_id` as call arguments. The Web UI's **Config -> Litmus Edge Manager** page manages multiple LEM connections and writes these headers automatically.

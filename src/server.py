@@ -26,6 +26,7 @@ from tools.data_tools import TOOLS as _DATA_TOOLS
 from tools.digitaltwins_tools import TOOLS as _DT_TOOLS
 from tools.system_tools import TOOLS as _SYS_TOOLS
 from tools.lem_tools import TOOLS as _LEM_TOOLS
+from tools.sdk_cli_tools import TOOLS as _SDK_CLI_TOOLS
 from tools.resource_tools import (
     get_documentation_resource_list,
     read_documentation_resource,
@@ -39,6 +40,7 @@ ALL_TOOLS = (
     + _DT_TOOLS
     + _SYS_TOOLS
     + _LEM_TOOLS
+    + _SDK_CLI_TOOLS
 )
 TOOL_BY_NAME: dict = {}
 for _tool in ALL_TOOLS:
@@ -98,6 +100,7 @@ async def handle_list_tools() -> list[Tool]:
             name=tool["name"],
             description=tool["description"],
             inputSchema=tool["schema"],
+            annotations=tool.get("annotations"),
         )
         for tool in ALL_TOOLS
     ]
