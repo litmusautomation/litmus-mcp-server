@@ -2,7 +2,7 @@
 Generic SDK fallback tools backed by the standalone `litmus-sdk-cli` Go binary.
 
 The curated tools in the other modules cover the common workflows. These two
-expose the full generated SDK surface (~570 functions) for everything else:
+expose the full generated SDK surface (~550 functions) for everything else:
 
   - litmus_sdk_discover  ->  `litmus-sdk-cli list [prefix]`
   - litmus_sdk_call      ->  `litmus-sdk-cli run <dotted.path> --args '{...}'`
@@ -248,7 +248,7 @@ TOOLS = [
         "name": "litmus_sdk_discover",
         "category": "sdk.fallback",
         "description": (
-            "Browses the full Litmus SDK function catalog (~570 functions across "
+            "Browses the full Litmus SDK function catalog (~550 functions across "
             "analytics, devicehub, digitaltwins, flows, integrations, lem, opc, "
             "system, unify, ...). Use this ONLY when no dedicated tool covers the "
             "operation, to find a function for litmus_sdk_call. Optionally pass a "

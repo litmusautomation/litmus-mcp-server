@@ -409,7 +409,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `lem_get_system_time`                  | LEM server clock; useful when comparing edge timestamps. |
 | **LEM Bridge** ***        | `lem_bridge_list_devicehub_devices`    | List devicehub devices on a specific edge by tunneling through LEM (no active-instance switch). |
 |                           | `lem_bridge_get_le_info`               | Identity info (friendly name, cloud activation) for an edge via the LEM bridge. |
-| **SDK Fallback (CLI)** ****| `litmus_sdk_discover`                 | Browse the full generated SDK catalog (~570 functions) by dotted-path prefix. |
+| **SDK Fallback (CLI)** ****| `litmus_sdk_discover`                 | Browse the full generated SDK catalog (~550 functions) by dotted-path prefix. |
 |                           | `litmus_sdk_call`                      | Invoke any SDK function by dotted path. Approval-gated; potentially destructive. |
 
 ### Tool Use Notes
