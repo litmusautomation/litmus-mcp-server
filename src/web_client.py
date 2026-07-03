@@ -197,7 +197,7 @@ async def api_models(provider: str):
 async def setup(request: Request):
     if request.method == "GET":
         return templates.TemplateResponse(
-            "setup.html", {"request": request, "active_page": "setup"}
+            request, "setup.html", {"active_page": "setup"}
         )
 
     form = await request.form()
@@ -207,8 +207,9 @@ async def setup(request: Request):
 
     if not anthropic_key and not openai_key and not gemini_key:
         return templates.TemplateResponse(
+            request,
             "setup.html",
-            {"request": request, "error": "Please provide at least one API key."},
+            {"error": "Please provide at least one API key."},
         )
 
     if anthropic_key:
@@ -365,9 +366,9 @@ async def update_env_form(request: Request):
     )
 
     return templates.TemplateResponse(
+        request,
         "update_env.html",
         {
-            "request": request,
             "current_model": model_type,
             "current_model_id": current_model_id,
             "current_client_timeout": current_client_timeout,
@@ -827,9 +828,9 @@ async def chat_get(request: Request):
     )
 
     response = templates.TemplateResponse(
+        request,
         "query.html",
         {
-            "request": request,
             "chat_log": [
                 {
                     "user": e.get("user", ""),
@@ -1036,9 +1037,9 @@ async def health_check(request: Request):
     mcp_env_loader()
     edge_instances = get_edge_instances()
     return templates.TemplateResponse(
+        request,
         "health.html",
         {
-            "request": request,
             "status": "ok",
             "version": "1.0",
             "active_page": "health",
@@ -1306,7 +1307,7 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
         return RedirectResponse(url="/")
     if exc.status_code == 500:
         return templates.TemplateResponse(
-            "500.html", {"request": request}, status_code=500
+            request, "500.html", status_code=500
         )
     return await http_exception_handler(request, exc)
 
