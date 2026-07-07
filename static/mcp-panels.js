@@ -2,11 +2,9 @@
 
 function togglePanel(panelId) {
     const panel    = document.getElementById(panelId);
-    const body     = panel.querySelector(".mcp-panel-body");
     const btn      = panel.querySelector(".mcp-panel-header");
     const expanded = btn.getAttribute("aria-expanded") === "true";
     btn.setAttribute("aria-expanded", String(!expanded));
-    body.style.maxHeight = expanded ? "0" : "";
     panel.classList.toggle("collapsed", expanded);
 }
 
@@ -318,4 +316,59 @@ function mcpCfgCopy() {
         _mcpCfg   = await res.json();
     } catch (_) {}
     mcpCfgReset();
+})();
+
+// ── Panel column resizers ───────────────────────────────────────────────────
+// Drag writes the preferred width to --left-w / --right-w; the grid's
+// clamp(min, preferred, cap) applies the viewport constraint, so a stored
+// width wider than the available space compresses and re-expands on its own.
+
+(function () {
+    const MIN = 200, MAX = 480;
+    const DEFAULTS = { left: 300, right: 320 };
+    const KEYS  = { left: "mcpPanelWidth.left", right: "mcpPanelWidth.right" };
+    const PROPS = { left: "--left-w",           right: "--right-w" };
+    const root = document.documentElement;
+    const clampW = w => Math.min(MAX, Math.max(MIN, Math.round(w)));
+
+    document.querySelectorAll(".panel-resizer").forEach(handle => {
+        const side  = handle.dataset.side;
+        const panel = document.getElementById(side === "left" ? "side-panels" : "mcp-config-panel");
+        if (!panel) return;
+        let startX = 0, startW = 0, dragging = false;
+
+        handle.addEventListener("pointerdown", e => {
+            e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+            startX = e.clientX;
+            // start from the rendered width so a viewport-capped panel doesn't jump
+            startW = panel.getBoundingClientRect().width;
+            dragging = true;
+            handle.classList.add("dragging");
+            document.body.classList.add("is-resizing");
+        });
+
+        handle.addEventListener("pointermove", e => {
+            if (!dragging) return;
+            const delta = side === "left" ? e.clientX - startX : startX - e.clientX;
+            root.style.setProperty(PROPS[side], clampW(startW + delta) + "px");
+        });
+
+        const endDrag = e => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove("dragging");
+            document.body.classList.remove("is-resizing");
+            try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            const w = parseInt(root.style.getPropertyValue(PROPS[side]), 10);
+            if (!Number.isNaN(w)) localStorage.setItem(KEYS[side], String(w));
+        };
+        handle.addEventListener("pointerup", endDrag);
+        handle.addEventListener("pointercancel", endDrag);
+
+        handle.addEventListener("dblclick", () => {
+            localStorage.removeItem(KEYS[side]);
+            root.style.setProperty(PROPS[side], DEFAULTS[side] + "px");
+        });
+    });
 })();

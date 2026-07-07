@@ -8,7 +8,23 @@
 *::-webkit-scrollbar-thumb { background: #ccddd8; border-radius: 99px; }
 *::-webkit-scrollbar-thumb:hover { background: #9ab8b0; }
 
+/* ── Layout variables ─────────────────────────────────────────────────────── */
+:root {
+    --left-w: 300px;      /* user-preferred panel widths; overwritten from localStorage */
+    --right-w: 320px;
+    --panel-min: 200px;
+    --panel-max: 480px;
+    --main-min: 680px;
+    --main-max: 1100px;
+    --gutter: 14px;
+}
+
+html { scrollbar-gutter: stable; }
+
 /* ── Base ─────────────────────────────────────────────────────────────────── */
+/* Three-column app layout: side panels and the main card are real grid
+   tracks, so they can never overlap. Each panel track is capped at half of
+   whatever width remains once the main card is guaranteed --main-min. */
 body {
     background-color: #f0f5f3;
     font-family: 'Inter', sans-serif;
@@ -16,13 +32,57 @@ body {
     line-height: 1.5;
     margin: 0;
     padding: 24px 16px;
-    display: flex;
-    align-items: flex-start;
+    display: grid;
+    --panel-cap: calc((100% - var(--main-min) - 2 * var(--gutter)) / 2);
+    grid-template-columns:
+        clamp(var(--panel-min), var(--left-w),  var(--panel-cap))  /* left panels   */
+        var(--gutter)                                              /* left resizer  */
+        minmax(var(--main-min), var(--main-max))                   /* main card     */
+        var(--gutter)                                              /* right resizer */
+        clamp(var(--panel-min), var(--right-w), var(--panel-cap)); /* right panel   */
     justify-content: center;
+    align-items: start;
     min-height: 100vh;
     min-width: 600px;
     color: #0d2420;
-    scrollbar-gutter: stable;
+}
+
+.container, .chat-shell {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+}
+
+/* ── Panel column resize handles ──────────────────────────────────────────── */
+.panel-resizer {
+    grid-row: 1;
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    height: calc(100vh - 48px);
+    cursor: col-resize;
+    touch-action: none;
+    display: flex;
+    justify-content: center;
+}
+
+.panel-resizer[data-side="left"]  { grid-column: 2; }
+.panel-resizer[data-side="right"] { grid-column: 4; }
+
+.panel-resizer::before {
+    content: "";
+    width: 3px;
+    border-radius: 99px;
+    background: transparent;
+    transition: background 0.15s;
+}
+
+.panel-resizer:hover::before,
+.panel-resizer.dragging::before { background: #c8ddd8; }
+
+body.is-resizing {
+    user-select: none;
+    cursor: col-resize;
 }
 
 hr {
@@ -542,22 +602,19 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     transition: opacity 0.5s;
 }
 
-/* ── Config page: floating right panel ───────────────────────────────────── */
+/* ── Right panel column (MCP Client Config) ──────────────────────────────── */
 .config-right-panel {
-    position: fixed;
-    right: 16px;
+    grid-column: 5;
+    grid-row: 1;
+    position: sticky;
     top: 24px;
-    width: clamp(264px, calc((100vw - 1100px) / 2 - 32px), 400px);
+    align-self: start;
+    min-width: 0;
     max-height: calc(100vh - 48px);
     overflow-y: auto;
-    z-index: 10;
     background: #fff;
     border-radius: 14px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
-}
-
-@media (max-width: 1320px) {
-    .config-right-panel { display: none; }
 }
 
 /* Collapse: hide body, rotate chevron */
@@ -672,23 +729,19 @@ textarea.config-json {
 .error-card h2 { color: #991b1b; margin-bottom: 8px; }
 .error-card p  { font-size: 15px; color: #6b2a2a; margin: 0 0 16px; }
 
-/* ── Side panels (floating, left of chat shell) ──────────────────────────── */
+/* ── Left panel column (Tools + Resources) ────────────────────────────────── */
 .side-panels {
-    position: fixed;
-    left: 16px;
+    grid-column: 1;
+    grid-row: 1;
+    position: sticky;
     top: 24px;
+    align-self: start;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: clamp(264px, calc((100vw - 1100px) / 2 - 32px), 400px);
+    min-width: 0;
     max-height: calc(100vh - 48px);
     overflow: hidden;
-    z-index: 10;
-}
-
-/* Hide on viewports where there's no room */
-@media (max-width: 1320px) {
-    .side-panels { display: none; }
 }
 
 .mcp-panel {
@@ -745,7 +798,7 @@ textarea.config-json {
 }
 
 .mcp-panel-body {
-    max-height: clamp(240px, calc(42vh - 70px), 520px);
+    max-height: clamp(240px, calc(50vh - 82px), 640px);
     overflow-y: auto;
     overflow-x: hidden;
     transition: max-height 0.25s ease;
@@ -754,6 +807,9 @@ textarea.config-json {
 }
 
 .mcp-panel.collapsed .mcp-panel-body {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
     border-top-color: transparent;
 }
 
@@ -1785,3 +1841,12 @@ button.clear-chat-btn:hover {
 }
 
 .chat-instance-selector.open .chat-instance-dropdown { display: block; }
+
+/* ── Narrow viewports: single column ──────────────────────────────────────── */
+/* Must stay at the end of the file: it overrides the panels' display rules
+   above, and media queries do not add specificity. */
+@media (max-width: 1199.98px) {
+    body { grid-template-columns: minmax(0, var(--main-max)); }
+    .side-panels, .config-right-panel, .panel-resizer { display: none; }
+    .container, .chat-shell { grid-column: 1; }
+}
