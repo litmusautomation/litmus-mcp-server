@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import asyncio
 import os
@@ -10,6 +11,7 @@ from mcp.server import Server
 
 from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR, METHOD_NOT_FOUND
@@ -106,6 +108,23 @@ async def handle_list_tools() -> list[Tool]:
     ]
 
 
+def _resolve_request():
+    """Resolve the request carrying connection headers for the current tool call.
+
+    Streamable HTTP attaches the Starlette request to each message
+    (mcp.request_context.request); its handlers run in the session manager's
+    task group, where the current_request context var is not set. SSE and
+    stdio set current_request on the connection task instead.
+    """
+    try:
+        ctx_request = mcp.request_context.request
+    except LookupError:
+        ctx_request = None
+    if ctx_request is not None:
+        return ctx_request
+    return current_request.get()
+
+
 @mcp.call_tool()
 async def handle_call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     """Dispatch a tool call by looking up the handler in TOOL_BY_NAME."""
@@ -116,7 +135,7 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
             ErrorData(code=METHOD_NOT_FOUND, message=f"Unknown tool: {name}")
         )
 
-    request = current_request.get()
+    request = _resolve_request()
     if request is None:
         raise McpError(
             ErrorData(code=INTERNAL_ERROR, message="Request context not available")
@@ -151,6 +170,34 @@ async def run_stdio_server():
     # Run with stdio transport
     async with stdio_server() as (read_stream, write_stream):
         await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
+
+
+# Streamable HTTP endpoint (spec 2025-03-26+). Stateless: every call carries
+# its own connection headers, so there is no per-session state to keep.
+session_manager = StreamableHTTPSessionManager(
+    app=mcp,
+    event_store=None,
+    json_response=False,
+    stateless=True,
+)
+
+
+class StreamableHTTPEndpoint:
+    """Raw ASGI endpoint for /mcp (a class instance so Starlette's Route does
+    not wrap it in request_response, which would double-send the response)."""
+
+    async def __call__(self, scope, receive, send):
+        await session_manager.handle_request(scope, receive, send)
+
+
+handle_streamable_http = StreamableHTTPEndpoint()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    """Run the streamable HTTP session manager for the app's lifetime."""
+    async with session_manager.run():
+        yield
 
 
 # SSE endpoint handler
@@ -263,7 +310,8 @@ async def oauth_not_supported(request: Request):
         content={
             "error": "unsupported_oauth",
             "error_description": "This MCP server does not support OAuth authentication. "
-            "Please use SSE transport with header-based authentication "
+            "Please use the Streamable HTTP (/mcp) or SSE (/sse) transport with "
+            "header-based authentication "
             "(EDGE_API_CLIENT_ID and EDGE_API_CLIENT_SECRET).",
         },
     )
@@ -277,7 +325,7 @@ async def health_check(request: Request):
 # Wrap the SSE POST handler with our context-capturing middleware
 wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
 
-# Create Starlette app with both SSE and POST message routes
+# Create Starlette app with the Streamable HTTP, SSE and POST message routes
 app = Starlette(
     routes=[
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
@@ -294,12 +342,22 @@ app = Starlette(
             methods=["GET"],
         ),
         Route(
+            "/.well-known/oauth-authorization-server/mcp",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
             "/.well-known/openid-configuration",
             endpoint=oauth_not_supported,
             methods=["GET"],
         ),
         Route(
             "/.well-known/openid-configuration/sse",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/openid-configuration/mcp",
             endpoint=oauth_not_supported,
             methods=["GET"],
         ),
@@ -318,10 +376,28 @@ app = Starlette(
             endpoint=oauth_not_supported,
             methods=["GET"],
         ),
+        Route(
+            "/.well-known/oauth-protected-resource/mcp",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
         Route("/register", endpoint=oauth_not_supported, methods=["GET", "POST"]),
         # Health check endpoint
         Route("/health", endpoint=health_check, methods=["GET"]),
-    ]
+        Route(
+            "/mcp/.well-known/openid-configuration",
+            endpoint=oauth_not_supported,
+            methods=["GET"],
+        ),
+        # Streamable HTTP transport; exact path (no Mount) so clients hitting
+        # /mcp are served directly instead of being 307-redirected to /mcp/
+        Route(
+            "/mcp",
+            endpoint=handle_streamable_http,
+            methods=["POST", "GET", "DELETE"],
+        ),
+    ],
+    lifespan=lifespan,
 )
 
 if __name__ == "__main__":
@@ -333,7 +409,8 @@ if __name__ == "__main__":
         logger.info("STDIO mode enabled")
         asyncio.run(run_stdio_server())
     else:
-        # SSE mode - runs HTTP server (current behavior)
-        logger.info(f"SSE mode enabled - Starting on port {MCP_PORT}")
-        logger.info(f"SSE endpoint: http://0.0.0.0:{MCP_PORT}/sse")
+        # HTTP mode - serves both Streamable HTTP and legacy SSE transports
+        logger.info(f"HTTP mode enabled - Starting on port {MCP_PORT}")
+        logger.info(f"Streamable HTTP endpoint: http://0.0.0.0:{MCP_PORT}/mcp")
+        logger.info(f"SSE endpoint (legacy): http://0.0.0.0:{MCP_PORT}/sse")
         uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)
