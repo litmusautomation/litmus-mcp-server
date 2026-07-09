@@ -1,7 +1,7 @@
 from starlette.requests import Request
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS
-from mcp.types import TextContent
+from mcp.types import TextContent, ToolAnnotations
 
 from litmussdk.digital_twins import (
     list_models,
@@ -471,6 +471,7 @@ TOOLS = [
     {
         "name": "list_digital_twin_models",
         "category": "digitaltwins.models",
+        "annotations": ToolAnnotations(title="List Digital Twin Models", readOnlyHint=True),
         "description": (
             "Lists all Digital Twin models configured on Litmus Edge. "
             "Returns model information including ID, name, description, and version. "
@@ -486,6 +487,7 @@ TOOLS = [
     {
         "name": "create_digital_twin_model",
         "category": "digitaltwins.models",
+        "annotations": ToolAnnotations(title="Create Digital Twin Model", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Creates a new Digital Twin model on Litmus Edge. "
             "A model is the schema/template; create instances from it with create_digital_twin_instance. "
@@ -516,6 +518,7 @@ TOOLS = [
     {
         "name": "list_digital_twin_instances",
         "category": "digitaltwins.instances",
+        "annotations": ToolAnnotations(title="List Digital Twin Instances", readOnlyHint=True),
         "description": (
             "Lists all Digital Twin instances or instances for a specific model. "
             "Instances are runtime representations of models with actual data. "
@@ -536,6 +539,7 @@ TOOLS = [
     {
         "name": "create_digital_twin_instance",
         "category": "digitaltwins.instances",
+        "annotations": ToolAnnotations(title="Create Digital Twin Instance", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Creates a new Digital Twin instance from an existing model. "
             "An instance is a runtime representation of a model that processes and publishes data. "
@@ -577,6 +581,7 @@ TOOLS = [
     {
         "name": "list_static_attributes",
         "category": "digitaltwins.attributes",
+        "annotations": ToolAnnotations(title="List Static Attributes", readOnlyHint=True),
         "description": (
             "Lists static attributes for a Digital Twin model or instance. "
             "Static attributes are fixed key-value pairs (e.g., serial number, location). "
@@ -601,6 +606,7 @@ TOOLS = [
     {
         "name": "list_dynamic_attributes",
         "category": "digitaltwins.attributes",
+        "annotations": ToolAnnotations(title="List Dynamic Attributes", readOnlyHint=True),
         "description": (
             "Lists dynamic attributes for a Digital Twin model or instance. "
             "Dynamic attributes are real-time data points (e.g., temperature, pressure, speed). "
@@ -625,6 +631,7 @@ TOOLS = [
     {
         "name": "list_transformations",
         "category": "digitaltwins.attributes",
+        "annotations": ToolAnnotations(title="List Transformations", readOnlyHint=True),
         "description": (
             "Lists transformations configured for a Digital Twin model. "
             "Transformations define data processing rules and calculations within the model. "
@@ -645,6 +652,7 @@ TOOLS = [
     {
         "name": "get_digital_twin_hierarchy",
         "category": "digitaltwins.hierarchy",
+        "annotations": ToolAnnotations(title="Get Digital Twin Hierarchy", readOnlyHint=True),
         "description": (
             "Gets the hierarchy configuration for a Digital Twin model. "
             "The hierarchy defines the structural relationships and organization within the model. "
@@ -665,6 +673,7 @@ TOOLS = [
     {
         "name": "save_digital_twin_hierarchy",
         "category": "digitaltwins.hierarchy",
+        "annotations": ToolAnnotations(title="Save Digital Twin Hierarchy", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Saves a new hierarchy configuration to a Digital Twin model. "
             "The hierarchy must be in the exact JSON format used by Digital Twins. "

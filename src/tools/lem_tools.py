@@ -1,6 +1,6 @@
 from starlette.requests import Request
 from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, TextContent
+from mcp.types import ErrorData, INVALID_PARAMS, TextContent, ToolAnnotations
 
 from litmussdk.lem.lifecycle.edgedevs.general import (
     get_devices_paginated,
@@ -531,6 +531,7 @@ TOOLS = [
     {
         "name": "lem_list_devices",
         "category": "lem.fleet",
+        "annotations": ToolAnnotations(title="LEM: List Devices", readOnlyHint=True),
         "description": (
             "Lists edge devices registered in a Litmus Edge Manager (LEM) project, "
             "paginated. Use this to enumerate the fleet from the LEM cloud side. "
@@ -560,6 +561,7 @@ TOOLS = [
     {
         "name": "lem_get_device_details",
         "category": "lem.fleet",
+        "annotations": ToolAnnotations(title="LEM: Get Device Details", readOnlyHint=True),
         "description": (
             "Fetches the full LEM-side record for a specific edge device "
             "(versions, license, last seen, configuration). "
@@ -581,6 +583,7 @@ TOOLS = [
     {
         "name": "lem_list_device_versions",
         "category": "lem.fleet",
+        "annotations": ToolAnnotations(title="LEM: List Device Versions", readOnlyHint=True),
         "description": (
             "Lists Litmus Edge versions registered in a LEM project. "
             "Use this to see which firmware/build versions are tracked in the cloud."
@@ -595,6 +598,7 @@ TOOLS = [
     {
         "name": "lem_list_device_groups",
         "category": "lem.fleet",
+        "annotations": ToolAnnotations(title="LEM: List Device Groups", readOnlyHint=True),
         "description": (
             "Lists device group labels (project-level groupings) defined in a LEM project. "
             "These are NOT driver TAGs - they are organizational tags used to group devices. "
@@ -610,6 +614,7 @@ TOOLS = [
     {
         "name": "lem_get_license_expiry",
         "category": "lem.licensing",
+        "annotations": ToolAnnotations(title="LEM: Get Expiring Licenses", readOnlyHint=True),
         "description": (
             "Lists devices in a LEM project whose license will expire within the next N days. "
             "Use for proactive license renewal planning. Returns device records with license info."
@@ -630,6 +635,7 @@ TOOLS = [
     {
         "name": "lem_get_expired_licenses",
         "category": "lem.licensing",
+        "annotations": ToolAnnotations(title="LEM: Get Expired Licenses", readOnlyHint=True),
         "description": (
             "Lists devices in a LEM project whose license has already expired. "
             "Use to audit which devices are running on lapsed licenses."
@@ -644,6 +650,7 @@ TOOLS = [
     {
         "name": "lem_dashboard_usage",
         "category": "lem.dashboard",
+        "annotations": ToolAnnotations(title="LEM: Dashboard Usage", readOnlyHint=True),
         "description": (
             "Returns the LEM project usage summary (device counts, license usage, "
             "deployment stats). Equivalent to the LEM web dashboard view. "
@@ -659,6 +666,7 @@ TOOLS = [
     {
         "name": "lem_get_project_alerts",
         "category": "lem.dashboard",
+        "annotations": ToolAnnotations(title="LEM: Get Project Alerts", readOnlyHint=True),
         "description": (
             "Lists active project-level alerts in LEM (device offline, license issues, etc.). "
             "Use to surface what needs attention across the fleet right now."
@@ -673,6 +681,7 @@ TOOLS = [
     {
         "name": "lem_list_companies",
         "category": "lem.companies",
+        "annotations": ToolAnnotations(title="LEM: List Companies", readOnlyHint=True),
         "description": (
             "Lists all companies (tenants) on this LEM with per-company counts of "
             "projects, devices, and models. Top of the LEM hierarchy. Start here when "
@@ -688,6 +697,7 @@ TOOLS = [
     {
         "name": "lem_get_company_details",
         "category": "lem.companies",
+        "annotations": ToolAnnotations(title="LEM: Get Company Details", readOnlyHint=True),
         "description": (
             "Gets full details for a single company: real name, description, teams, "
             "license, quotas. Use after lem_list_companies when the user asks for "
@@ -711,6 +721,7 @@ TOOLS = [
     {
         "name": "lem_list_company_projects",
         "category": "lem.companies",
+        "annotations": ToolAnnotations(title="LEM: List Company Projects", readOnlyHint=True),
         "description": (
             "Lists all projects belonging to a company. Each project is a container "
             "for edge devices. Use as the second step when drilling from a company "
@@ -731,6 +742,7 @@ TOOLS = [
     {
         "name": "lem_get_project_details",
         "category": "lem.companies",
+        "annotations": ToolAnnotations(title="LEM: Get Project Details", readOnlyHint=True),
         "description": (
             "Gets details for one project (timezone, data TTL, allocated slots, "
             "topics, billing plan). Use when the user asks about project-level "
@@ -746,6 +758,7 @@ TOOLS = [
     {
         "name": "lem_deployment_info",
         "category": "lem.tenant",
+        "annotations": ToolAnnotations(title="LEM: Deployment Info", readOnlyHint=True),
         "description": (
             "Returns deployment info for the LEM tenant itself: version, build, "
             "release metadata. Use to verify connectivity or check the LEM version."
@@ -760,6 +773,7 @@ TOOLS = [
     {
         "name": "lem_get_system_time",
         "category": "lem.tenant",
+        "annotations": ToolAnnotations(title="LEM: Get System Time", readOnlyHint=True),
         "description": (
             "Returns the LEM server clock. Use when comparing LEM-reported "
             "timestamps to edge timestamps or local time."
@@ -774,6 +788,7 @@ TOOLS = [
     {
         "name": "lem_bridge_list_devicehub_devices",
         "category": "lem.bridge",
+        "annotations": ToolAnnotations(title="LEM Bridge: List DeviceHub Devices", readOnlyHint=True),
         "description": (
             "Lists devicehub devices configured on a specific edge by tunneling "
             "through LEM. Requires both project_id and device_id (the edge's LEM "
@@ -794,6 +809,7 @@ TOOLS = [
     {
         "name": "lem_bridge_get_le_info",
         "category": "lem.bridge",
+        "annotations": ToolAnnotations(title="LEM Bridge: Get Edge Info", readOnlyHint=True),
         "description": (
             "Returns identity info for an edge (friendly name + cloud activation "
             "status) by tunneling through LEM. Useful for translating opaque LEM "

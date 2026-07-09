@@ -8,6 +8,8 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from mcp.types import ToolAnnotations  # noqa: E402
+
 from server import ALL_TOOLS, TOOL_BY_NAME  # noqa: E402
 
 ALLOWED_CATEGORIES = {
@@ -84,6 +86,34 @@ def test_tool_by_name_covers_every_entry():
     assert len(TOOL_BY_NAME) == len(ALL_TOOLS)
     for tool in ALL_TOOLS:
         assert TOOL_BY_NAME[tool["name"]] is tool
+
+
+def test_every_tool_has_title_and_hint_annotations():
+    """Anthropic connectors directory requirement: every tool must carry a
+    title and either readOnlyHint=True or destructiveHint=True."""
+    for tool in ALL_TOOLS:
+        ann = tool.get("annotations")
+        assert isinstance(
+            ann, ToolAnnotations
+        ), f"{tool['name']}: missing ToolAnnotations"
+        assert (
+            isinstance(ann.title, str) and ann.title
+        ), f"{tool['name']}: annotations.title is required"
+        if ann.readOnlyHint is True:
+            assert (
+                ann.destructiveHint is not True
+            ), f"{tool['name']}: read-only tool must not be destructive"
+        else:
+            assert ann.readOnlyHint is False and ann.destructiveHint is True, (
+                f"{tool['name']}: write tool needs readOnlyHint=False and "
+                "destructiveHint=True"
+            )
+
+
+def test_tool_names_within_directory_length_limit():
+    """Directory review rejects tool names longer than 64 characters."""
+    for tool in ALL_TOOLS:
+        assert len(tool["name"]) <= 64, f"{tool['name']}: name exceeds 64 chars"
 
 
 def test_get_device_logs_alias_points_to_get_system_events_handler():

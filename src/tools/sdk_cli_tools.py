@@ -277,7 +277,7 @@ TOOLS = [
             },
             "required": [],
         },
-        "annotations": ToolAnnotations(readOnlyHint=True),
+        "annotations": ToolAnnotations(title="Discover SDK Functions", readOnlyHint=True),
         "handler": discover_litmus_sdk_functions,
     },
     {
@@ -321,7 +321,9 @@ TOOLS = [
             },
             "required": ["function", "user_approved"],
         },
-        "annotations": ToolAnnotations(destructiveHint=True, readOnlyHint=False),
+        "annotations": ToolAnnotations(
+            title="Call SDK Function", destructiveHint=True, readOnlyHint=False
+        ),
         "handler": call_litmus_sdk_function,
     },
 ]

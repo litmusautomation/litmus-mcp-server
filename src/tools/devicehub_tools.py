@@ -8,7 +8,7 @@ from .data_tools import get_current_value_on_topic, _make_influx_client
 
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
-from mcp.types import TextContent
+from mcp.types import TextContent, ToolAnnotations
 from starlette.requests import Request
 from litmussdk.devicehub import devices, tags
 from litmussdk.devicehub.tags import Tag
@@ -992,6 +992,7 @@ TOOLS = [
     {
         "name": "get_litmusedge_driver_list",
         "category": "devicehub.drivers",
+        "annotations": ToolAnnotations(title="List DeviceHub Drivers", readOnlyHint=True),
         "description": (
             "Retrieves all available drivers supported by Litmus Edge DeviceHub. "
             "Returns a list of supported industrial protocols and device drivers "
@@ -1008,6 +1009,7 @@ TOOLS = [
     {
         "name": "get_devicehub_devices",
         "category": "devicehub.devices",
+        "annotations": ToolAnnotations(title="List DeviceHub Devices", readOnlyHint=True),
         "description": (
             "Retrieves all configured devices in the DeviceHub module on Litmus Edge. "
             "Returns detailed information about each device including name, driver type, "
@@ -1028,6 +1030,7 @@ TOOLS = [
     {
         "name": "create_devicehub_device",
         "category": "devicehub.devices",
+        "annotations": ToolAnnotations(title="Create DeviceHub Device", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Creates a new device in DeviceHub with specified driver and default configuration. "
             "IMPORTANT: This only creates the device with default settings. You'll need to: "
@@ -1053,6 +1056,7 @@ TOOLS = [
     {
         "name": "get_device_connection_status",
         "category": "devicehub.devices",
+        "annotations": ToolAnnotations(title="Get Device Connection Status", readOnlyHint=True),
         "description": (
             "Checks whether DeviceHub devices are actively publishing data by probing InfluxDB "
             "for recent records. Returns connected/stale/no_data per device. "
@@ -1078,6 +1082,7 @@ TOOLS = [
     {
         "name": "get_devicehub_device_tags",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="List Device Tags", readOnlyHint=True),
         "description": (
             "Retrieves tags (data points/registers) with their configuration. "
             "If device_name is provided, returns tags for that device only. "
@@ -1101,6 +1106,7 @@ TOOLS = [
     {
         "name": "get_current_value_of_devicehub_tag",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Get Tag Current Value", readOnlyHint=True),
         "description": (
             "Reads the current real-time value of a specific tag from a device. "
             "Returns the value along with timestamp and quality. "
@@ -1129,6 +1135,7 @@ TOOLS = [
     {
         "name": "create_devicehub_tag",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Create Device Tag", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Creates a new tag (register) on a DeviceHub device. "
             "register_name is the driver-specific register type (e.g. 'S' for Generator, "
@@ -1172,6 +1179,7 @@ TOOLS = [
     {
         "name": "update_devicehub_tag",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Update Device Tag", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Updates mutable fields of an existing DeviceHub tag: display name, description, or properties. "
             "The device and tag must already exist. Use get_devicehub_device_tags to find tag names."
@@ -1207,6 +1215,7 @@ TOOLS = [
     {
         "name": "delete_devicehub_tag",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Delete Device Tag", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Deletes a tag from a DeviceHub device. This is destructive and cannot be undone. "
             "Use get_devicehub_device_tags to confirm the tag name before deleting."
@@ -1230,6 +1239,7 @@ TOOLS = [
     {
         "name": "get_tag_status",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Get Tag Status", readOnlyHint=True),
         "description": (
             "Returns OK/ERROR status for tags on a specific device. "
             "Optionally filter to a single tag by name. "
@@ -1254,6 +1264,7 @@ TOOLS = [
     {
         "name": "get_all_tags_status",
         "category": "devicehub.tags",
+        "annotations": ToolAnnotations(title="Get All Tags Status", readOnlyHint=True),
         "description": (
             "Returns tag status across ALL devices. Defaults to returning only non-OK tags "
             "so the LLM sees actionable issues first. Pass filter_status='' to see all. "

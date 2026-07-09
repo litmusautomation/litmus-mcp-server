@@ -4,7 +4,7 @@ from utils.formatting import format_success_response, format_error_response
 
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS
-from mcp.types import TextContent
+from mcp.types import TextContent, ToolAnnotations
 from starlette.requests import Request
 from litmussdk.system import network, device_management
 
@@ -88,6 +88,7 @@ TOOLS = [
     {
         "name": "get_litmusedge_friendly_name",
         "category": "system.identity",
+        "annotations": ToolAnnotations(title="Get Edge Friendly Name", readOnlyHint=True),
         "description": (
             "Gets the human-readable name assigned to this Litmus Edge device. "
             "Use this to identify which Edge device you're working with."
@@ -102,6 +103,7 @@ TOOLS = [
     {
         "name": "set_litmusedge_friendly_name",
         "category": "system.identity",
+        "annotations": ToolAnnotations(title="Set Edge Friendly Name", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Changes the human-readable name of this Litmus Edge device. "
             "Use this to give the device a more descriptive name or update naming "
@@ -122,6 +124,7 @@ TOOLS = [
     {
         "name": "get_cloud_activation_status",
         "category": "system.cloud",
+        "annotations": ToolAnnotations(title="Get Cloud Activation Status", readOnlyHint=True),
         "description": (
             "Checks the cloud registration and activation status with Litmus Edge Manager. "
             "Returns connection state, last sync time, and any error messages. "
