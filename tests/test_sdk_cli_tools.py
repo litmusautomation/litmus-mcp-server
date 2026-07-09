@@ -1,4 +1,4 @@
-"""Tests for the generic SDK fallback tools backed by litmus-sdk-cli.
+"""Tests for the generic SDK fallback tools backed by litmus-cli.
 
 The CLI subprocess layer (_run_cli) is mocked throughout; these tests pin the
 approval gate, the header-to-env forwarding contract, and error handling.
@@ -198,13 +198,20 @@ def test_discover_without_prefix_lists_all():
 
 
 def test_missing_binary_raises_with_install_hint(monkeypatch):
-    monkeypatch.delenv("LITMUS_SDK_CLI_PATH", raising=False)
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
     with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
         with pytest.raises(McpError, match="litmus-sdk-releases"):
             _resolve_cli_binary()
 
 
+def test_old_binary_name_used_as_fallback(monkeypatch):
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    which = {"litmus-cli": None, "litmus-sdk-cli": "/usr/local/bin/litmus-sdk-cli"}
+    with patch("tools.sdk_cli_tools.shutil.which", side_effect=which.get):
+        assert _resolve_cli_binary() == "/usr/local/bin/litmus-sdk-cli"
+
+
 def test_bad_explicit_path_raises(monkeypatch):
-    monkeypatch.setenv("LITMUS_SDK_CLI_PATH", "/nonexistent/litmus-sdk-cli")
+    monkeypatch.setenv("LITMUS_CLI_PATH", "/nonexistent/litmus-cli")
     with pytest.raises(McpError, match="not an executable file"):
         _resolve_cli_binary()
