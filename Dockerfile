@@ -12,17 +12,17 @@ RUN apt-get update && apt-get install -y \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uvx /bin/uvx
 
-# Install the standalone litmus-sdk-cli binary (backs the litmus_sdk_discover
+# Install the standalone litmus-cli binary (backs the litmus_sdk_discover
 # and litmus_sdk_call fallback tools), pinned and checksum-verified
-ARG LITMUS_SDK_CLI_VERSION=cli-v0.3.0
+ARG LITMUS_CLI_VERSION=cli-v0.4.0
 ARG TARGETARCH=amd64
 RUN curl -fsSL -o /tmp/SHA256SUMS \
-        "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/${LITMUS_SDK_CLI_VERSION}/SHA256SUMS" \
-    && curl -fsSL -o "/tmp/litmus-sdk-cli-linux-${TARGETARCH}" \
-        "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/${LITMUS_SDK_CLI_VERSION}/litmus-sdk-cli-linux-${TARGETARCH}" \
-    && (cd /tmp && grep "litmus-sdk-cli-linux-${TARGETARCH}$" SHA256SUMS | sha256sum -c -) \
-    && mv "/tmp/litmus-sdk-cli-linux-${TARGETARCH}" /usr/local/bin/litmus-sdk-cli \
-    && chmod +x /usr/local/bin/litmus-sdk-cli \
+        "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/${LITMUS_CLI_VERSION}/SHA256SUMS" \
+    && curl -fsSL -o "/tmp/litmus-cli-linux-${TARGETARCH}" \
+        "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/${LITMUS_CLI_VERSION}/litmus-cli-linux-${TARGETARCH}" \
+    && (cd /tmp && grep "litmus-cli-linux-${TARGETARCH}$" SHA256SUMS | sha256sum -c -) \
+    && mv "/tmp/litmus-cli-linux-${TARGETARCH}" /usr/local/bin/litmus-cli \
+    && chmod +x /usr/local/bin/litmus-cli \
     && rm /tmp/SHA256SUMS
 
 # Set working directory

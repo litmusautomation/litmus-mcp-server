@@ -1,11 +1,11 @@
 """
-Generic SDK fallback tools backed by the standalone `litmus-sdk-cli` Go binary.
+Generic SDK fallback tools backed by the standalone `litmus-cli` Go binary.
 
 The curated tools in the other modules cover the common workflows. These two
 expose the full generated SDK surface (~550 functions) for everything else:
 
-  - litmus_sdk_discover  ->  `litmus-sdk-cli list [prefix]`
-  - litmus_sdk_call      ->  `litmus-sdk-cli run <dotted.path> --args '{...}'`
+  - litmus_sdk_discover  ->  `litmus-cli list [prefix]`
+  - litmus_sdk_call      ->  `litmus-cli run <dotted.path> --args '{...}'`
 
 Connection credentials are forwarded from the request headers to the
 subprocess environment. The header names used by this server and the CLI's
@@ -76,7 +76,7 @@ def _get_isolated_dir() -> str:
 
 
 def _resolve_cli_binary() -> str:
-    explicit = os.getenv("LITMUS_SDK_CLI_PATH")
+    explicit = os.getenv("LITMUS_CLI_PATH")
     if explicit:
         if os.path.isfile(explicit) and os.access(explicit, os.X_OK):
             return explicit
@@ -84,21 +84,29 @@ def _resolve_cli_binary() -> str:
             ErrorData(
                 code=INTERNAL_ERROR,
                 message=(
-                    f"LITMUS_SDK_CLI_PATH is set to '{explicit}' but it is not "
+                    f"LITMUS_CLI_PATH is set to '{explicit}' but it is not "
                     "an executable file"
                 ),
             )
         )
+    found = shutil.which("litmus-cli")
+    if found:
+        return found
+    # Transitional fallback: accept a pre-rename binary already on PATH.
     found = shutil.which("litmus-sdk-cli")
     if found:
+        logger.warning(
+            "Using deprecated 'litmus-sdk-cli' binary found on PATH; it was "
+            "renamed to 'litmus-cli' and the fallback will be removed"
+        )
         return found
     raise McpError(
         ErrorData(
             code=INTERNAL_ERROR,
             message=(
-                "litmus-sdk-cli binary not found. Install it from the cli-v* "
+                "litmus-cli binary not found. Install it from the cli-v* "
                 f"releases at {_RELEASES_URL} and put it on PATH, or set "
-                "LITMUS_SDK_CLI_PATH to its location."
+                "LITMUS_CLI_PATH to its location."
             ),
         )
     )
@@ -151,7 +159,7 @@ async def _run_cli(argv: list, env: dict) -> tuple:
         raise McpError(
             ErrorData(
                 code=INTERNAL_ERROR,
-                message=f"litmus-sdk-cli timed out after {_CLI_TIMEOUT_SECONDS}s",
+                message=f"litmus-cli timed out after {_CLI_TIMEOUT_SECONDS}s",
             )
         )
     return (
@@ -164,7 +172,7 @@ async def _run_cli(argv: list, env: dict) -> tuple:
 async def discover_litmus_sdk_functions(
     request: Request, arguments: dict | None = None
 ) -> list[TextContent]:
-    """Browse the SDK function catalog via `litmus-sdk-cli list [prefix]`."""
+    """Browse the SDK function catalog via `litmus-cli list [prefix]`."""
     prefix = (arguments or {}).get("prefix", "")
     argv = ["list"] + ([prefix] if prefix else [])
     try:
@@ -173,21 +181,21 @@ async def discover_litmus_sdk_functions(
             return format_error_response(
                 "sdk_discover_failed", (stderr or stdout).strip()
             )
-        logger.info(f"litmus-sdk-cli list {prefix or '(all)'} succeeded")
+        logger.info(f"litmus-cli list {prefix or '(all)'} succeeded")
         return format_success_response(
             {"prefix": prefix or None, "functions": stdout.strip()}
         )
     except McpError:
         raise
     except Exception as e:
-        logger.error(f"Error running litmus-sdk-cli list: {e}", exc_info=True)
+        logger.error(f"Error running litmus-cli list: {e}", exc_info=True)
         return format_error_response("sdk_discover_failed", str(e))
 
 
 async def call_litmus_sdk_function(
     request: Request, arguments: dict
 ) -> list[TextContent]:
-    """Invoke one SDK function via `litmus-sdk-cli run`, gated on approval."""
+    """Invoke one SDK function via `litmus-cli run`, gated on approval."""
     arguments = arguments or {}
     function = arguments.get("function")
     if not function or not isinstance(function, str):
@@ -234,12 +242,12 @@ async def call_litmus_sdk_function(
         except ValueError:
             result = stdout.strip()
 
-        logger.info(f"litmus-sdk-cli run {function} succeeded")
+        logger.info(f"litmus-cli run {function} succeeded")
         return format_success_response({"function": function, "result": result})
     except McpError:
         raise
     except Exception as e:
-        logger.error(f"Error running litmus-sdk-cli run {function}: {e}", exc_info=True)
+        logger.error(f"Error running litmus-cli run {function}: {e}", exc_info=True)
         return format_error_response("sdk_call_failed", str(e))
 
 
@@ -277,7 +285,7 @@ TOOLS = [
         "category": "sdk.fallback",
         "description": (
             "FALLBACK - POTENTIALLY DESTRUCTIVE. Invokes any Litmus SDK function "
-            "by dotted path via the litmus-sdk-cli dispatcher. Use ONLY when no "
+            "by dotted path via the litmus-cli dispatcher. Use ONLY when no "
             "dedicated tool covers the operation, with a path returned by "
             "litmus_sdk_discover. Many SDK functions modify or delete device "
             "configuration (create/update/delete/restart/deploy) with no undo. "
