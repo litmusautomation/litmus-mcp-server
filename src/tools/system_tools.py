@@ -4,7 +4,7 @@ from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
 
 from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, TextContent
+from mcp.types import ErrorData, INVALID_PARAMS, TextContent, ToolAnnotations
 from starlette.requests import Request
 from litmussdk.system import events as sys_events, network as sys_network
 
@@ -239,6 +239,7 @@ TOOLS = [
     {
         "name": "get_system_events",
         "category": "system.events",
+        "annotations": ToolAnnotations(title="Get System Events", readOnlyHint=True),
         "description": _GET_SYSTEM_EVENTS_DESC,
         "schema": _GET_SYSTEM_EVENTS_SCHEMA,
         "handler": get_device_logs,
@@ -246,6 +247,7 @@ TOOLS = [
     {
         "name": "get_device_logs",
         "category": "system.events",
+        "annotations": ToolAnnotations(title="Get Device Logs (Deprecated)", readOnlyHint=True),
         "description": (
             "(DEPRECATED, use `get_system_events`. Will be removed in next minor release.) "
             + _GET_SYSTEM_EVENTS_DESC
@@ -257,6 +259,7 @@ TOOLS = [
     {
         "name": "get_system_event_stats",
         "category": "system.events",
+        "annotations": ToolAnnotations(title="Get System Event Stats", readOnlyHint=True),
         "description": (
             "Returns event manager statistics: queue sizes, processing rates, memory, health indicators. "
             "Use this to check system health and event pipeline throughput. "
@@ -268,6 +271,7 @@ TOOLS = [
     {
         "name": "get_firewall_rules",
         "category": "system.network",
+        "annotations": ToolAnnotations(title="Get Firewall Rules", readOnlyHint=True),
         "description": (
             "Returns the firewall rules configured on this Litmus Edge device: "
             "ports, protocols, and ALLOW/DENY actions. "
@@ -279,6 +283,7 @@ TOOLS = [
     {
         "name": "get_network_interface_info",
         "category": "system.network",
+        "annotations": ToolAnnotations(title="Get Network Interface Info", readOnlyHint=True),
         "description": (
             "Returns network interface details for the Litmus Edge device: "
             "IP address, MAC, gateway, link status, MTU, and speed. "
@@ -300,6 +305,7 @@ TOOLS = [
     {
         "name": "get_packet_capture_interfaces",
         "category": "system.pcap",
+        "annotations": ToolAnnotations(title="List Packet Capture Interfaces", readOnlyHint=True),
         "description": (
             "Lists network interfaces available for packet capture on Litmus Edge "
             "(e.g. eth0, wlan0). Use this before starting a capture to pick the right interface."
@@ -310,6 +316,7 @@ TOOLS = [
     {
         "name": "get_packet_capture_status",
         "category": "system.pcap",
+        "annotations": ToolAnnotations(title="Get Packet Capture Status", readOnlyHint=True),
         "description": (
             "Returns the current packet capture state and list of captured .pcap files with metadata. "
             "Use start_packet_capture / stop_packet_capture to control capture."
@@ -320,6 +327,7 @@ TOOLS = [
     {
         "name": "start_packet_capture",
         "category": "system.pcap",
+        "annotations": ToolAnnotations(title="Start Packet Capture", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Starts a packet capture on a Litmus Edge network interface. "
             "Duration is 1-30 minutes. Let it run to completion - the pcap file "
@@ -347,6 +355,7 @@ TOOLS = [
     {
         "name": "stop_packet_capture",
         "category": "system.pcap",
+        "annotations": ToolAnnotations(title="Stop Packet Capture", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Stops an in-progress packet capture on Litmus Edge. "
             "WARNING: stopping early discards the pcap file - only use this to abort "

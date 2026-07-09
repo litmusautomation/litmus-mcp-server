@@ -21,7 +21,7 @@ from numpy import zeros
 from starlette.requests import Request
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
-from mcp.types import TextContent
+from mcp.types import TextContent, ToolAnnotations
 
 import influxdb
 from litmussdk.devicehub import devices as dh_devices, tags as dh_tags
@@ -852,6 +852,7 @@ TOOLS = [
     {
         "name": "get_current_value_from_topic",
         "category": "nats.topics",
+        "annotations": ToolAnnotations(title="Get Current Topic Value", readOnlyHint=True),
         "description": (
             "Gets the current value from a NATS topic. "
             "Subscribes to the topic and returns the next published message. "
@@ -872,6 +873,7 @@ TOOLS = [
     {
         "name": "get_multiple_values_from_topic",
         "category": "nats.topics",
+        "annotations": ToolAnnotations(title="Get Multiple Topic Values", readOnlyHint=True),
         "description": (
             "Collects multiple sequential values from a NATS topic for trend analysis or plotting. "
             "WARNING: This function blocks until num_samples messages are received. "
@@ -909,6 +911,7 @@ TOOLS = [
     {
         "name": "get_historical_data_from_influxdb",
         "category": "datahub.influx",
+        "annotations": ToolAnnotations(title="Query Historical Data", readOnlyHint=True),
         "description": (
             "Queries historical time-series data from InfluxDB. "
             "Retrieve past data, historic trends, or perform data analysis on stored values. "
@@ -938,6 +941,7 @@ TOOLS = [
     {
         "name": "list_influxdb_measurements",
         "category": "datahub.influx",
+        "annotations": ToolAnnotations(title="List InfluxDB Measurements", readOnlyHint=True),
         "description": (
             "Lists all measurement names in the InfluxDB tsdata database. "
             "Use this to discover available data series before querying historical data. "
@@ -949,6 +953,7 @@ TOOLS = [
     {
         "name": "get_device_historical_data",
         "category": "datahub.queries",
+        "annotations": ToolAnnotations(title="Get Device Historical Data", readOnlyHint=True),
         "description": (
             "Queries historical InfluxDB data using fuzzy device name matching. "
             "Use this when you know a device name but not the exact InfluxDB measurement. "
@@ -983,6 +988,7 @@ TOOLS = [
     {
         "name": "query_tag_data",
         "category": "datahub.queries",
+        "annotations": ToolAnnotations(title="Query Tag Data", readOnlyHint=True),
         "description": (
             "Queries historical time-series data for a specific tag by looking up its InfluxDB topic. "
             "Returns data ordered newest first. "
@@ -1021,6 +1027,7 @@ TOOLS = [
     {
         "name": "get_tag_statistics",
         "category": "datahub.queries",
+        "annotations": ToolAnnotations(title="Get Tag Statistics", readOnlyHint=True),
         "description": (
             "Returns aggregate statistics for a tag: mean, min, max, stddev, count, and baseline range (mean +/- 2sigma). "
             "Use this for anomaly detection or understanding normal operating range. "
@@ -1054,6 +1061,7 @@ TOOLS = [
     {
         "name": "get_device_data_for_inference",
         "category": "datahub.queries",
+        "annotations": ToolAnnotations(title="Get Device Data for Inference", readOnlyHint=True),
         "description": (
             "Comprehensive data package for AI inference: device metadata, all tags, per-tag statistics, "
             "and recent samples in one call. Preferred when asking the AI to analyze or diagnose a device. "
