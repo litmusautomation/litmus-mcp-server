@@ -45,13 +45,20 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 
 ## Quick Launch
 
-### Start an HTTP SSE MCP Server using Docker
+### Start an HTTP MCP Server using Docker
 
-Run the server in Docker (HTTP SSE only)
+Run the server in Docker (HTTP only)
 
 ```bash
 docker run -d --name litmus-mcp-server -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:latest
 ```
+
+The HTTP server exposes both MCP transports on port 8000:
+
+- `http://<host>:8000/mcp` - Streamable HTTP (current MCP spec, recommended)
+- `http://<host>:8000/sse` - HTTP+SSE (legacy transport, kept for older clients)
+
+Clients that support Streamable HTTP should point at `/mcp` (e.g. `"type": "http"`, as in the Claude Code example below). The remaining client examples use the SSE endpoint; swap in `/mcp` if your client supports it, keeping the same headers.
 
 NOTE: The Litmus MCP Server is built for linux/AMD64 platforms. If running in Docker on ARM64, specify the AMD64 platform type by including the --platform argument:
 
@@ -133,8 +140,8 @@ Run Claude from a directory that includes a configuration file at `~/.claude/mcp
 {
   "mcpServers": {
     "litmus-mcp-server": {
-      "type": "sse",
-      "url": "http://localhost:8000/sse",
+      "type": "http",
+      "url": "http://localhost:8000/mcp",
       "headers": {
         "EDGE_URL": "${EDGE_URL}",
         "EDGE_API_CLIENT_ID": "${EDGE_API_CLIENT_ID}",
@@ -435,7 +442,7 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `EDGE_MANAGER_ADMIN_URL` (optional): admin URL, defaults to the EDGE_MANAGER_URL host on port `8446`
 
 **\*\*\*\* SDK Fallback Tools Requirements:**
-`litmus_sdk_discover` and `litmus_sdk_call` are backed by the standalone `litmus-sdk-cli` Go binary (installed in the Docker image; for local runs install it from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH, or set `LITMUS_SDK_CLI_PATH`). They expose the full generated SDK surface beyond the curated tools above. Notes:
+`litmus_sdk_discover` and `litmus_sdk_call` are backed by the standalone `litmus-sdk-cli` Go binary. The Docker image installs it at build time, and `run.sh` installs or updates it automatically for local runs (checksum-verified into `.venv/bin`, pinned to the same version as the Docker image via the Dockerfile `ARG LITMUS_SDK_CLI_VERSION`). To use a different binary, set `LITMUS_SDK_CLI_PATH` (skips the bootstrap), or install one from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH. They expose the full generated SDK surface beyond the curated tools above. Notes:
 - Connection headers are forwarded to the CLI per call; no CLI profile is read or written.
 - `litmus_sdk_call` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
 - Prefer the dedicated tools above when one covers the operation.
