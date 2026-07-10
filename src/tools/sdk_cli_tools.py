@@ -204,7 +204,7 @@ async def call_litmus_sdk_function(
                 code=INVALID_PARAMS,
                 message=(
                     "'function' parameter is required: a dotted path exactly as "
-                    "returned by litmus_sdk_discover (e.g. 'devicehub.ListDevices')"
+                    "returned by litmus_sdk_discover (e.g. 'le.devicehub.ListDevices')"
                 ),
             )
         )
@@ -256,13 +256,15 @@ TOOLS = [
         "name": "litmus_sdk_discover",
         "category": "sdk.fallback",
         "description": (
-            "Browses the full Litmus SDK function catalog (~550 functions across "
-            "analytics, devicehub, digitaltwins, flows, integrations, lem, opc, "
-            "system, unify, ...). Use this ONLY when no dedicated tool covers the "
-            "operation, to find a function for litmus_sdk_call. Optionally pass a "
-            "dotted-path prefix (e.g. 'integrations' or 'lem.Get') to narrow the "
-            "listing. Returned dotted paths and parameter names are exactly what "
-            "litmus_sdk_call expects; do not guess paths that this tool did not return."
+            "Browses the full Litmus SDK function catalog (~550 functions). Litmus "
+            "Edge packages live under the 'le.' prefix (le.devicehub, le.analytics, "
+            "le.digitaltwins, le.flows, le.integrations, le.marketplace, le.opc, "
+            "le.system); lem.* and unify.* are top-level. Use this ONLY when no "
+            "dedicated tool covers the operation, to find a function for "
+            "litmus_sdk_call. Optionally pass a dotted-path prefix (e.g. "
+            "'le.integrations' or 'lem.Get') to narrow the listing. Returned dotted "
+            "paths and parameter names are exactly what litmus_sdk_call expects; do "
+            "not guess paths that this tool did not return."
         ),
         "schema": {
             "type": "object",
@@ -271,7 +273,7 @@ TOOLS = [
                     "type": "string",
                     "description": (
                         "Optional dotted-path prefix to filter the catalog "
-                        "(e.g. 'devicehub', 'integrations', 'lem.Get')"
+                        "(e.g. 'le.devicehub', 'le.integrations', 'lem.Get')"
                     ),
                 },
             },
@@ -301,7 +303,7 @@ TOOLS = [
                     "type": "string",
                     "description": (
                         "Dotted function path exactly as returned by "
-                        "litmus_sdk_discover (e.g. 'devicehub.ListDevices')"
+                        "litmus_sdk_discover (e.g. 'le.devicehub.ListDevices')"
                     ),
                 },
                 "args": {
