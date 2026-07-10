@@ -1,0 +1,22 @@
+# TLS termination for the Litmus MCP server.
+#
+# Certificates are issued and renewed automatically via Let's Encrypt for
+# the public hostname in $DOMAIN. Optionally uncomment the email line to
+# receive certificate expiry notices.
+#
+# {
+#     email ops@example.com
+# }
+
+{$DOMAIN} {
+	# Streamable HTTP (/mcp), legacy SSE (/sse, /messages), and /health all
+	# live on the MCP server's port 8000. Caddy streams SSE responses
+	# without buffering by default. The web UI (:9000) is intentionally not
+	# proxied; it is a local operator console.
+	reverse_proxy litmus-mcp-server:8000
+
+	# For servers on private networks without public DNS, replace the
+	# automatic certificates with Caddy's internal CA (clients must trust
+	# it) by uncommenting:
+	# tls internal
+}

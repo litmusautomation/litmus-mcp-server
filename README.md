@@ -31,6 +31,7 @@ The official [Litmus Automation](https://litmus.io) **Model Context Protocol (MC
 ## Table of Contents
 
 - [Quick Launch](#quick-launch)
+  - [HTTPS Deployment](#https-deployment)
   - [Web UI](#web-ui)
   - [Persistent Configuration](#persistent-configuration)
   - [Claude Code CLI](#claude-code-cli)
@@ -65,6 +66,24 @@ NOTE: The Litmus MCP Server is built for linux/AMD64 platforms. If running in Do
 ```bash
 docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.io/litmusautomation/litmus-mcp-server:main
 ```
+
+---
+
+## HTTPS Deployment
+
+The container serves plain HTTP and is intended to sit behind a TLS-terminating reverse proxy in production. [`deploy/docker-compose.https.yml`](deploy/docker-compose.https.yml) ships that pattern using [Caddy](https://caddyserver.com/), which obtains and renews Let's Encrypt certificates automatically:
+
+```bash
+# DNS A/AAAA record for mcp.example.com must point at this machine
+DOMAIN=mcp.example.com docker compose -f deploy/docker-compose.https.yml up -d
+```
+
+MCP clients then connect to `https://mcp.example.com/mcp` (no port) with the same headers as before. Notes:
+
+- Only Caddy is published to the host (ports 80/443); the MCP server stays on the internal compose network, and the web UI (`:9000`) is deliberately not proxied.
+- Certificates persist in the `caddy_data` volume across restarts.
+- For private networks without public DNS, uncomment `tls internal` in [`deploy/Caddyfile`](deploy/Caddyfile) to use Caddy's internal CA instead (clients must trust that CA).
+- Any other TLS-terminating proxy (Traefik, nginx, a cloud load balancer) works the same way: forward to port 8000 and keep SSE responses unbuffered.
 
 ---
 
