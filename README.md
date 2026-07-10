@@ -84,6 +84,8 @@ docker run -d --name litmus-mcp-server \
 - **`:9000`** — Web UI (chat interface). Open `http://localhost:9000` in your browser, add a Litmus Edge instance via the config page, and start chatting.
 - **`:8000`** — SSE endpoint for external MCP clients (Claude Desktop, Cursor, VS Code, etc.) — still available as normal.
 
+> **Security note:** the Web UI is a local operator console. It has no login and it stores LLM API keys and Litmus Edge credentials, so only publish port 9000 on networks you trust; port 8000 (`/mcp`) is the only endpoint intended for MCP clients. Outside Docker, the UI binds to `127.0.0.1` unless you set `WEB_UI_HOST=0.0.0.0` (the Docker image sets this so the `-p 9000:9000` mapping works; simply omit the mapping to keep the UI private). Cross-origin browser access to the UI is disabled unless `WEB_UI_CORS_ORIGINS` is set to a comma-separated list of explicit origins.
+
 **Supported LLM providers:** Anthropic Claude, OpenAI, and Google Gemini. Provide one or more keys at startup (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or enter them through the Web UI's setup screen. The active provider and model are switchable from the Web UI's config page at any time.
 
 **Multiple Litmus Edge instances:** The Web UI lets you register and switch between multiple Litmus Edge devices from a single MCP server. Each instance keeps its own URL and OAuth2 credentials; the active instance's credentials are mirrored into `EDGE_URL` / `EDGE_API_CLIENT_ID` / `EDGE_API_CLIENT_SECRET` automatically. Manage instances under **Config → Litmus Edge Instances**, or check status per-instance from the **Health** page.
