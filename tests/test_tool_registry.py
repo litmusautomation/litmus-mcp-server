@@ -38,7 +38,7 @@ ALLOWED_CATEGORIES = {
     "sdk.fallback",
 }
 
-EXPECTED_CANONICAL_COUNT = 59
+EXPECTED_CANONICAL_COUNT = 60
 
 
 def test_every_entry_well_formed():

@@ -417,7 +417,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 | **LEM Bridge** ***        | `lem_bridge_list_devicehub_devices`    | List devicehub devices on a specific edge by tunneling through LEM (no active-instance switch). |
 |                           | `lem_bridge_get_le_info`               | Identity info (friendly name, cloud activation) for an edge via the LEM bridge. |
 | **SDK Fallback (CLI)** ****| `litmus_sdk_discover`                 | Browse the full generated SDK catalog (~550 functions) by dotted-path prefix. |
-|                           | `litmus_sdk_call`                      | Invoke any SDK function by dotted path. Approval-gated; potentially destructive. |
+|                           | `litmus_sdk_read`                      | Invoke a read-only SDK function (Get/List/Browse/...) by dotted path. |
+|                           | `litmus_sdk_write`                     | Invoke a state-changing SDK function by dotted path. Approval-gated; potentially destructive. |
 
 ### Tool Use Notes
 
@@ -442,9 +443,10 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `EDGE_MANAGER_ADMIN_URL` (optional): admin URL, defaults to the EDGE_MANAGER_URL host on port `8446`
 
 **\*\*\*\* SDK Fallback Tools Requirements:**
-`litmus_sdk_discover` and `litmus_sdk_call` are backed by the standalone `litmus-cli` Go binary. The Docker image installs it at build time, and `run.sh` installs or updates it automatically for local runs (checksum-verified into `.venv/bin`, pinned to the same version as the Docker image via the Dockerfile `ARG LITMUS_CLI_VERSION`). To use a different binary, set `LITMUS_CLI_PATH` (skips the bootstrap), or install one from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH. They expose the full generated SDK surface beyond the curated tools above. Notes:
+`litmus_sdk_discover`, `litmus_sdk_read`, and `litmus_sdk_write` are backed by the standalone `litmus-cli` Go binary. The Docker image installs it at build time, and `run.sh` installs or updates it automatically for local runs (checksum-verified into `.venv/bin`, pinned to the same version as the Docker image via the Dockerfile `ARG LITMUS_CLI_VERSION`). To use a different binary, set `LITMUS_CLI_PATH` (skips the bootstrap), or install one from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH. They expose the full generated SDK surface beyond the curated tools above. Notes:
 - Connection headers are forwarded to the CLI per call; no CLI profile is read or written.
-- `litmus_sdk_call` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
+- `litmus_sdk_read` accepts only read-only functions (final segment starting with Get, List, Browse, Describe, Read, Search, Find, Query, or Count); everything else goes through `litmus_sdk_write`.
+- `litmus_sdk_write` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
 - Prefer the dedicated tools above when one covers the operation.
 - `VALIDATE_CERTIFICATE` (optional): `true` to verify TLS certs on the LEM bridge (default `false`)
 

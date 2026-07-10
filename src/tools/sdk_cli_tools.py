@@ -1,11 +1,17 @@
 """
 Generic SDK fallback tools backed by the standalone `litmus-cli` Go binary.
 
-The curated tools in the other modules cover the common workflows. These two
+The curated tools in the other modules cover the common workflows. These
 expose the full generated SDK surface (~550 functions) for everything else:
 
   - litmus_sdk_discover  ->  `litmus-cli list [prefix]`
-  - litmus_sdk_call      ->  `litmus-cli run <dotted.path> --args '{...}'`
+  - litmus_sdk_read      ->  `litmus-cli run <dotted.path>` (read-only functions)
+  - litmus_sdk_write     ->  `litmus-cli run <dotted.path>` (everything else)
+
+The read/write split is by the verb prefix of the function's final path
+segment (_READ_VERBS). Functions that don't match a read verb are treated
+as writes, so misclassification can only add an approval prompt, never
+skip one.
 
 Connection credentials are forwarded from the request headers to the
 subprocess environment. The header names used by this server and the CLI's
@@ -14,7 +20,7 @@ environment variables are intentionally identical, so forwarding is verbatim.
 profile saved on the host can never leak into a request, and no request can
 write one.
 
-`litmus_sdk_call` is approval-gated: it fails unless `user_approved` is true,
+`litmus_sdk_write` is approval-gated: it fails unless `user_approved` is true,
 which the model may only set after the user explicitly approved the exact
 function and arguments in conversation.
 """
@@ -192,11 +198,32 @@ async def discover_litmus_sdk_functions(
         return format_error_response("sdk_discover_failed", str(e))
 
 
-async def call_litmus_sdk_function(
-    request: Request, arguments: dict
-) -> list[TextContent]:
-    """Invoke one SDK function via `litmus-cli run`, gated on approval."""
-    arguments = arguments or {}
+# Read-only SDK functions are recognized by the verb prefix of the final
+# path segment. Anything else is a write and must go through the
+# litmus_sdk_write approval gate.
+_READ_VERBS = (
+    "Get",
+    "List",
+    "Browse",
+    "Describe",
+    "Read",
+    "Search",
+    "Find",
+    "Query",
+    "Count",
+)
+
+
+def _is_read_function(function: str) -> bool:
+    leaf = function.rsplit(".", 1)[-1]
+    return any(
+        leaf.startswith(verb)
+        and (len(leaf) == len(verb) or leaf[len(verb)].isupper())
+        for verb in _READ_VERBS
+    )
+
+
+def _require_function(arguments: dict) -> str:
     function = arguments.get("function")
     if not function or not isinstance(function, str):
         raise McpError(
@@ -205,6 +232,85 @@ async def call_litmus_sdk_function(
                 message=(
                     "'function' parameter is required: a dotted path exactly as "
                     "returned by litmus_sdk_discover (e.g. 'le.devicehub.ListDevices')"
+                ),
+            )
+        )
+    return function
+
+
+def _require_args(arguments: dict) -> dict:
+    function_args = arguments.get("args") or {}
+    if not isinstance(function_args, dict):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message="'args' must be a JSON object keyed by SDK parameter names",
+            )
+        )
+    return function_args
+
+
+async def _run_sdk_function(
+    request: Request, function: str, function_args: dict, error_code: str
+) -> list[TextContent]:
+    argv = ["run", function]
+    if function_args:
+        argv += ["--args", json.dumps(function_args)]
+    try:
+        returncode, stdout, stderr = await _run_cli(argv, _build_cli_env(request))
+        if returncode != 0:
+            return format_error_response(error_code, (stderr or stdout).strip())
+
+        try:
+            result = json.loads(stdout)
+        except ValueError:
+            result = stdout.strip()
+
+        logger.info(f"litmus-cli run {function} succeeded")
+        return format_success_response({"function": function, "result": result})
+    except McpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error running litmus-cli run {function}: {e}", exc_info=True)
+        return format_error_response(error_code, str(e))
+
+
+async def read_litmus_sdk_function(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """Invoke one read-only SDK function via `litmus-cli run`."""
+    arguments = arguments or {}
+    function = _require_function(arguments)
+    if not _is_read_function(function):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    f"'{function}' is not a read-only SDK function (read-only "
+                    f"functions start with one of: {', '.join(_READ_VERBS)}). "
+                    "Use litmus_sdk_write, which requires explicit user approval."
+                ),
+            )
+        )
+    return await _run_sdk_function(
+        request, function, _require_args(arguments), "sdk_read_failed"
+    )
+
+
+async def write_litmus_sdk_function(
+    request: Request, arguments: dict
+) -> list[TextContent]:
+    """Invoke one state-changing SDK function via `litmus-cli run`, gated on
+    approval."""
+    arguments = arguments or {}
+    function = _require_function(arguments)
+    if _is_read_function(function):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    f"'{function}' is a read-only SDK function; call it via "
+                    "litmus_sdk_read instead (no approval required)."
                 ),
             )
         )
@@ -220,35 +326,9 @@ async def call_litmus_sdk_function(
                 ),
             )
         )
-    function_args = arguments.get("args") or {}
-    if not isinstance(function_args, dict):
-        raise McpError(
-            ErrorData(
-                code=INVALID_PARAMS,
-                message="'args' must be a JSON object keyed by SDK parameter names",
-            )
-        )
-
-    argv = ["run", function]
-    if function_args:
-        argv += ["--args", json.dumps(function_args)]
-    try:
-        returncode, stdout, stderr = await _run_cli(argv, _build_cli_env(request))
-        if returncode != 0:
-            return format_error_response("sdk_call_failed", (stderr or stdout).strip())
-
-        try:
-            result = json.loads(stdout)
-        except ValueError:
-            result = stdout.strip()
-
-        logger.info(f"litmus-cli run {function} succeeded")
-        return format_success_response({"function": function, "result": result})
-    except McpError:
-        raise
-    except Exception as e:
-        logger.error(f"Error running litmus-cli run {function}: {e}", exc_info=True)
-        return format_error_response("sdk_call_failed", str(e))
+    return await _run_sdk_function(
+        request, function, _require_args(arguments), "sdk_call_failed"
+    )
 
 
 TOOLS = [
@@ -261,10 +341,12 @@ TOOLS = [
             "le.digitaltwins, le.flows, le.integrations, le.marketplace, le.opc, "
             "le.system); lem.* and unify.* are top-level. Use this ONLY when no "
             "dedicated tool covers the operation, to find a function for "
-            "litmus_sdk_call. Optionally pass a dotted-path prefix (e.g. "
-            "'le.integrations' or 'lem.Get') to narrow the listing. Returned dotted "
-            "paths and parameter names are exactly what litmus_sdk_call expects; do "
-            "not guess paths that this tool did not return."
+            "litmus_sdk_read or litmus_sdk_write. Optionally pass a dotted-path "
+            "prefix (e.g. 'le.integrations' or 'lem.Get') to narrow the listing. "
+            "Returned dotted paths and parameter names are exactly what "
+            "litmus_sdk_read and litmus_sdk_write expect; do not guess paths that "
+            "this tool did not return. SDK reference: "
+            "https://docs.litmus.io/litmus-mcp-server"
         ),
         "schema": {
             "type": "object",
@@ -283,14 +365,51 @@ TOOLS = [
         "handler": discover_litmus_sdk_functions,
     },
     {
-        "name": "litmus_sdk_call",
+        "name": "litmus_sdk_read",
         "category": "sdk.fallback",
         "description": (
-            "FALLBACK - POTENTIALLY DESTRUCTIVE. Invokes any Litmus SDK function "
-            "by dotted path via the litmus-cli dispatcher. Use ONLY when no "
-            "dedicated tool covers the operation, with a path returned by "
+            "FALLBACK - READ-ONLY. Invokes a single read-only Litmus SDK function "
+            "by dotted path via the litmus-cli dispatcher (SDK reference: "
+            "https://docs.litmus.io/litmus-mcp-server). Only functions whose final "
+            "path segment starts with Get, List, Browse, Describe, Read, Search, "
+            "Find, Query, or Count are accepted; anything else is rejected and "
+            "must go through litmus_sdk_write. Use ONLY when no dedicated tool "
+            "covers the operation, with a path returned by litmus_sdk_discover."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "function": {
+                    "type": "string",
+                    "description": (
+                        "Dotted read-only function path exactly as returned by "
+                        "litmus_sdk_discover (e.g. 'le.devicehub.ListDevices')"
+                    ),
+                },
+                "args": {
+                    "type": "object",
+                    "description": (
+                        "Function arguments as a JSON object keyed by the SDK "
+                        "parameter names shown by litmus_sdk_discover"
+                    ),
+                },
+            },
+            "required": ["function"],
+        },
+        "annotations": ToolAnnotations(title="Read SDK Function", readOnlyHint=True),
+        "handler": read_litmus_sdk_function,
+    },
+    {
+        "name": "litmus_sdk_write",
+        "category": "sdk.fallback",
+        "description": (
+            "FALLBACK - POTENTIALLY DESTRUCTIVE. Invokes a state-changing Litmus "
+            "SDK function by dotted path via the litmus-cli dispatcher (SDK "
+            "reference: https://docs.litmus.io/litmus-mcp-server). Use ONLY when "
+            "no dedicated tool covers the operation, with a path returned by "
             "litmus_sdk_discover. Many SDK functions modify or delete device "
             "configuration (create/update/delete/restart/deploy) with no undo. "
+            "Read-only functions are rejected; call them via litmus_sdk_read. "
             "APPROVAL REQUIRED: every call fails unless user_approved=true, and "
             "you may set user_approved=true ONLY after showing the user the exact "
             "function and arguments and receiving their explicit approval in this "
@@ -302,8 +421,8 @@ TOOLS = [
                 "function": {
                     "type": "string",
                     "description": (
-                        "Dotted function path exactly as returned by "
-                        "litmus_sdk_discover (e.g. 'le.devicehub.ListDevices')"
+                        "Dotted state-changing function path exactly as returned "
+                        "by litmus_sdk_discover (e.g. 'le.devicehub.DeleteDevice')"
                     ),
                 },
                 "args": {
@@ -324,8 +443,8 @@ TOOLS = [
             "required": ["function", "user_approved"],
         },
         "annotations": ToolAnnotations(
-            title="Call SDK Function", destructiveHint=True, readOnlyHint=False
+            title="Write SDK Function", destructiveHint=True, readOnlyHint=False
         ),
-        "handler": call_litmus_sdk_function,
+        "handler": write_litmus_sdk_function,
     },
 ]

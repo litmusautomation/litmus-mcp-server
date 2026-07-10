@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uvx /bin/uvx
 
-# Install the standalone litmus-cli binary (backs the litmus_sdk_discover
-# and litmus_sdk_call fallback tools), pinned and checksum-verified
+# Install the standalone litmus-cli binary (backs the litmus_sdk_discover,
+# litmus_sdk_read, and litmus_sdk_write fallback tools), pinned and
+# checksum-verified
 ARG LITMUS_CLI_VERSION=cli-v0.5.0
 ARG TARGETARCH=amd64
 RUN curl -fsSL -o /tmp/SHA256SUMS \

@@ -13,9 +13,11 @@ from mcp.shared.exceptions import McpError
 
 from tools.sdk_cli_tools import (
     _build_cli_env,
+    _is_read_function,
     _resolve_cli_binary,
-    call_litmus_sdk_function,
     discover_litmus_sdk_functions,
+    read_litmus_sdk_function,
+    write_litmus_sdk_function,
 )
 
 
@@ -80,37 +82,39 @@ def test_env_omits_bridge_flag_when_bridge_headers_incomplete():
 # ---------------------------------------------------------------- approval gate
 
 
-def test_call_rejected_without_user_approval():
+def test_write_rejected_without_user_approval():
     with pytest.raises(McpError, match="explicit user approval"):
         run(
-            call_litmus_sdk_function(
-                FakeRequest(EDGE_HEADERS), {"function": "le.devicehub.ListDevices"}
+            write_litmus_sdk_function(
+                FakeRequest(EDGE_HEADERS), {"function": "le.devicehub.DeleteDevice"}
             )
         )
 
 
-def test_call_rejected_when_user_approved_false():
+def test_write_rejected_when_user_approved_false():
     with pytest.raises(McpError, match="explicit user approval"):
         run(
-            call_litmus_sdk_function(
+            write_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
-                {"function": "le.devicehub.ListDevices", "user_approved": False},
+                {"function": "le.devicehub.DeleteDevice", "user_approved": False},
             )
         )
 
 
-def test_call_rejected_without_function():
+def test_write_rejected_without_function():
     with pytest.raises(McpError, match="'function' parameter is required"):
-        run(call_litmus_sdk_function(FakeRequest(EDGE_HEADERS), {"user_approved": True}))
+        run(
+            write_litmus_sdk_function(FakeRequest(EDGE_HEADERS), {"user_approved": True})
+        )
 
 
-def test_call_rejected_when_args_not_object():
+def test_write_rejected_when_args_not_object():
     with pytest.raises(McpError, match="'args' must be a JSON object"):
         run(
-            call_litmus_sdk_function(
+            write_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {
-                    "function": "le.devicehub.ListDevices",
+                    "function": "le.devicehub.DeleteDevice",
                     "user_approved": True,
                     "args": "not-a-dict",
                 },
@@ -118,36 +122,82 @@ def test_call_rejected_when_args_not_object():
         )
 
 
-# ---------------------------------------------------------------- call
+# ---------------------------------------------------------------- read/write split
 
 
-def test_approved_call_invokes_run_with_json_args():
+def test_read_verb_classification():
+    assert _is_read_function("le.devicehub.ListDevices")
+    assert _is_read_function("lem.GetCompanyProjects")
+    assert _is_read_function("le.devicehub.BrowseTags")
+    assert not _is_read_function("le.devicehub.DeleteDevice")
+    assert not _is_read_function("le.devicehub.CartAddItems")
+    assert not _is_read_function("le.system.Version")
+    # Verb must be a full word prefix: "Getaway" is not a Get* function.
+    assert not _is_read_function("le.system.Getaway")
+
+
+def test_read_runs_read_only_function_without_approval():
     mock = AsyncMock(return_value=(0, '{"devices": []}', ""))
     with patch("tools.sdk_cli_tools._run_cli", mock):
         result = run(
-            call_litmus_sdk_function(
+            read_litmus_sdk_function(
+                FakeRequest(EDGE_HEADERS), {"function": "le.devicehub.ListDevices"}
+            )
+        )
+    assert mock.call_args.args[0] == ["run", "le.devicehub.ListDevices"]
+    payload = json.loads(result[0].text)
+    assert payload["success"] is True
+
+
+def test_read_rejects_write_function():
+    with pytest.raises(McpError, match="not a read-only SDK function"):
+        run(
+            read_litmus_sdk_function(
+                FakeRequest(EDGE_HEADERS), {"function": "le.devicehub.DeleteDevice"}
+            )
+        )
+
+
+def test_write_rejects_read_function():
+    with pytest.raises(McpError, match="call it via litmus_sdk_read"):
+        run(
+            write_litmus_sdk_function(
+                FakeRequest(EDGE_HEADERS),
+                {"function": "le.devicehub.ListDevices", "user_approved": True},
+            )
+        )
+
+
+# ---------------------------------------------------------------- write
+
+
+def test_approved_write_invokes_run_with_json_args():
+    mock = AsyncMock(return_value=(0, '{"deleted": true}', ""))
+    with patch("tools.sdk_cli_tools._run_cli", mock):
+        result = run(
+            write_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {
-                    "function": "le.devicehub.ListDevices",
-                    "args": {"limit": 5},
+                    "function": "le.devicehub.DeleteDevice",
+                    "args": {"deviceID": "dev-1"},
                     "user_approved": True,
                 },
             )
         )
     argv = mock.call_args.args[0]
-    assert argv[:2] == ["run", "le.devicehub.ListDevices"]
+    assert argv[:2] == ["run", "le.devicehub.DeleteDevice"]
     assert argv[2] == "--args"
-    assert json.loads(argv[3]) == {"limit": 5}
+    assert json.loads(argv[3]) == {"deviceID": "dev-1"}
     payload = json.loads(result[0].text)
     assert payload["success"] is True
-    assert payload["result"] == {"devices": []}
+    assert payload["result"] == {"deleted": True}
 
 
-def test_approved_call_without_args_omits_args_flag():
+def test_approved_write_without_args_omits_args_flag():
     mock = AsyncMock(return_value=(0, "{}", ""))
     with patch("tools.sdk_cli_tools._run_cli", mock):
         run(
-            call_litmus_sdk_function(
+            write_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {"function": "le.system.Version", "user_approved": True},
             )
@@ -155,11 +205,11 @@ def test_approved_call_without_args_omits_args_flag():
     assert mock.call_args.args[0] == ["run", "le.system.Version"]
 
 
-def test_call_nonzero_exit_returns_error_response():
+def test_write_nonzero_exit_returns_error_response():
     mock = AsyncMock(return_value=(1, "", "Error: unknown function"))
     with patch("tools.sdk_cli_tools._run_cli", mock):
         result = run(
-            call_litmus_sdk_function(
+            write_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {"function": "nope.Nope", "user_approved": True},
             )
