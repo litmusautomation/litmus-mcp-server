@@ -8,8 +8,8 @@ fi
 # Bootstrap the litmus-cli binary for local (non-Docker) runs, pinned to
 # the same release the Docker image installs (the Dockerfile ARG is the single
 # source of truth). Skipped when LITMUS_CLI_PATH is already set (e.g. via
-# .env). Failure is non-fatal: only the litmus_sdk_discover and
-# litmus_sdk_call fallback tools need the binary.
+# .env). Failure is non-fatal: only the litmus_sdk_discover,
+# litmus_sdk_read, and litmus_sdk_write fallback tools need the binary.
 bootstrap_sdk_cli() {
     TAG=$(sed -n 's/^ARG LITMUS_CLI_VERSION=//p' Dockerfile)
     if [ -z "$TAG" ]; then
@@ -74,7 +74,7 @@ bootstrap_sdk_cli() {
 
 if [ -z "${LITMUS_CLI_PATH:-}" ]; then
     if ! bootstrap_sdk_cli; then
-        echo "run.sh: continuing without litmus-cli; litmus_sdk_discover and litmus_sdk_call will be unavailable" >&2
+        echo "run.sh: continuing without litmus-cli; litmus_sdk_discover, litmus_sdk_read, and litmus_sdk_write will be unavailable" >&2
     fi
 fi
 

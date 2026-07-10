@@ -19,3 +19,5 @@ dev_tests
 .directory
 .claude
 mcp-agents.md
+# Local MCP client config with real credentials (copy from .mcp.json.example)
+.mcp.json
