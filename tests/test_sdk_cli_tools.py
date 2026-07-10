@@ -84,7 +84,7 @@ def test_call_rejected_without_user_approval():
     with pytest.raises(McpError, match="explicit user approval"):
         run(
             call_litmus_sdk_function(
-                FakeRequest(EDGE_HEADERS), {"function": "devicehub.ListDevices"}
+                FakeRequest(EDGE_HEADERS), {"function": "le.devicehub.ListDevices"}
             )
         )
 
@@ -94,7 +94,7 @@ def test_call_rejected_when_user_approved_false():
         run(
             call_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
-                {"function": "devicehub.ListDevices", "user_approved": False},
+                {"function": "le.devicehub.ListDevices", "user_approved": False},
             )
         )
 
@@ -110,7 +110,7 @@ def test_call_rejected_when_args_not_object():
             call_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {
-                    "function": "devicehub.ListDevices",
+                    "function": "le.devicehub.ListDevices",
                     "user_approved": True,
                     "args": "not-a-dict",
                 },
@@ -128,14 +128,14 @@ def test_approved_call_invokes_run_with_json_args():
             call_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
                 {
-                    "function": "devicehub.ListDevices",
+                    "function": "le.devicehub.ListDevices",
                     "args": {"limit": 5},
                     "user_approved": True,
                 },
             )
         )
     argv = mock.call_args.args[0]
-    assert argv[:2] == ["run", "devicehub.ListDevices"]
+    assert argv[:2] == ["run", "le.devicehub.ListDevices"]
     assert argv[2] == "--args"
     assert json.loads(argv[3]) == {"limit": 5}
     payload = json.loads(result[0].text)
@@ -149,10 +149,10 @@ def test_approved_call_without_args_omits_args_flag():
         run(
             call_litmus_sdk_function(
                 FakeRequest(EDGE_HEADERS),
-                {"function": "system.Version", "user_approved": True},
+                {"function": "le.system.Version", "user_approved": True},
             )
         )
-    assert mock.call_args.args[0] == ["run", "system.Version"]
+    assert mock.call_args.args[0] == ["run", "le.system.Version"]
 
 
 def test_call_nonzero_exit_returns_error_response():
@@ -174,21 +174,21 @@ def test_call_nonzero_exit_returns_error_response():
 
 
 def test_discover_lists_with_prefix():
-    mock = AsyncMock(return_value=(0, "devicehub.ListDevices()\n", ""))
+    mock = AsyncMock(return_value=(0, "le.devicehub.ListDevices()\n", ""))
     with patch("tools.sdk_cli_tools._run_cli", mock):
         result = run(
             discover_litmus_sdk_functions(
-                FakeRequest(EDGE_HEADERS), {"prefix": "devicehub"}
+                FakeRequest(EDGE_HEADERS), {"prefix": "le.devicehub"}
             )
         )
-    assert mock.call_args.args[0] == ["list", "devicehub"]
+    assert mock.call_args.args[0] == ["list", "le.devicehub"]
     payload = json.loads(result[0].text)
     assert payload["success"] is True
-    assert "devicehub.ListDevices" in payload["functions"]
+    assert "le.devicehub.ListDevices" in payload["functions"]
 
 
 def test_discover_without_prefix_lists_all():
-    mock = AsyncMock(return_value=(0, "analytics.GetTopics()\n", ""))
+    mock = AsyncMock(return_value=(0, "le.analytics.GetTopics()\n", ""))
     with patch("tools.sdk_cli_tools._run_cli", mock):
         run(discover_litmus_sdk_functions(FakeRequest(EDGE_HEADERS), {}))
     assert mock.call_args.args[0] == ["list"]
