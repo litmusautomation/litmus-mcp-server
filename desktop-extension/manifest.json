@@ -1,0 +1,130 @@
+{
+  "manifest_version": "0.3",
+  "name": "litmus-mcp",
+  "display_name": "Litmus MCP",
+  "version": "0.1.0",
+  "description": "Connect Claude to Litmus Edge industrial devices through your Litmus MCP Server.",
+  "long_description": "Gives Claude access to your Litmus Edge deployment: browse DeviceHub devices and tags, read real-time and historical process data, manage Digital Twins, inspect system health, and reach the full Litmus SDK surface. This extension bridges Claude Desktop to a Litmus MCP Server you run on your own network (see https://github.com/litmusautomation/litmus-mcp-server); your credentials are stored in the operating system keychain and sent only to that server.",
+  "author": {
+    "name": "Litmus Automation, Inc.",
+    "url": "https://litmus.io"
+  },
+  "icon": "icon.png",
+  "homepage": "https://litmus.io",
+  "documentation": "https://docs.litmus.io/litmus-mcp-server",
+  "support": "https://github.com/litmusautomation/litmus-mcp-server/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/litmusautomation/litmus-mcp-server"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["litmus", "litmus-edge", "industrial", "iiot", "devicehub", "manufacturing"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "LITMUS_MCP_SERVER_URL": "${user_config.server_url}",
+        "EDGE_URL": "${user_config.edge_url}",
+        "EDGE_API_CLIENT_ID": "${user_config.edge_api_client_id}",
+        "EDGE_API_CLIENT_SECRET": "${user_config.edge_api_client_secret}",
+        "NATS_SOURCE": "${user_config.nats_source}",
+        "NATS_PORT": "${user_config.nats_port}",
+        "NATS_USER": "${user_config.nats_user}",
+        "NATS_PASSWORD": "${user_config.nats_password}",
+        "INFLUX_HOST": "${user_config.influx_host}",
+        "INFLUX_PORT": "${user_config.influx_port}",
+        "INFLUX_DB_NAME": "${user_config.influx_db_name}",
+        "INFLUX_USERNAME": "${user_config.influx_username}",
+        "INFLUX_PASSWORD": "${user_config.influx_password}"
+      }
+    }
+  },
+  "user_config": {
+    "server_url": {
+      "type": "string",
+      "title": "Litmus MCP Server URL",
+      "description": "Base URL of your Litmus MCP Server, e.g. https://mcp.example.com or http://localhost:8000",
+      "required": true
+    },
+    "edge_url": {
+      "type": "string",
+      "title": "Litmus Edge URL",
+      "description": "URL of the Litmus Edge device, e.g. https://192.168.1.50",
+      "required": true
+    },
+    "edge_api_client_id": {
+      "type": "string",
+      "title": "Edge OAuth2 Client ID",
+      "description": "OAuth2 client ID from Litmus Edge (System > API Access)",
+      "required": true
+    },
+    "edge_api_client_secret": {
+      "type": "string",
+      "title": "Edge OAuth2 Client Secret",
+      "description": "OAuth2 client secret from Litmus Edge",
+      "sensitive": true,
+      "required": true
+    },
+    "nats_source": {
+      "type": "string",
+      "title": "NATS Host (optional)",
+      "description": "Litmus Edge IP for real-time data tools; leave empty to skip"
+    },
+    "nats_port": {
+      "type": "string",
+      "title": "NATS Port (optional)",
+      "description": "Defaults to 4222 when NATS Host is set",
+      "default": "4222"
+    },
+    "nats_user": {
+      "type": "string",
+      "title": "NATS Username (optional)",
+      "description": "Access token username from Litmus Edge"
+    },
+    "nats_password": {
+      "type": "string",
+      "title": "NATS Password (optional)",
+      "description": "Access token from Litmus Edge",
+      "sensitive": true
+    },
+    "influx_host": {
+      "type": "string",
+      "title": "InfluxDB Host (optional)",
+      "description": "Litmus Edge IP for historical data tools; leave empty to skip"
+    },
+    "influx_port": {
+      "type": "string",
+      "title": "InfluxDB Port (optional)",
+      "description": "Defaults to 8086 when InfluxDB Host is set",
+      "default": "8086"
+    },
+    "influx_db_name": {
+      "type": "string",
+      "title": "InfluxDB Database (optional)",
+      "description": "Defaults to tsdata",
+      "default": "tsdata"
+    },
+    "influx_username": {
+      "type": "string",
+      "title": "InfluxDB Username (optional)",
+      "description": "DataHub username"
+    },
+    "influx_password": {
+      "type": "string",
+      "title": "InfluxDB Password (optional)",
+      "description": "DataHub password",
+      "sensitive": true
+    }
+  },
+  "tools_generated": true,
+  "privacy_policies": ["https://litmus.io/privacy-policy"],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

@@ -21,3 +21,6 @@ dev_tests
 mcp-agents.md
 # Local MCP client config with real credentials (copy from .mcp.json.example)
 .mcp.json
+
+# Cross-team handoff notes, shared out of band
+HANDOFF-*.md
