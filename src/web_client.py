@@ -84,17 +84,29 @@ async def lifespan(app: FastAPI):
     logger.info("MCP client shut down")
 
 
+def _parse_cors_origins(value: str) -> list[str]:
+    """Comma-separated explicit origins; empty means same-origin only."""
+    return [o.strip() for o in (value or "").split(",") if o.strip()]
+
+
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory=JINJA_TEMPLATE_DIR)
 templates.env.filters["markdown_to_html"] = markdown_to_html
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+# The UI is served same-origin by this app, so no CORS is needed by default.
+# Cross-origin access (e.g. a separately hosted frontend) must be opted into
+# with an explicit origin list; wildcard origins are not allowed because the
+# UI relies on a session cookie.
+_cors_origins = _parse_cors_origins(os.environ.get("WEB_UI_CORS_ORIGINS", ""))
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # ── Session helpers ─────────────────────────────────────────────────────────
@@ -1332,7 +1344,11 @@ if __name__ == "__main__":
             _time.sleep(0.5)
 
     try:
-        uvicorn.run("web_client:app", host="0.0.0.0", port=9000, reload=False)
+        # Local operator console: bind loopback unless deliberately exposed.
+        # The Docker image sets WEB_UI_HOST=0.0.0.0 so the -p port mapping
+        # works; exposure there is still opt-in via -p 9000:9000.
+        _ui_host = os.environ.get("WEB_UI_HOST", "127.0.0.1")
+        uvicorn.run("web_client:app", host=_ui_host, port=9000, reload=False)
     except KeyboardInterrupt:
         logger.info("Server shutdown requested")
     except Exception as e:

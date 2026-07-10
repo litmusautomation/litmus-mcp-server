@@ -42,6 +42,10 @@ RUN uv venv && uv sync --frozen --group llm-sdks
 # Activate virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
+# The web UI must bind all container interfaces so the -p 9000:9000 mapping
+# can reach it; publishing the port remains opt-in on the docker run side.
+ENV WEB_UI_HOST=0.0.0.0
+
 # Expose the MCP server port (default 8000) and the web UI port (default 9000)
 EXPOSE 8000 9000
 
