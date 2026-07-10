@@ -1,0 +1,49 @@
+# HTTPS deployment: Caddy terminates TLS in front of the MCP server and
+# obtains/renews certificates automatically via Let's Encrypt.
+#
+# Usage (from this directory):
+#   1. Point a DNS A/AAAA record for your hostname at this machine.
+#   2. cp .env.example .env   # and set DOMAIN
+#   3. docker compose -f docker-compose.https.yml up -d
+#   4. Configure MCP clients with https://<DOMAIN>/mcp (no port).
+#
+# The MCP server itself stays plain HTTP on the internal compose network;
+# nothing but Caddy is published to the host.
+
+services:
+  litmus-mcp-server:
+    image: ghcr.io/litmusautomation/litmus-mcp-server:latest
+    # The image is published for linux/amd64 only; this makes ARM64 hosts
+    # run it under emulation instead of failing the pull.
+    platform: linux/amd64
+    restart: unless-stopped
+    expose:
+      - "8000"
+    # The web UI (:9000) is a local operator console and is not proxied.
+    # To reach it from this machine only, uncomment:
+    # ports:
+    #   - "127.0.0.1:9000:9000"
+    #
+    # Optional: persist Web UI configuration across container replacements
+    # (create the host file first: mkdir -p /opt/litmus-mcp && touch /opt/litmus-mcp/.env)
+    # volumes:
+    #   - /opt/litmus-mcp/.env:/app/.env
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to the public hostname of this server}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - litmus-mcp-server
+
+volumes:
+  caddy_data:
+  caddy_config:
