@@ -15,7 +15,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uvx /bin/uvx
 # Install the standalone litmus-cli binary (backs the litmus_sdk_discover,
 # litmus_sdk_read, and litmus_sdk_write fallback tools), pinned and
 # checksum-verified
-ARG LITMUS_CLI_VERSION=cli-v0.6.0
+ARG LITMUS_CLI_VERSION=cli-v0.7.0
 ARG TARGETARCH=amd64
 RUN curl -fsSL -o /tmp/SHA256SUMS \
         "https://github.com/litmusautomation/litmus-sdk-releases/releases/download/${LITMUS_CLI_VERSION}/SHA256SUMS" \
