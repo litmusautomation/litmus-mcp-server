@@ -1,3 +1,4 @@
+import base64
 import contextlib
 import logging
 import asyncio
@@ -5,6 +6,7 @@ import os
 import warnings
 
 from contextvars import ContextVar
+from pathlib import Path as _Path
 
 import urllib3
 from mcp.server import Server
@@ -12,7 +14,7 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.types import Tool, TextContent
+from mcp.types import Icon, Tool, TextContent
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INTERNAL_ERROR, METHOD_NOT_FOUND
 from starlette.applications import Starlette
@@ -58,8 +60,43 @@ logging.basicConfig(
 logging.getLogger(__name__).setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
+def _server_icons() -> list[Icon] | None:
+    """Brand icon advertised in the initialize response, embedded as a data
+    URI so it renders without network access (e.g. stdio clients)."""
+    icon_path = _Path(__file__).resolve().parent.parent / "static" / "icon.png"
+    try:
+        encoded = base64.b64encode(icon_path.read_bytes()).decode()
+    except OSError:
+        return None
+    return [
+        Icon(
+            src=f"data:image/png;base64,{encoded}",
+            mimeType="image/png",
+            sizes=["512x512"],
+        )
+    ]
+
+
+def _server_version() -> str | None:
+    """Project version from pyproject.toml; the project is a uv virtual
+    project (not an installed distribution), so package metadata is absent."""
+    pyproject = _Path(__file__).resolve().parent.parent / "pyproject.toml"
+    try:
+        import tomllib
+
+        with pyproject.open("rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return None
+
+
 # Create MCP server
-mcp = Server("LitmusMCPServer")
+mcp = Server(
+    "LitmusMCPServer",
+    version=_server_version(),
+    website_url="https://litmus.io",
+    icons=_server_icons(),
+)
 
 # Context variable to store request across async calls
 current_request: ContextVar[Request | None] = ContextVar(
