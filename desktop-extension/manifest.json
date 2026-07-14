@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "litmus-mcp",
   "display_name": "Litmus MCP",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Connect Claude to Litmus Edge industrial devices through your Litmus MCP Server.",
   "long_description": "Gives Claude access to your Litmus Edge deployment: browse DeviceHub devices and tags, read real-time and historical process data, manage Digital Twins, inspect system health, and reach the full Litmus SDK surface. This extension bridges Claude Desktop to a Litmus MCP Server you run on your own network (see https://github.com/litmusautomation/litmus-mcp-server); your credentials are stored in the operating system keychain and sent only to that server.",
   "author": {
@@ -38,7 +38,8 @@
         "INFLUX_PORT": "${user_config.influx_port}",
         "INFLUX_DB_NAME": "${user_config.influx_db_name}",
         "INFLUX_USERNAME": "${user_config.influx_username}",
-        "INFLUX_PASSWORD": "${user_config.influx_password}"
+        "INFLUX_PASSWORD": "${user_config.influx_password}",
+        "VALIDATE_CERTIFICATE": "${user_config.validate_certificate}"
       }
     }
   },
@@ -117,6 +118,12 @@
       "title": "InfluxDB Password (optional)",
       "description": "DataHub password",
       "sensitive": true
+    },
+    "validate_certificate": {
+      "type": "boolean",
+      "title": "Validate TLS Certificates",
+      "description": "Verify the Litmus Edge HTTPS certificate. Leave off for edges with self-signed certificates (the default).",
+      "default": false
     }
   },
   "tools_generated": true,

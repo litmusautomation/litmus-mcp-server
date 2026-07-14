@@ -22,6 +22,7 @@ const HEADER_VARS = [
   "INFLUX_DB_NAME",
   "INFLUX_USERNAME",
   "INFLUX_PASSWORD",
+  "VALIDATE_CERTIFICATE",
 ];
 
 const base = (process.env.LITMUS_MCP_SERVER_URL || "").trim().replace(/\/+$/, "");
