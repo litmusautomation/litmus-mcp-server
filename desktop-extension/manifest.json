@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "litmus-mcp",
   "display_name": "Litmus MCP",
-  "version": "0.2.0",
+  "version": "1.1.0",
   "description": "Connect Claude to Litmus Edge industrial devices through your Litmus MCP Server.",
   "long_description": "Gives Claude access to your Litmus Edge deployment: browse DeviceHub devices and tags, read real-time and historical process data, manage Digital Twins, inspect system health, and reach the full Litmus SDK surface. This extension bridges Claude Desktop to a Litmus MCP Server you run on your own network (see https://github.com/litmusautomation/litmus-mcp-server); your credentials are stored in the operating system keychain and sent only to that server.",
   "author": {
