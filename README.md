@@ -287,30 +287,18 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 This MCP server supports local connections with Claude Desktop and other applications via Standard file Input/Output (STDIO): https://modelcontextprotocol.io/legacy/concepts/transports
 
-To use STDIO: Clone, edit config.py to enable STDIO, run the server as a local process, and update Claude Desktop MCP server configuration file to use the server:
+To use STDIO: Clone, install dependencies, and add the server to the Claude Desktop configuration file with `ENABLE_STDIO` set to `true`. Claude Desktop launches the server process itself; without `ENABLE_STDIO` the server starts in HTTP mode, never answers on stdin/stdout, and Claude Desktop disconnects after its 60-second initialize timeout.
 
-### Clone
+### Clone and install dependencies
 ```bash
-# Clone 
 git clone https://github.com/litmusautomation/litmus-mcp-server.git
-```
+cd litmus-mcp-server
 
-### Set ENABLE_STDIO to 'true' in /src/config.py:
-```python
-ENABLE_STDIO = os.getenv("ENABLE_STDIO", "true").lower() in ("true", "1", "yes")
-```
-
-### Run the server
-```bash
-# Run using uv 
+# Using uv
 uv sync
-cd /path/to/litmus-mcp-server
-uv run python3 src/server.py
 
 # Otherwise
-cd litmus-mcp-server
 pip install -e .
-python3 src/server.py
 ```
 
 ### Add json server definision to your Claude Desktop config file:
@@ -327,6 +315,7 @@ python3 src/server.py
         "/absolute/path/to/litmus-mcp-server/src/server.py"
       ],
       "env": {
+        "ENABLE_STDIO": "true",
         "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
