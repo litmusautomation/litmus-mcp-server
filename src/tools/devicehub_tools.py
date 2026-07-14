@@ -430,7 +430,9 @@ async def get_current_value_of_devicehub_tag(
             )
 
         # Find tag
-        tag_list = tags.list_registers_from_single_device(requested_device)
+        tag_list = tags.list_registers_from_single_device(
+            requested_device, le_connection=connection
+        )
 
         if tag_name:
             requested_tag = next(
@@ -587,7 +589,8 @@ async def get_device_connection_status(
 
         results = []
         for device in device_list:
-            output_topic = None
+            output_topics = []
+            error = None
             try:
                 tag_list = tags.list_registers_from_single_device(
                     device, le_connection=connection
@@ -595,37 +598,57 @@ async def get_device_connection_status(
                 for tag in tag_list:
                     for tp in tag.topics or []:
                         if tp.direction == "Output":
-                            output_topic = tp.topic
-                            break
-                    if output_topic:
-                        break
-            except Exception:
-                pass
+                            output_topics.append(tp.topic)
+            except Exception as e:
+                error = f"tag_listing_failed: {e}"
+                logger.warning(
+                    f"Could not list tags for device '{device.name}': {e}"
+                )
 
+            # Newest data point across all of the device's output topics.
+            # SELECT last(*) is deliberately avoided: applied to multiple
+            # fields, InfluxQL returns the epoch-0 timestamp instead of the
+            # point's real time.
             status = "no_data"
             last_seen = None
-            if output_topic:
+            last_seen_topic = None
+            newest_ts = None
+            for output_topic in output_topics:
                 try:
-                    rs = client.query(f'SELECT last(*) FROM "{output_topic}"')
+                    rs = client.query(
+                        f'SELECT * FROM "{output_topic}" ORDER BY time DESC LIMIT 1'
+                    )
                     pts = list(rs.get_points())
-                    if pts:
-                        ts_str = pts[0].get("time", "")
-                        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    if not pts:
+                        continue
+                    ts_str = pts[0].get("time", "")
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    ts_epoch = ts.replace(tzinfo=timezone.utc).timestamp()
+                    if newest_ts is None or ts_epoch > newest_ts:
+                        newest_ts = ts_epoch
                         last_seen = ts_str
-                        age_s = now_epoch - ts.replace(tzinfo=timezone.utc).timestamp()
-                        status = "connected" if age_s <= threshold else "stale"
-                except Exception:
-                    pass
+                        last_seen_topic = output_topic
+                except Exception as e:
+                    error = f"influx_query_failed: {e}"
+                    logger.warning(
+                        f"InfluxDB query failed for topic '{output_topic}': {e}"
+                    )
 
-            results.append(
-                {
-                    "device_name": device.name,
-                    "device_id": device.id,
-                    "status": status,
-                    "last_seen": last_seen,
-                    "checked_topic": output_topic,
-                }
-            )
+            if newest_ts is not None:
+                age_s = now_epoch - newest_ts
+                status = "connected" if age_s <= threshold else "stale"
+
+            result = {
+                "device_name": device.name,
+                "device_id": device.id,
+                "status": status,
+                "last_seen": last_seen,
+                "checked_topic": last_seen_topic,
+                "checked_topics_count": len(output_topics),
+            }
+            if error:
+                result["error"] = error
+            results.append(result)
 
         return format_success_response(
             {

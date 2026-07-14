@@ -142,6 +142,10 @@ def _build_cli_env(request: Request) -> dict:
         env.get(k) for k in _LEM_BRIDGE_HEADERS
     ):
         env["USE_LEM_BRIDGE"] = "true"
+    # Mirror get_litmus_connection's default of not validating certificates.
+    # Without this, litmussdk's env default (True) applies inside the CLI and
+    # requests to edges with self-signed certs fail.
+    env.setdefault("VALIDATE_CERTIFICATE", "false")
     return env
 
 
