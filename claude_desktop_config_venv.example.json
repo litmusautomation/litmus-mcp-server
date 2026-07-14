@@ -6,6 +6,7 @@
         "/absolute/path/to/litmus-mcp-server/src/server.py"
       ],
       "env": {
+        "ENABLE_STDIO": "true",
         "PYTHONPATH": "/absolute/path/to/litmus-mcp-server/src",
         "EDGE_URL": "https://<LITMUSEDGE_IP>",
         "EDGE_API_CLIENT_ID": "<oauth2_client_id>",
