@@ -12,7 +12,8 @@ Parse with json.loads(result[0].text) and check "success" key.
 import asyncio
 import json
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 from starlette.requests import Request
 
 import sys
@@ -21,12 +22,14 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mcp.shared.exceptions import McpError
+import tools.devicehub_tools as devicehub_tools
 from tools.devicehub_tools import (
     get_litmusedge_driver_list,
     get_devicehub_devices,
     create_devicehub_device,
     get_devicehub_device_tags,
     get_current_value_of_devicehub_tag,
+    get_device_connection_status,
 )
 from tools.dm_tools import (
     get_litmusedge_friendly_name,
@@ -293,6 +296,298 @@ def test_get_tag_value_missing_both_identifiers():
                     _make_request(), {"device_name": "Dev"}
                 )
             )
+
+
+def _make_device(name="TestDevice", device_id="d-1"):
+    device = MagicMock()
+    device.name = name
+    device.id = device_id
+    return device
+
+
+def _make_tag(tag_name="Temp", tag_id="t-1", topic="dh.raw.d-1.Temp"):
+    tag = MagicMock()
+    tag.tag_name = tag_name
+    tag.id = tag_id
+    tp = MagicMock()
+    tp.direction = "Output"
+    tp.topic = topic
+    tag.topics = [tp]
+    return tag
+
+
+def _make_influx_result(points):
+    rs = MagicMock()
+    rs.get_points.return_value = points
+    return rs
+
+
+@patch("tools.devicehub_tools.get_current_value_on_topic", new_callable=AsyncMock)
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_get_tag_value_passes_le_connection_to_sdk(
+    mock_connection, mock_list_devices, mock_list_registers, mock_get_value
+):
+    """Regression: tag listing must use the header-derived connection.
+
+    Omitting le_connection makes litmussdk fall back to its env-based
+    DEFAULT_LE_CONNECTION, which validates certificates by default and
+    fails against edges with self-signed certs.
+    """
+    devicehub_tools._device_list_cache.clear()
+    connection = MagicMock()
+    mock_connection.return_value = connection
+    device = _make_device()
+    mock_list_devices.return_value = [device]
+    mock_list_registers.return_value = [_make_tag()]
+    mock_get_value.return_value = {"value": 42}
+
+    result = _run(
+        get_current_value_of_devicehub_tag(
+            _make_request(), {"device_name": "TestDevice", "tag_name": "Temp"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    mock_list_registers.assert_called_once_with(device, le_connection=connection)
+
+
+# ── get_device_connection_status ────────────────────────────────────────────
+
+
+@patch("tools.devicehub_tools._make_influx_client")
+@patch("tools.devicehub_tools.get_influx_connection_params")
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_connection_status_recent_data_is_connected(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """Regression: a device with fresh data must report 'connected'.
+
+    The old SELECT last(*) query returned the epoch-0 timestamp (InfluxQL
+    behavior for selectors applied to multiple fields), so every device
+    with data was reported stale with last_seen 1970-01-01.
+    """
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.return_value = [_make_tag()]
+    mock_influx_params.return_value = {}
+
+    recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    client = MagicMock()
+    client.query.return_value = _make_influx_result([{"time": recent, "value": 1.0}])
+    mock_make_client.return_value = client
+
+    result = _run(get_device_connection_status(_make_request(), {}))
+    data = _parse(result)
+
+    assert data["success"] is True
+    dev = data["devices"][0]
+    assert dev["status"] == "connected"
+    assert dev["last_seen"] == recent
+
+    query = client.query.call_args[0][0]
+    assert "last(*)" not in query
+    assert "ORDER BY time DESC LIMIT 1" in query
+
+
+@patch("tools.devicehub_tools._make_influx_client")
+@patch("tools.devicehub_tools.get_influx_connection_params")
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_connection_status_old_data_is_stale(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """Data older than the threshold reports 'stale' with the real timestamp."""
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.return_value = [_make_tag()]
+    mock_influx_params.return_value = {}
+
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
+    client = MagicMock()
+    client.query.return_value = _make_influx_result([{"time": old, "value": 1.0}])
+    mock_make_client.return_value = client
+
+    result = _run(get_device_connection_status(_make_request(), {}))
+    data = _parse(result)
+
+    dev = data["devices"][0]
+    assert dev["status"] == "stale"
+    assert dev["last_seen"] == old
+
+
+@patch("tools.devicehub_tools._make_influx_client")
+@patch("tools.devicehub_tools.get_influx_connection_params")
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_connection_status_checks_all_topics(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """Regression: all output topics are probed, not just the first tag's.
+
+    A device whose first tag has no stored data must still report
+    'connected' when another tag is flowing.
+    """
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.return_value = [
+        _make_tag(tag_name="Empty", tag_id="t-1", topic="dh.raw.d-1.Empty"),
+        _make_tag(tag_name="Flowing", tag_id="t-2", topic="dh.raw.d-1.Flowing"),
+    ]
+    mock_influx_params.return_value = {}
+
+    recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    def query_side_effect(q):
+        if "Flowing" in q:
+            return _make_influx_result([{"time": recent, "value": 1.0}])
+        return _make_influx_result([])
+
+    client = MagicMock()
+    client.query.side_effect = query_side_effect
+    mock_make_client.return_value = client
+
+    result = _run(get_device_connection_status(_make_request(), {}))
+    data = _parse(result)
+
+    dev = data["devices"][0]
+    assert dev["status"] == "connected"
+    assert dev["checked_topic"] == "dh.raw.d-1.Flowing"
+    assert dev["checked_topics_count"] == 2
+    assert client.query.call_count == 2
+
+
+@patch("tools.devicehub_tools._make_influx_client")
+@patch("tools.devicehub_tools.get_influx_connection_params")
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_connection_status_surfaces_errors(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """Regression: failures are reported per device instead of silently
+    collapsing into 'no_data'."""
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.side_effect = RuntimeError("boom")
+    mock_influx_params.return_value = {}
+    mock_make_client.return_value = MagicMock()
+
+    result = _run(get_device_connection_status(_make_request(), {}))
+    data = _parse(result)
+
+    dev = data["devices"][0]
+    assert dev["status"] == "no_data"
+    assert dev["error"].startswith("tag_listing_failed")
+
+
+@patch("tools.devicehub_tools._make_influx_client")
+@patch("tools.devicehub_tools.get_influx_connection_params")
+@patch("tools.devicehub_tools.tags.list_registers_from_single_device")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.get_litmus_connection")
+def test_connection_status_no_points_is_no_data(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """No stored points on any topic reports 'no_data' without error."""
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.return_value = [_make_tag()]
+    mock_influx_params.return_value = {}
+
+    client = MagicMock()
+    client.query.return_value = _make_influx_result([])
+    mock_make_client.return_value = client
+
+    result = _run(get_device_connection_status(_make_request(), {}))
+    data = _parse(result)
+
+    dev = data["devices"][0]
+    assert dev["status"] == "no_data"
+    assert dev["last_seen"] is None
+    assert "error" not in dev
+
+
+# ── get_tag_statistics ──────────────────────────────────────────────────────
+
+
+@patch("tools.data_tools._make_influx_client")
+@patch("tools.data_tools.get_influx_connection_params")
+@patch("tools.data_tools.dh_tags.list_registers_from_single_device")
+@patch("tools.data_tools.dh_devices.list_devices")
+@patch("tools.data_tools.get_litmus_connection")
+def test_tag_statistics_strips_epoch_zero_timestamp(
+    mock_connection,
+    mock_list_devices,
+    mock_list_registers,
+    mock_influx_params,
+    mock_make_client,
+):
+    """Regression: aggregate queries return the epoch-0 timestamp, which must
+    not be surfaced in the statistics as if it were a data timestamp."""
+    from tools.data_tools import get_tag_statistics
+
+    mock_connection.return_value = MagicMock()
+    mock_list_devices.return_value = [_make_device()]
+    mock_list_registers.return_value = [_make_tag()]
+    mock_influx_params.return_value = {}
+
+    client = MagicMock()
+    client.query.return_value = _make_influx_result(
+        [
+            {
+                "time": "1970-01-01T00:00:00Z",
+                "mean": 5.0,
+                "min": 1.0,
+                "max": 9.0,
+                "count": 100,
+                "stddev": 2.0,
+            }
+        ]
+    )
+    mock_make_client.return_value = client
+
+    result = _run(
+        get_tag_statistics(
+            _make_request(), {"device_name": "TestDevice", "tag_name": "Temp"}
+        )
+    )
+    data = _parse(result)
+
+    assert data["success"] is True
+    stats = data["statistics"]
+    assert "time" not in stats
+    assert stats["mean"] == 5.0
+    assert stats["baseline_low"] == 1.0
+    assert stats["baseline_high"] == 9.0
 
 
 # ── get_litmusedge_friendly_name ────────────────────────────────────────────

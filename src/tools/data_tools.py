@@ -725,6 +725,9 @@ async def get_tag_statistics(request: Request, arguments: dict) -> list[TextCont
         r = client.query(q)
         pts = list(r.get_points())
         stats = pts[0] if pts else {}
+        # Aggregate queries without GROUP BY time() carry the epoch-0
+        # timestamp; drop it so it is not mistaken for a data timestamp.
+        stats.pop("time", None)
 
         mean_v = stats.get("mean")
         std_v = stats.get("stddev")
@@ -802,21 +805,31 @@ async def get_device_data_for_inference(
                     pts = list(r.get_points())
                     if pts:
                         s = pts[0]
+                        # Aggregate queries without GROUP BY time() carry the
+                        # epoch-0 timestamp; drop it so it is not mistaken for
+                        # a data timestamp.
+                        s.pop("time", None)
                         mean_v, std_v = s.get("mean"), s.get("stddev")
                         if mean_v is not None and std_v is not None:
                             s["baseline_low"] = mean_v - 2 * std_v
                             s["baseline_high"] = mean_v + 2 * std_v
                         entry["statistics"] = s
-                except Exception:
-                    pass
+                except Exception as e:
+                    entry["statistics_error"] = str(e)
+                    logger.warning(
+                        f"Statistics query failed for topic '{output_topic}': {e}"
+                    )
 
             if output_topic and sample_size > 0:
                 try:
                     q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {sample_size}'
                     r = client.query(q)
                     entry["recent_samples"] = list(r.get_points())
-                except Exception:
-                    pass
+                except Exception as e:
+                    entry["samples_error"] = str(e)
+                    logger.warning(
+                        f"Samples query failed for topic '{output_topic}': {e}"
+                    )
 
             tags_data.append(entry)
 
