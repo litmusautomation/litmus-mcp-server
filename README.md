@@ -171,7 +171,6 @@ Run Claude from a directory that includes a configuration file at `~/.claude/mcp
         "EDGE_API_CLIENT_SECRET": "${EDGE_API_CLIENT_SECRET}",
         "NATS_SOURCE": "${NATS_SOURCE}",
         "NATS_PORT": "${NATS_PORT:-4222}",
-        "NATS_USER": "${NATS_USER}",
         "NATS_PASSWORD": "${NATS_PASSWORD}",
         "INFLUX_HOST": "${INFLUX_HOST}",
         "INFLUX_PORT": "${INFLUX_PORT:-8086}",
@@ -202,7 +201,6 @@ Add to `~/.cursor/mcp.json` or `.cursor/mcp.json`:
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",
@@ -236,7 +234,6 @@ Open User Settings (JSON) → Add:
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",
@@ -270,7 +267,6 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",
@@ -324,7 +320,6 @@ pip install -e .
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",
@@ -358,8 +353,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 **Header Configuration Guide:**
 - `EDGE_URL`: Litmus Edge base URL (include https://)
 - `EDGE_API_CLIENT_ID` / `EDGE_API_CLIENT_SECRET`: OAuth2 credentials from Litmus Edge
-- `NATS_SOURCE`: Litmus Edge IP (no http/https)
-- `NATS_USER` / `NATS_PASSWORD`: Access token credentials from **System → Access Control → Tokens**
+- `NATS_SOURCE`: Litmus Edge IP (no http/https); optional, derived from `EDGE_URL` when omitted
+- `NATS_PASSWORD`: Access token from **System → Access Control → Tokens** (no username needed)
 - `INFLUX_HOST`: Litmus Edge IP (no http/https)
 - `INFLUX_USERNAME` / `INFLUX_PASSWORD`: DataHub user credentials
 

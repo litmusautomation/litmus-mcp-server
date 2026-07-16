@@ -183,17 +183,33 @@ def test_influx_username_still_required():
 # ── connect options ─────────────────────────────────────────────────────────
 
 
-def test_connect_options_prefer_token_over_user_password():
-    opts = _get_connect_options(
-        "edge.example.com", "4222", "user1", "pass1", use_tls=False, nats_token="tok1"
-    )
+def test_connect_options_password_alone_is_sufficient():
+    # LE validates the access-account API key as the password and ignores
+    # the username, so NATS_PASSWORD alone must produce full credentials.
+    opts = _get_connect_options("edge.example.com", "4222", None, "secret1", False)
     assert opts["servers"] == ["nats://edge.example.com:4222"]
-    assert opts["token"] == "tok1"
-    assert "user" not in opts
+    assert opts["password"] == "secret1"
+    assert opts["user"] == "secret1"
 
+
+def test_connect_options_token_is_password_alias():
+    opts = _get_connect_options(
+        "edge.example.com", "4222", None, None, use_tls=False, nats_token="tok1"
+    )
+    assert opts["password"] == "tok1"
+    assert opts["user"] == "tok1"
+
+
+def test_connect_options_legacy_username_still_sent():
     opts = _get_connect_options("edge.example.com", "4222", "user1", "pass1", False)
     assert opts["user"] == "user1"
     assert opts["password"] == "pass1"
+
+
+def test_connect_options_no_credentials():
+    opts = _get_connect_options("edge.example.com", "4222", None, None, False)
+    assert "user" not in opts
+    assert "password" not in opts
     assert "token" not in opts
 
 

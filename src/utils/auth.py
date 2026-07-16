@@ -221,9 +221,9 @@ def get_nats_connection_params(request: Optional[Request] = None) -> dict:
         Dictionary containing NATS connection parameters:
         - nats_source: NATS server address
         - nats_port: NATS server port (default 4222)
-        - nats_user: Optional username for authentication
-        - nats_password: Optional password for authentication
-        - nats_token: Optional token for authentication
+        - nats_user: Optional username (legacy; the LE broker ignores it)
+        - nats_password: Access-account API key (the only credential LE checks)
+        - nats_token: Optional alias for nats_password
         - use_tls: Whether to use TLS/SSL
         - derived_from_edge_url: True when the host came from EDGE_URL
 

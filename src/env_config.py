@@ -54,7 +54,6 @@ SAVE_SETTINGS_ALLOWED_KEYS = frozenset(
         "GEMINI_API_KEY",
         "NATS_SOURCE",
         "NATS_PORT",
-        "NATS_USER",
         "NATS_PASSWORD",
         "NATS_TLS",
         "INFLUX_HOST",

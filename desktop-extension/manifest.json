@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "litmus-mcp",
   "display_name": "Litmus MCP",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Connect Claude to Litmus Edge industrial devices through your Litmus MCP Server.",
   "long_description": "Gives Claude access to your Litmus Edge deployment: browse DeviceHub devices and tags, read real-time and historical process data, manage Digital Twins, inspect system health, and reach the full Litmus SDK surface. This extension bridges Claude Desktop to a Litmus MCP Server you run on your own network (see https://github.com/litmusautomation/litmus-mcp-server); your credentials are stored in the operating system keychain and sent only to that server.",
   "author": {
@@ -32,7 +32,6 @@
         "EDGE_API_CLIENT_SECRET": "${user_config.edge_api_client_secret}",
         "NATS_SOURCE": "${user_config.nats_source}",
         "NATS_PORT": "${user_config.nats_port}",
-        "NATS_USER": "${user_config.nats_user}",
         "NATS_PASSWORD": "${user_config.nats_password}",
         "INFLUX_HOST": "${user_config.influx_host}",
         "INFLUX_PORT": "${user_config.influx_port}",
@@ -80,15 +79,10 @@
       "description": "Defaults to 4222 when NATS Host is set",
       "default": "4222"
     },
-    "nats_user": {
-      "type": "string",
-      "title": "NATS Username (optional)",
-      "description": "Access token username from Litmus Edge"
-    },
     "nats_password": {
       "type": "string",
       "title": "NATS Password (optional)",
-      "description": "Access token from Litmus Edge",
+      "description": "Access token from Litmus Edge (username is not needed)",
       "sensitive": true
     },
     "influx_host": {

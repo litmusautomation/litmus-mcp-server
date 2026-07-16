@@ -220,11 +220,15 @@ def _get_connect_options(
     if use_tls:
         connect_options["tls"] = ssl_config()
 
-    if nats_token:
-        connect_options["token"] = nats_token
-    elif nats_user and nats_password:
-        connect_options["user"] = nats_user
-        connect_options["password"] = nats_password
+    # The LE gateway broker validates the access-account API key as the
+    # password and ignores the username, so a single secret (NATS_PASSWORD,
+    # or NATS_TOKEN as an alias) is all that is needed. A username from a
+    # legacy config is still sent; otherwise the secret doubles as the user
+    # field, mirroring litmussdk-go.
+    secret = nats_password or nats_token
+    if secret:
+        connect_options["user"] = nats_user or secret
+        connect_options["password"] = secret
 
     return connect_options
 

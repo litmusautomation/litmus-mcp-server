@@ -13,7 +13,6 @@
         "EDGE_API_CLIENT_SECRET": "<oauth2_client_secret>",
         "NATS_SOURCE": "<LITMUSEDGE_IP>",
         "NATS_PORT": "4222",
-        "NATS_USER": "<access_token_username>",
         "NATS_PASSWORD": "<access_token_from_litmusedge>",
         "INFLUX_HOST": "<LITMUSEDGE_IP>",
         "INFLUX_PORT": "8086",

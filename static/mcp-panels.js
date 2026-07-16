@@ -255,7 +255,6 @@ function _mcpCfgHeaders() {
     };
     if (_mcpCfg.nats_source)     h["NATS_SOURCE"]     = _mcpCfg.nats_source;
     if (_mcpCfg.nats_port)       h["NATS_PORT"]        = _mcpCfg.nats_port;
-    if (_mcpCfg.nats_user)       h["NATS_USER"]        = _mcpCfg.nats_user;
     if (_mcpCfg.nats_password)   h["NATS_PASSWORD"]    = _mcpCfg.nats_password;
     if (_mcpCfg.influx_host)     h["INFLUX_HOST"]      = _mcpCfg.influx_host;
     if (_mcpCfg.influx_port)     h["INFLUX_PORT"]      = _mcpCfg.influx_port;
