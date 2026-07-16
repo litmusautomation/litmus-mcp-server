@@ -18,8 +18,6 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 # ── Network defaults (override via .env) ───────────────────────────────────
 
-NATS_SOURCE = "10.30.50.1"
-NATS_PORT = "4222"
 MCP_PORT = 8000
 
 # ── Credential module-level mirrors (set by mcp_env_loader) ────────────────

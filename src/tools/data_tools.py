@@ -8,7 +8,6 @@ from typing import Optional
 from datetime import datetime
 
 from config import logger, ssl_config
-from config import NATS_PORT, NATS_SOURCE
 
 from utils.formatting import format_success_response, format_error_response
 from utils.auth import (
@@ -32,6 +31,40 @@ INFLUXDB_AVAILABLE = True
 NATS_TIMEOUT = 30  # seconds
 
 
+def _nats_connection_note(params: dict) -> Optional[str]:
+    """Human/LLM-facing note when the broker address was derived from EDGE_URL."""
+    if params.get("derived_from_edge_url"):
+        return (
+            f"NATS host not configured; using "
+            f"nats://{params['nats_source']}:{params['nats_port']} derived "
+            "from EDGE_URL. Set NATS_SOURCE (and NATS_PORT if needed) in the "
+            "MCP configuration to override."
+        )
+    return None
+
+
+def _influx_connection_note(params: dict) -> Optional[str]:
+    """Human/LLM-facing note when the InfluxDB address was derived from EDGE_URL."""
+    if params.get("derived_from_edge_url"):
+        return (
+            f"InfluxDB host not configured; using "
+            f"http://{params['INFLUX_HOST']}:{params['INFLUX_PORT']} derived "
+            "from EDGE_URL. Set INFLUX_HOST (and INFLUX_PORT if needed) in "
+            "the MCP configuration to override."
+        )
+    return None
+
+
+def _with_connection_note(result: dict, note: Optional[str]) -> dict:
+    if note:
+        result["connection_note"] = note
+    return result
+
+
+def _error_with_note(message: str, note: Optional[str]) -> str:
+    return f"{message} ({note})" if note else message
+
+
 async def get_current_value_on_topic(
     topic: str,
     nats_source: Optional[str] = None,
@@ -40,34 +73,19 @@ async def get_current_value_on_topic(
 ) -> dict:
     """
     Subscribes to a NATS topic and retrieves the next published message.
+
+    Explicitly passed nats_source/nats_port win over the request-resolved
+    values (which themselves fall back to the EDGE_URL host).
     """
-    # Get connection parameters from auth function if request is provided
-    use_tls = True
-    if request:
-        try:
-            params = get_nats_connection_params(request)
-            nats_source = params["nats_source"]
-            nats_port = params["nats_port"]
-            nats_user = params.get("nats_user")
-            nats_password = params.get("nats_password")
-            use_tls = params.get("use_tls", True)
-        except McpError:
-            # Fall back to provided parameters or config defaults
-            nats_source = nats_source or NATS_SOURCE
-            nats_port = nats_port or NATS_PORT
-            nats_user = None
-            nats_password = None
-            logger.warning(
-                "NATS params missing from request headers, using config defaults: %s:%s",
-                nats_source,
-                nats_port,
-            )
-    else:
-        # Use provided parameters or config defaults
-        nats_source = nats_source or NATS_SOURCE
-        nats_port = nats_port or NATS_PORT
-        nats_user = None
-        nats_password = None
+    try:
+        params = get_nats_connection_params(request)
+    except McpError:
+        if not nats_source:
+            raise
+        params = {}
+
+    nats_source = nats_source or params.get("nats_source")
+    nats_port = nats_port or params.get("nats_port") or "4222"
 
     stop_event = asyncio.Event()
     final_message = await _nc_single_topic(
@@ -75,9 +93,10 @@ async def get_current_value_on_topic(
         nats_port,
         topic,
         stop_event,
-        nats_user=nats_user,
-        nats_password=nats_password,
-        use_tls=use_tls,
+        nats_user=params.get("nats_user"),
+        nats_password=params.get("nats_password"),
+        nats_token=params.get("nats_token"),
+        use_tls=params.get("use_tls", True),
     )
     return final_message
 
@@ -90,6 +109,7 @@ async def get_current_value_on_topic_tool(
 
     Waits for the next message published to the topic and returns it.
     """
+    note = None
     try:
         topic = arguments.get("topic")
 
@@ -98,6 +118,7 @@ async def get_current_value_on_topic_tool(
                 ErrorData(code=INVALID_PARAMS, message="'topic' parameter is required")
             )
 
+        note = _nats_connection_note(get_nats_connection_params(request))
         message = await get_current_value_on_topic(topic=topic, request=request)
 
         logger.info(f"Retrieved value from topic: {topic}")
@@ -107,13 +128,13 @@ async def get_current_value_on_topic_tool(
             "data": message,
         }
 
-        return format_success_response(result)
+        return format_success_response(_with_connection_note(result, note))
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error getting value from topic: {e}", exc_info=True)
-        return format_error_response("retrieval_failed", str(e))
+        return format_error_response("retrieval_failed", _error_with_note(str(e), note))
 
 
 async def get_multiple_values_from_topic_tool(
@@ -124,11 +145,12 @@ async def get_multiple_values_from_topic_tool(
 
     WARNING: This function blocks until num_samples messages are received.
     """
+    note = None
     try:
         topic = arguments.get("topic")
         num_samples = arguments.get("num_samples", 10)
-        nats_source = arguments.get("nats_source")
-        nats_port = arguments.get("nats_port")
+        arg_source = arguments.get("nats_source")
+        arg_port = arguments.get("nats_port")
 
         if not topic:
             raise McpError(
@@ -139,26 +161,19 @@ async def get_multiple_values_from_topic_tool(
             logger.warning(f"num_samples={num_samples} is high, capping at 100")
             num_samples = 100
 
-        # Get connection parameters from auth function
-        use_tls = True
+        # Explicit tool arguments win over header/derived values; they also
+        # keep the tool usable when no host is configured at all.
         try:
             params = get_nats_connection_params(request)
-            nats_source = params["nats_source"]
-            nats_port = params["nats_port"]
-            nats_user = params.get("nats_user")
-            nats_password = params.get("nats_password")
-            use_tls = params.get("use_tls", True)
         except McpError:
-            # Fall back to provided parameters or config defaults
-            nats_source = nats_source or NATS_SOURCE
-            nats_port = nats_port or NATS_PORT
-            nats_user = None
-            nats_password = None
-            logger.warning(
-                "NATS params missing from request headers, using config defaults: %s:%s",
-                nats_source,
-                nats_port,
-            )
+            if not arg_source:
+                raise
+            params = {}
+
+        nats_source = arg_source or params.get("nats_source")
+        nats_port = arg_port or params.get("nats_port") or "4222"
+        if not arg_source:
+            note = _nats_connection_note(params)
 
         stop_event = asyncio.Event()
 
@@ -168,9 +183,10 @@ async def get_multiple_values_from_topic_tool(
             topic,
             stop_event,
             num_samples,
-            nats_user=nats_user,
-            nats_password=nats_password,
-            use_tls=use_tls,
+            nats_user=params.get("nats_user"),
+            nats_password=params.get("nats_password"),
+            nats_token=params.get("nats_token"),
+            use_tls=params.get("use_tls", True),
         )
 
         logger.info(f"Collected {num_samples} samples from topic: {topic}")
@@ -182,17 +198,19 @@ async def get_multiple_values_from_topic_tool(
             "timestamps": output["humanTimestamps"],
         }
 
-        return format_success_response(result)
+        return format_success_response(_with_connection_note(result, note))
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error collecting values from topic: {e}", exc_info=True)
-        return format_error_response("collection_failed", str(e))
+        return format_error_response(
+            "collection_failed", _error_with_note(str(e), note)
+        )
 
 
 def _get_connect_options(
-    nats_source, nats_port, nats_user, nats_password, use_tls=True
+    nats_source, nats_port, nats_user, nats_password, use_tls=True, nats_token=None
 ):
     connect_options = {
         "servers": [f"nats://{nats_source}:{nats_port}"],
@@ -202,7 +220,9 @@ def _get_connect_options(
     if use_tls:
         connect_options["tls"] = ssl_config()
 
-    if nats_user and nats_password:
+    if nats_token:
+        connect_options["token"] = nats_token
+    elif nats_user and nats_password:
         connect_options["user"] = nats_user
         connect_options["password"] = nats_password
 
@@ -216,6 +236,7 @@ async def _nc_single_topic(
     stop_event: asyncio.Event,
     nats_user: Optional[str] = None,
     nats_password: Optional[str] = None,
+    nats_token: Optional[str] = None,
     use_tls: bool = True,
 ) -> dict:
     """
@@ -223,7 +244,12 @@ async def _nc_single_topic(
     """
 
     connect_options = _get_connect_options(
-        nats_source, nats_port, nats_user, nats_password, use_tls=use_tls
+        nats_source,
+        nats_port,
+        nats_user,
+        nats_password,
+        use_tls=use_tls,
+        nats_token=nats_token,
     )
     nc = await nats.connect(**connect_options)
 
@@ -272,13 +298,19 @@ async def _collect_multiple_values_from_topic(
     num_samples: int = 10,
     nats_user: Optional[str] = None,
     nats_password: Optional[str] = None,
+    nats_token: Optional[str] = None,
     use_tls: bool = True,
 ) -> dict:
     """
     Collect multiple values from a topic for plotting or analysis.
     """
     connect_options = _get_connect_options(
-        nats_source, nats_port, nats_user, nats_password, use_tls=use_tls
+        nats_source,
+        nats_port,
+        nats_user,
+        nats_password,
+        use_tls=use_tls,
+        nats_token=nats_token,
     )
     nc = await nats.connect(**connect_options)
 
@@ -345,6 +377,7 @@ async def get_historical_data_from_influxdb_tool(
     """
     logger.info("Trying")
     params = get_influx_connection_params(request)
+    note = _influx_connection_note(params)
     influx_host = params["INFLUX_HOST"]
     influx_port = params["INFLUX_PORT"]
     influx_username = params["INFLUX_USERNAME"]
@@ -410,12 +443,15 @@ async def get_historical_data_from_influxdb_tool(
         if not points:
             logger.warning(f"No data returned from InfluxDB for query: {query}")
             return format_success_response(
-                {
-                    "query": query,
-                    "data": [],
-                    "count": 0,
-                    "message": "No data found for the specified query",
-                }
+                _with_connection_note(
+                    {
+                        "query": query,
+                        "data": [],
+                        "count": 0,
+                        "message": "No data found for the specified query",
+                    },
+                    note,
+                )
             )
 
         # Convert to DataFrame for easier manipulation
@@ -433,19 +469,23 @@ async def get_historical_data_from_influxdb_tool(
             "columns": list(df.columns),
         }
 
-        return format_success_response(result)
+        return format_success_response(_with_connection_note(result, note))
 
     except McpError:
         raise
     except influxdb.exceptions.InfluxDBClientError as e:
         logger.error(f"InfluxDB client error: {e}", exc_info=True)
-        return format_error_response("influxdb_client_error", str(e))
+        return format_error_response(
+            "influxdb_client_error", _error_with_note(str(e), note)
+        )
     except influxdb.exceptions.InfluxDBServerError as e:
         logger.error(f"InfluxDB server error: {e}", exc_info=True)
-        return format_error_response("influxdb_server_error", str(e))
+        return format_error_response(
+            "influxdb_server_error", _error_with_note(str(e), note)
+        )
     except Exception as e:
         logger.error(f"Error querying InfluxDB: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 # ── InfluxDB helpers ──────────────────────────────────────────────────────────
@@ -493,27 +533,32 @@ async def list_influxdb_measurements(
     request: Request, arguments: dict
 ) -> list[TextContent]:
     params = get_influx_connection_params(request)
+    note = _influx_connection_note(params)
     try:
         client = _make_influx_client(params)
         rs = client.query("SHOW MEASUREMENTS")
         measurements = sorted(pt["name"] for pt in rs.get_points())
         return format_success_response(
-            {
-                "database": params["INFLUX_DB_NAME"],
-                "count": len(measurements),
-                "measurements": measurements,
-            }
+            _with_connection_note(
+                {
+                    "database": params["INFLUX_DB_NAME"],
+                    "count": len(measurements),
+                    "measurements": measurements,
+                },
+                note,
+            )
         )
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error listing measurements: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 async def get_device_historical_data(
     request: Request, arguments: dict
 ) -> list[TextContent]:
+    note = None
     try:
         device_query = (arguments.get("device_query") or "").strip()
         tag_name_query = (arguments.get("tag_name_query") or "").strip()
@@ -527,6 +572,7 @@ async def get_device_historical_data(
         _validate_time_range(time_range)
 
         params = get_influx_connection_params(request)
+        note = _influx_connection_note(params)
         client = _make_influx_client(params)
 
         rs = client.query("SHOW MEASUREMENTS")
@@ -543,12 +589,15 @@ async def get_device_historical_data(
 
         if not matches:
             return format_success_response(
-                {
-                    "device_query": device_query,
-                    "matched_measurements": [],
-                    "results": [],
-                    "message": "No measurements matched the query. Use list_influxdb_measurements to see available names.",
-                }
+                _with_connection_note(
+                    {
+                        "device_query": device_query,
+                        "matched_measurements": [],
+                        "results": [],
+                        "message": "No measurements matched the query. Use list_influxdb_measurements to see available names.",
+                    },
+                    note,
+                )
             )
 
         results = []
@@ -564,23 +613,27 @@ async def get_device_historical_data(
                 results.append({"measurement": measurement, "error": str(ex)})
 
         return format_success_response(
-            {
-                "device_query": device_query,
-                "matched_measurements": matches,
-                "time_range": time_range,
-                "results": results,
-                "total_records": sum(r.get("count", 0) for r in results),
-            }
+            _with_connection_note(
+                {
+                    "device_query": device_query,
+                    "matched_measurements": matches,
+                    "time_range": time_range,
+                    "results": results,
+                    "total_records": sum(r.get("count", 0) for r in results),
+                },
+                note,
+            )
         )
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error in get_device_historical_data: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 async def query_tag_data(request: Request, arguments: dict) -> list[TextContent]:
+    note = None
     try:
         device_name = (arguments.get("device_name") or "").strip()
         tag_name = (arguments.get("tag_name") or "").strip()
@@ -638,31 +691,36 @@ async def query_tag_data(request: Request, arguments: dict) -> list[TextContent]
             )
 
         params = get_influx_connection_params(request)
+        note = _influx_connection_note(params)
         client = _make_influx_client(params)
         q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {limit}'
         r = client.query(q, chunked=True, chunk_size=5000)
         pts = list(r.get_points())
 
         return format_success_response(
-            {
-                "device_name": device_name,
-                "tag_name": tag.tag_name,
-                "tag_id": tag.id,
-                "measurement": output_topic,
-                "time_range": time_range,
-                "count": len(pts),
-                "data": pts,
-            }
+            _with_connection_note(
+                {
+                    "device_name": device_name,
+                    "tag_name": tag.tag_name,
+                    "tag_id": tag.id,
+                    "measurement": output_topic,
+                    "time_range": time_range,
+                    "count": len(pts),
+                    "data": pts,
+                },
+                note,
+            )
         )
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error in query_tag_data: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 async def get_tag_statistics(request: Request, arguments: dict) -> list[TextContent]:
+    note = None
     try:
         device_name = (arguments.get("device_name") or "").strip()
         tag_name = (arguments.get("tag_name") or "").strip()
@@ -716,6 +774,7 @@ async def get_tag_statistics(request: Request, arguments: dict) -> list[TextCont
             )
 
         params = get_influx_connection_params(request)
+        note = _influx_connection_note(params)
         client = _make_influx_client(params)
         q = (
             f'SELECT mean("value") AS mean, min("value") AS min, max("value") AS max, '
@@ -736,26 +795,30 @@ async def get_tag_statistics(request: Request, arguments: dict) -> list[TextCont
             stats["baseline_high"] = mean_v + 2 * std_v
 
         return format_success_response(
-            {
-                "device_name": device_name,
-                "tag_name": tag.tag_name,
-                "tag_id": tag.id,
-                "measurement": output_topic,
-                "time_range": time_range,
-                "statistics": stats,
-            }
+            _with_connection_note(
+                {
+                    "device_name": device_name,
+                    "tag_name": tag.tag_name,
+                    "tag_id": tag.id,
+                    "measurement": output_topic,
+                    "time_range": time_range,
+                    "statistics": stats,
+                },
+                note,
+            )
         )
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error in get_tag_statistics: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 async def get_device_data_for_inference(
     request: Request, arguments: dict
 ) -> list[TextContent]:
+    note = None
     try:
         device_name = (arguments.get("device_name") or "").strip()
         time_range = arguments.get("time_range", "1h")
@@ -778,6 +841,7 @@ async def get_device_data_for_inference(
             )
 
         params = get_influx_connection_params(request)
+        note = _influx_connection_note(params)
         client = _make_influx_client(params)
 
         tag_list = dh_tags.list_registers_from_single_device(
@@ -840,25 +904,28 @@ async def get_device_data_for_inference(
             pass
 
         return format_success_response(
-            {
-                "device": {
-                    "name": device.name,
-                    "id": device.id,
-                    "driver": driver_name,
-                    "description": device.description,
+            _with_connection_note(
+                {
+                    "device": {
+                        "name": device.name,
+                        "id": device.id,
+                        "driver": driver_name,
+                        "description": device.description,
+                    },
+                    "time_range": time_range,
+                    "sample_size": sample_size,
+                    "tag_count": len(tags_data),
+                    "tags": tags_data,
                 },
-                "time_range": time_range,
-                "sample_size": sample_size,
-                "tag_count": len(tags_data),
-                "tags": tags_data,
-            }
+                note,
+            )
         )
 
     except McpError:
         raise
     except Exception as e:
         logger.error(f"Error in get_device_data_for_inference: {e}", exc_info=True)
-        return format_error_response("query_failed", str(e))
+        return format_error_response("query_failed", _error_with_note(str(e), note))
 
 
 TOOLS = [
@@ -910,7 +977,7 @@ TOOLS = [
                 },
                 "nats_source": {
                     "type": "string",
-                    "description": "Optional: NATS broker IP (default: 10.30.50.1)",
+                    "description": "Optional: NATS broker host. Overrides the configured NATS_SOURCE and the default (the Edge URL host).",
                 },
                 "nats_port": {
                     "type": "string",

@@ -154,6 +154,8 @@ services:
 
 ---
 
+> **Note:** `NATS_SOURCE`, `NATS_PORT`, `INFLUX_HOST`, and `INFLUX_PORT` are optional in all of the client configurations below. When omitted, the server derives the hosts from `EDGE_URL` (defaulting to `nats://<edge-host>:4222` and `http://<edge-host>:8086`) and mentions the fallback in tool responses. Set them only when the data plane is reachable at a different address or port than the Edge web UI.
+
 ### Claude Code CLI
 Run Claude from a directory that includes a configuration file at `~/.claude/mcp.json`:
 
