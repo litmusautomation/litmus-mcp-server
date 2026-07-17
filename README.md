@@ -370,7 +370,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `get_devicehub_devices`                | List all configured DeviceHub devices with connection settings and status. |
 |                           | `create_devicehub_device`              | Create a new device with specified driver and default configuration. |
 |                           | `get_device_connection_status` **      | Check whether devices are actively publishing data via InfluxDB heartbeat (connected/stale/no_data). |
-| **DeviceHub, Tags**       | `get_devicehub_device_tags`            | Retrieve all tags (data points/registers) for a specific device. |
+| **DeviceHub, Tags**       | `get_devicehub_device_tags`            | Retrieve tags (data points/registers) for a specific device or all devices, paginated via `limit`/`offset` so any tag count can be paged through. |
 |                           | `get_current_value_of_devicehub_tag`   | Read the current real-time value of a specific device tag. |
 |                           | `create_devicehub_tag`                 | Create a new tag (register) on a device. Driver-required properties auto-fill from defaults. |
 |                           | `update_devicehub_tag`                 | Update mutable fields of an existing tag (display name, description, properties). |
@@ -402,8 +402,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `create_digital_twin_model`            | Create a new Digital Twin model. |
 |                           | `list_digital_twin_instances`          | List all Digital Twin instances or filter by model ID. |
 |                           | `create_digital_twin_instance`         | Create a new Digital Twin instance from an existing model. |
-|                           | `list_static_attributes`               | List static attributes (fixed key-value pairs) for a model or instance. |
-|                           | `list_dynamic_attributes`              | List dynamic attributes (real-time data points) for a model or instance. |
+|                           | `list_static_attributes`               | List static attributes (fixed key-value pairs) for a model, an instance (by id or name), or every instance at once (`all_instances`). |
+|                           | `list_dynamic_attributes`              | List dynamic attributes (real-time data points) for a model, an instance (by id or name), or every instance at once (`all_instances`). |
 |                           | `list_transformations`                 | List data transformation rules configured for a Digital Twin model. |
 |                           | `get_digital_twin_hierarchy`           | Get the hierarchy configuration for a Digital Twin model. |
 |                           | `save_digital_twin_hierarchy`          | Save a new hierarchy configuration to a Digital Twin model. |
@@ -450,7 +450,7 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `EDGE_MANAGER_ADMIN_URL` (optional): admin URL, defaults to the EDGE_MANAGER_URL host on port `8446`
 
 **\*\*\*\* SDK Fallback Tools Requirements:**
-`litmus_sdk_discover`, `litmus_sdk_read`, and `litmus_sdk_write` are backed by the standalone `litmus-cli` Go binary. The Docker image installs it at build time, and `run.sh` installs or updates it automatically for local runs (checksum-verified into `.venv/bin`, pinned to the same version as the Docker image via the Dockerfile `ARG LITMUS_CLI_VERSION`). To use a different binary, set `LITMUS_CLI_PATH` (skips the bootstrap), or install one from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH. They expose the full generated SDK surface beyond the curated tools above. Notes:
+`litmus_sdk_discover`, `litmus_sdk_read`, and `litmus_sdk_write` are backed by the standalone `litmus-cli` Go binary, as are the curated digital twin attribute and tag status tools. The Docker image installs it at build time, and `run.sh` installs or updates it automatically for local runs (checksum-verified into `.venv/bin`, pinned to the same version as the Docker image via the Dockerfile `ARG LITMUS_CLI_VERSION`). If the server is started without it (e.g. a bare `python src/server.py`), it self-installs the pinned release on first use: downloaded from the official releases, SHA256-verified, and cached under `~/.cache/litmus-mcp-server`. Air-gapped hosts without GitHub access should pre-install the binary instead. To use a different binary, set `LITMUS_CLI_PATH` (skips all bootstrapping), or install one from the `cli-v*` releases at https://github.com/litmusautomation/litmus-sdk-releases/releases and put it on PATH. They expose the full generated SDK surface beyond the curated tools above. Notes:
 - Connection headers are forwarded to the CLI per call; no CLI profile is read or written.
 - `litmus_sdk_read` accepts only read-only functions (final segment starting with Get, List, Browse, Describe, Read, Search, Find, Query, or Count); everything else goes through `litmus_sdk_write`.
 - `litmus_sdk_write` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
@@ -458,6 +458,12 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `VALIDATE_CERTIFICATE` (optional): `true` to verify TLS certs on the LEM bridge (default `false`)
 
 `lem_bridge_*` tools additionally tunnel through LEM to a specific edge and require both `project_id` and `device_id` as call arguments. The Web UI's **Config -> Litmus Edge Manager** page manages multiple LEM connections and writes these headers automatically.
+
+**Per-call LEM bridge routing for edge tools:**
+When `EDGE_MANAGER_URL` is configured, every edge-targeting tool (DeviceHub, Digital Twins, system, marketplace, and the SDK fallback tools) additionally accepts optional `project_id` and `device_id` arguments. Passing both routes that single call to the corresponding managed edge through the LEM bridge, so a LEM-only configuration (URL + token, no `EDGE_URL`) can still use the full Litmus Edge toolset: the assistant discovers ids with `lem_list_devices` and then calls edge tools directly against any device in the fleet. `EDGE_MANAGER_PROJECT_ID` and `EDGE_MANAGER_DEVICE_ID` headers remain supported as static defaults.
+
+**CLI-backed curated tools:**
+The digital twin attribute/transformation listing tools and the tag status tools are executed through the bundled `litmus-cli` binary (same connection layer as the SDK fallback tools) rather than the Python SDK, so devices or twins with unusual data no longer fail strict client-side validation, and LEM bridge routing applies uniformly.
 
 ---
 

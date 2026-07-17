@@ -26,10 +26,14 @@ function and arguments in conversation.
 """
 
 import asyncio
+import hashlib
 import json
 import os
+import platform
 import shutil
 import tempfile
+import urllib.request
+from pathlib import Path
 from typing import Optional
 
 from starlette.requests import Request
@@ -81,6 +85,109 @@ def _get_isolated_dir() -> str:
     return _isolated_dir
 
 
+# ── binary resolution and self-bootstrap ─────────────────────────────────────
+#
+# Docker installs the binary at build time and run.sh bootstraps it for local
+# runs. A bare `python src/server.py` has neither, so as a last resort the
+# server downloads the pinned release itself on first use (checksum-verified,
+# same release the Dockerfile pins) instead of hard-failing the CLI-backed
+# tools.
+
+_FALLBACK_CLI_VERSION = "cli-v0.7.0"  # used only when Dockerfile is absent
+
+_BOOTSTRAP_BASE_DIR = Path.home() / ".cache" / "litmus-mcp-server" / "bin"
+
+_DOWNLOAD_TIMEOUT_SECONDS = 60
+
+_bootstrap_lock: Optional[asyncio.Lock] = None
+
+
+def _pinned_cli_version() -> str:
+    """Release tag to install: LITMUS_CLI_VERSION env, else the Dockerfile
+    ARG (single source of truth), else the baked-in fallback."""
+    env = os.getenv("LITMUS_CLI_VERSION")
+    if env:
+        return env
+    dockerfile = Path(__file__).resolve().parents[2] / "Dockerfile"
+    try:
+        for line in dockerfile.read_text().splitlines():
+            if line.startswith("ARG LITMUS_CLI_VERSION="):
+                value = line.split("=", 1)[1].strip()
+                if value:
+                    return value
+    except OSError:
+        pass
+    return _FALLBACK_CLI_VERSION
+
+
+def _cli_asset_name() -> str:
+    system = platform.system()
+    os_name = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}.get(system)
+    if os_name is None:
+        raise RuntimeError(f"unsupported OS '{system}' for litmus-cli bootstrap")
+    machine = platform.machine().lower()
+    arch = {
+        "arm64": "arm64",
+        "aarch64": "arm64",
+        "x86_64": "amd64",
+        "amd64": "amd64",
+    }.get(machine)
+    if arch is None:
+        raise RuntimeError(
+            f"unsupported architecture '{machine}' for litmus-cli bootstrap"
+        )
+    suffix = ".exe" if os_name == "windows" else ""
+    return f"litmus-cli-{os_name}-{arch}{suffix}"
+
+
+def _bootstrap_target() -> Path:
+    """Version-scoped install path, so a pin bump re-downloads naturally."""
+    name = "litmus-cli.exe" if platform.system() == "Windows" else "litmus-cli"
+    return _BOOTSTRAP_BASE_DIR / _pinned_cli_version() / name
+
+
+def _fetch(url: str) -> bytes:
+    with urllib.request.urlopen(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as resp:
+        return resp.read()
+
+
+def _bootstrap_cli_binary() -> str:
+    """Download the pinned litmus-cli release, verify its SHA256 against the
+    release's SHA256SUMS, and install it under the user cache dir. Blocking;
+    run in a thread."""
+    tag = _pinned_cli_version()
+    asset = _cli_asset_name()
+    target = _bootstrap_target()
+    if target.is_file() and os.access(target, os.X_OK):
+        return str(target)
+
+    base = f"{_RELEASES_URL}/download/{tag}"
+    logger.info(f"Installing litmus-cli {tag} ({asset}) to {target}")
+    sums = _fetch(f"{base}/SHA256SUMS").decode()
+    binary = _fetch(f"{base}/{asset}")
+
+    expected = None
+    for line in sums.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[-1].lstrip("*") == asset:
+            expected = parts[0]
+            break
+    if not expected:
+        raise RuntimeError(f"no SHA256SUMS entry for {asset} in release {tag}")
+    actual = hashlib.sha256(binary).hexdigest()
+    if actual != expected:
+        raise RuntimeError(
+            f"checksum mismatch for {asset}: expected {expected}, got {actual}"
+        )
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_bytes(binary)
+    tmp.chmod(0o755)
+    os.replace(tmp, target)
+    return str(target)
+
+
 def _resolve_cli_binary() -> str:
     explicit = os.getenv("LITMUS_CLI_PATH")
     if explicit:
@@ -106,6 +213,10 @@ def _resolve_cli_binary() -> str:
             "renamed to 'litmus-cli' and the fallback will be removed"
         )
         return found
+    # A binary installed by a previous self-bootstrap.
+    bootstrapped = _bootstrap_target()
+    if bootstrapped.is_file() and os.access(bootstrapped, os.X_OK):
+        return str(bootstrapped)
     raise McpError(
         ErrorData(
             code=INTERNAL_ERROR,
@@ -116,6 +227,39 @@ def _resolve_cli_binary() -> str:
             ),
         )
     )
+
+
+async def _ensure_cli_binary() -> str:
+    """Resolve the CLI binary, self-installing the pinned release if nothing
+    is found."""
+    global _bootstrap_lock
+    try:
+        return _resolve_cli_binary()
+    except McpError:
+        pass
+    if _bootstrap_lock is None:
+        _bootstrap_lock = asyncio.Lock()
+    async with _bootstrap_lock:
+        # Another call may have finished the install while we waited.
+        try:
+            return _resolve_cli_binary()
+        except McpError:
+            pass
+        try:
+            return await asyncio.to_thread(_bootstrap_cli_binary)
+        except Exception as e:
+            logger.error(f"litmus-cli self-install failed: {e}")
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=(
+                        f"litmus-cli binary not found and automatic install "
+                        f"failed ({e}). Install it from the cli-v* releases "
+                        f"at {_RELEASES_URL} and put it on PATH, or set "
+                        "LITMUS_CLI_PATH to its location."
+                    ),
+                )
+            ) from e
 
 
 def _build_cli_env(request: Request) -> dict:
@@ -151,7 +295,7 @@ def _build_cli_env(request: Request) -> dict:
 
 async def _run_cli(argv: list, env: dict) -> tuple:
     """Run the CLI with the given argv and env; return (rc, stdout, stderr)."""
-    binary = _resolve_cli_binary()
+    binary = await _ensure_cli_binary()
     process = await asyncio.create_subprocess_exec(
         binary,
         *argv,
@@ -254,24 +398,45 @@ def _require_args(arguments: dict) -> dict:
     return function_args
 
 
-async def _run_sdk_function(
-    request: Request, function: str, function_args: dict, error_code: str
-) -> list[TextContent]:
+class CLIFunctionError(Exception):
+    """A litmus-cli `run` invocation exited non-zero."""
+
+    def __init__(self, function: str, message: str):
+        self.function = function
+        super().__init__(message)
+
+
+async def run_cli_function(request: Request, function: str, function_args: dict):
+    """Invoke one SDK function via `litmus-cli run` and return its decoded
+    JSON result (or raw stdout when the output is not JSON).
+
+    Shared backend for the generic litmus_sdk_read/write tools and for
+    curated tools in other modules that are CLI-backed. Raises
+    CLIFunctionError on a non-zero exit and McpError when the binary is
+    missing or times out.
+    """
     argv = ["run", function]
     if function_args:
         argv += ["--args", json.dumps(function_args)]
+    returncode, stdout, stderr = await _run_cli(argv, _build_cli_env(request))
+    if returncode != 0:
+        raise CLIFunctionError(function, (stderr or stdout).strip())
     try:
-        returncode, stdout, stderr = await _run_cli(argv, _build_cli_env(request))
-        if returncode != 0:
-            return format_error_response(error_code, (stderr or stdout).strip())
+        result = json.loads(stdout)
+    except ValueError:
+        result = stdout.strip()
+    logger.info(f"litmus-cli run {function} succeeded")
+    return result
 
-        try:
-            result = json.loads(stdout)
-        except ValueError:
-            result = stdout.strip()
 
-        logger.info(f"litmus-cli run {function} succeeded")
+async def _run_sdk_function(
+    request: Request, function: str, function_args: dict, error_code: str
+) -> list[TextContent]:
+    try:
+        result = await run_cli_function(request, function, function_args)
         return format_success_response({"function": function, "result": result})
+    except CLIFunctionError as e:
+        return format_error_response(error_code, str(e))
     except McpError:
         raise
     except Exception as e:

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from mcp.shared.exceptions import McpError
 
+import tools.sdk_cli_tools as sdk_cli_tools
 from tools.sdk_cli_tools import (
     _build_cli_env,
     _is_read_function,
@@ -261,8 +262,9 @@ def test_discover_without_prefix_lists_all():
 # ---------------------------------------------------------------- binary resolution
 
 
-def test_missing_binary_raises_with_install_hint(monkeypatch):
+def test_missing_binary_raises_with_install_hint(monkeypatch, tmp_path):
     monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path / "bin")
     with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
         with pytest.raises(McpError, match="litmus-sdk-releases"):
             _resolve_cli_binary()
@@ -279,3 +281,102 @@ def test_bad_explicit_path_raises(monkeypatch):
     monkeypatch.setenv("LITMUS_CLI_PATH", "/nonexistent/litmus-cli")
     with pytest.raises(McpError, match="not an executable file"):
         _resolve_cli_binary()
+
+
+# ---------------------------------------------------------------- self-bootstrap
+
+
+def test_pinned_version_reads_dockerfile_arg(monkeypatch):
+    monkeypatch.delenv("LITMUS_CLI_VERSION", raising=False)
+    version = sdk_cli_tools._pinned_cli_version()
+    assert version.startswith("cli-v")
+
+
+def test_pinned_version_env_override(monkeypatch):
+    monkeypatch.setenv("LITMUS_CLI_VERSION", "cli-v9.9.9")
+    assert sdk_cli_tools._pinned_cli_version() == "cli-v9.9.9"
+
+
+def test_resolve_finds_previously_bootstrapped_binary(monkeypatch, tmp_path):
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    target = sdk_cli_tools._bootstrap_target()
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"#!/bin/sh\n")
+    target.chmod(0o755)
+    with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
+        assert _resolve_cli_binary() == str(target)
+
+
+def _sha256sums_for(asset: str, payload: bytes) -> bytes:
+    import hashlib
+
+    return f"{hashlib.sha256(payload).hexdigest()}  {asset}\n".encode()
+
+
+def test_bootstrap_downloads_verifies_and_installs(monkeypatch, tmp_path):
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    payload = b"fake-binary-bytes"
+    asset = sdk_cli_tools._cli_asset_name()
+    responses = {
+        "SHA256SUMS": _sha256sums_for(asset, payload),
+        asset: payload,
+    }
+
+    def fake_fetch(url):
+        return responses[url.rsplit("/", 1)[-1]]
+
+    monkeypatch.setattr(sdk_cli_tools, "_fetch", fake_fetch)
+    installed = sdk_cli_tools._bootstrap_cli_binary()
+    assert installed == str(sdk_cli_tools._bootstrap_target())
+    import os as _os
+
+    assert _os.access(installed, _os.X_OK)
+    with open(installed, "rb") as f:
+        assert f.read() == payload
+
+
+def test_bootstrap_rejects_checksum_mismatch(monkeypatch, tmp_path):
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    asset = sdk_cli_tools._cli_asset_name()
+    responses = {
+        "SHA256SUMS": _sha256sums_for(asset, b"expected-bytes"),
+        asset: b"tampered-bytes",
+    }
+    monkeypatch.setattr(
+        sdk_cli_tools, "_fetch", lambda url: responses[url.rsplit("/", 1)[-1]]
+    )
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        sdk_cli_tools._bootstrap_cli_binary()
+    assert not sdk_cli_tools._bootstrap_target().exists()
+
+
+def test_ensure_binary_bootstraps_when_nothing_found(monkeypatch, tmp_path):
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    monkeypatch.setattr(sdk_cli_tools, "_bootstrap_lock", None)
+    installed = tmp_path / "installed" / "litmus-cli"
+
+    def fake_bootstrap():
+        installed.parent.mkdir(parents=True, exist_ok=True)
+        installed.write_bytes(b"bin")
+        installed.chmod(0o755)
+        return str(installed)
+
+    monkeypatch.setattr(sdk_cli_tools, "_bootstrap_cli_binary", fake_bootstrap)
+    with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
+        assert run(sdk_cli_tools._ensure_cli_binary()) == str(installed)
+
+
+def test_ensure_binary_wraps_download_failure(monkeypatch, tmp_path):
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    monkeypatch.setattr(sdk_cli_tools, "_bootstrap_lock", None)
+
+    def fake_bootstrap():
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(sdk_cli_tools, "_bootstrap_cli_binary", fake_bootstrap)
+    with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
+        with pytest.raises(McpError, match="automatic install failed"):
+            run(sdk_cli_tools._ensure_cli_binary())

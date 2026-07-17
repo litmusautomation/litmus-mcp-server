@@ -273,6 +273,109 @@ def test_get_device_tags_device_not_found(mock_list_devices, mock_connection):
     assert "not found" in str(exc_info.value).lower()
 
 
+@patch("tools.devicehub_tools.get_litmus_connection")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.api.gql_query")
+def test_get_device_tags_over_limit_returns_first_page(
+    mock_gql_query, mock_list_devices, mock_connection
+):
+    """Totals beyond the page limit no longer refuse: the first page comes
+    back with pagination metadata."""
+    devicehub_tools._device_list_cache.clear()
+    mock_connection.return_value = MagicMock()
+    dev = MagicMock()
+    dev.name = "BigDevice"
+    dev.id = "dev-big"
+    mock_list_devices.return_value = [dev]
+    page = [{"TagName": f"Tag{i:04d}", "ID": f"t{i}"} for i in range(1000)]
+    mock_gql_query.side_effect = [
+        {"data": {"ListRegisters": {"TotalCount": 2500}}},
+        {"data": {"ListRegisters": {"Registers": page}}},
+    ]
+
+    data = _parse(
+        _run(get_devicehub_device_tags(_make_request(), {"device_name": "BigDevice"}))
+    )
+
+    assert data["success"] is True
+    assert data["total_count"] == 2500
+    assert data["count"] == 1000
+    assert data["has_more"] is True
+    assert data["next_offset"] == 1000
+    # first page: SkipCount omitted entirely for older-LE schema compatibility
+    list_input = mock_gql_query.call_args_list[1].args[1]["variables"]["input"]
+    assert list_input["Limit"] == 1000
+    assert "SkipCount" not in list_input
+
+
+@patch("tools.devicehub_tools.get_litmus_connection")
+@patch("tools.devicehub_tools.devices.list_devices")
+@patch("tools.devicehub_tools.api.gql_query")
+def test_get_device_tags_offset_passed_as_skipcount(
+    mock_gql_query, mock_list_devices, mock_connection
+):
+    """limit/offset arguments reach the GraphQL input as Limit/SkipCount."""
+    devicehub_tools._device_list_cache.clear()
+    mock_connection.return_value = MagicMock()
+    dev = MagicMock()
+    dev.name = "BigDevice"
+    dev.id = "dev-big"
+    mock_list_devices.return_value = [dev]
+    mock_gql_query.side_effect = [
+        {"data": {"ListRegisters": {"TotalCount": 2500}}},
+        {"data": {"ListRegisters": {"Registers": [{"TagName": "Tag2000"}]}}},
+    ]
+
+    data = _parse(
+        _run(
+            get_devicehub_device_tags(
+                _make_request(),
+                {"device_name": "BigDevice", "limit": 500, "offset": 2000},
+            )
+        )
+    )
+
+    assert data["success"] is True
+    assert data["offset"] == 2000
+    list_input = mock_gql_query.call_args_list[1].args[1]["variables"]["input"]
+    assert list_input["Limit"] == 500
+    assert list_input["SkipCount"] == 2000
+
+
+@patch("tools.devicehub_tools.get_litmus_connection")
+@patch("tools.devicehub_tools.api.gql_query")
+def test_get_all_tags_over_limit_pages_instead_of_refusing(
+    mock_gql_query, mock_connection
+):
+    """All-devices path also paginates with SkipCount."""
+    mock_connection.return_value = MagicMock()
+    mock_gql_query.side_effect = [
+        {"data": {"ListRegistersFromAllDevices": {"TotalCount": 1500}}},
+        {
+            "data": {
+                "ListRegistersFromAllDevices": {
+                    "Registers": [{"TagName": "Pressure"}]
+                }
+            }
+        },
+    ]
+
+    data = _parse(
+        _run(get_devicehub_device_tags(_make_request(), {"offset": 1000}))
+    )
+
+    assert data["success"] is True
+    assert data["total_count"] == 1500
+    list_input = mock_gql_query.call_args_list[1].args[1]["variables"]["input"]
+    assert list_input["SkipCount"] == 1000
+
+
+def test_get_device_tags_rejects_bad_pagination_args():
+    for bad in ({"limit": 0}, {"limit": 1001}, {"offset": -5}, {"limit": "abc"}):
+        with pytest.raises(McpError):
+            _run(get_devicehub_device_tags(_make_request(), bad))
+
+
 # ── get_current_value_of_devicehub_tag ─────────────────────────────────────
 
 
