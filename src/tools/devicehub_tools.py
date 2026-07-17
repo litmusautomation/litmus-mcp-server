@@ -4,7 +4,12 @@ from typing import Optional, Any
 from config import logger
 from utils.auth import get_litmus_connection, get_influx_connection_params
 from utils.formatting import format_success_response, format_error_response
-from .data_tools import get_current_value_on_topic, _make_influx_client
+from .data_tools import (
+    get_current_value_on_topic,
+    _make_influx_client,
+    _influx_connection_note,
+    _with_connection_note,
+)
 
 from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
@@ -584,6 +589,7 @@ async def get_device_connection_status(
             device_list = devices.list_devices(le_connection=connection)
 
         params = get_influx_connection_params(request)
+        note = _influx_connection_note(params)
         client = _make_influx_client(params)
         now_epoch = time.time()
 
@@ -651,11 +657,14 @@ async def get_device_connection_status(
             results.append(result)
 
         return format_success_response(
-            {
-                "count": len(results),
-                "threshold_seconds": threshold,
-                "devices": results,
-            }
+            _with_connection_note(
+                {
+                    "count": len(results),
+                    "threshold_seconds": threshold,
+                    "devices": results,
+                },
+                note,
+            )
         )
 
     except McpError:

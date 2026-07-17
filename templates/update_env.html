@@ -405,8 +405,7 @@ loadInstances();
 <div class="settings-form settings-form-grid">
     <label>Source (IP)<input type="text" id="nats-source" value="{{ mcp_config.nats_source }}" placeholder="10.0.0.1"></label>
     <label>Port<input type="text" id="nats-port" value="{{ mcp_config.nats_port }}" placeholder="4222"></label>
-    <label>User<input type="text" id="nats-user" value="{{ mcp_config.nats_user }}"></label>
-    <label>Password
+    <label>Password (LE access token)
         <div class="settings-input-wrap">
             <input type="password" id="nats-password" value="{{ mcp_config.nats_password }}" autocomplete="off">
             <button type="button" class="reveal-btn" onclick="toggleReveal('nats-password', this)" aria-label="Show"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -625,7 +624,6 @@ async function saveConnSettings() {
     const data = {
         NATS_SOURCE:          document.getElementById('nats-source').value.trim(),
         NATS_PORT:            document.getElementById('nats-port').value.trim(),
-        NATS_USER:            document.getElementById('nats-user').value.trim(),
         NATS_PASSWORD:        document.getElementById('nats-password').value.trim(),
         NATS_TLS:             document.getElementById('nats-tls').checked ? 'true' : 'false',
         INFLUX_HOST:          document.getElementById('influx-host').value.trim(),

@@ -193,62 +193,75 @@ def _validate_auth_headers(edge_url: str, client_id: str, client_secret: str) ->
         )
 
 
+def _data_plane_host(raw: Optional[str]) -> Optional[str]:
+    """Extract the bare hostname from an address such as
+    'https://edge.example.com:8443', '10.0.0.5:443', or 'edge.example.com/'.
+    Returns None when nothing parseable was given."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    try:
+        return urlparse(raw).hostname or None
+    except ValueError:
+        return None
+
+
 def get_nats_connection_params(request: Optional[Request] = None) -> dict:
     """
-    Get NATS connection parameters from request headers or environment variables.
+    Get NATS connection parameters from request headers.
 
-    Priority order:
-    1. Request headers (if request is provided)
-    2. Environment variables
-
-    Args:
-        request: Optional Starlette request object
+    Host resolution: an explicit NATS_SOURCE header wins; otherwise the host
+    is derived from EDGE_URL (scheme, port, and path stripped) and the
+    returned dict carries derived_from_edge_url=True so tools can tell the
+    caller a fallback was used.
 
     Returns:
         Dictionary containing NATS connection parameters:
         - nats_source: NATS server address
-        - nats_port: NATS server port
-        - nats_user: Optional username for authentication
-        - nats_password: Optional password for authentication
-        - nats_token: Optional token for authentication
+        - nats_port: NATS server port (default 4222)
+        - nats_user: Optional username (legacy; the LE broker ignores it)
+        - nats_password: Access-account API key (the only credential LE checks)
+        - nats_token: Optional alias for nats_password
         - use_tls: Whether to use TLS/SSL
+        - derived_from_edge_url: True when the host came from EDGE_URL
 
     Raises:
-        McpError: If required parameters are missing
+        McpError: If neither NATS_SOURCE nor EDGE_URL yields a host
     """
-    # Try to get from request headers first, then fall back to environment variables
+    if request is None:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message="NATS connection requires a request context",
+            )
+        )
 
-    nats_source = request.headers.get("NATS_SOURCE") or request.headers.get("EDGE_URL")
+    nats_source = _data_plane_host(request.headers.get("NATS_SOURCE"))
+    derived_from_edge_url = False
+    if not nats_source:
+        nats_source = _data_plane_host(request.headers.get("EDGE_URL"))
+        derived_from_edge_url = nats_source is not None
+
+    if not nats_source:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    "The NATS broker host is not configured. Set EDGE_URL "
+                    "(the NATS host is derived from it) or NATS_SOURCE in the "
+                    "MCP configuration. Tell the user one of the two is "
+                    "required for live data tools."
+                ),
+            )
+        )
+
     nats_port = request.headers.get("NATS_PORT") or NATS_PORT
     nats_user = request.headers.get("NATS_USER")
     nats_password = request.headers.get("NATS_PASSWORD")
     nats_token = request.headers.get("NATS_TOKEN")
     use_tls_str = request.headers.get("NATS_TLS", "true")
-
-    # Validate required parameters
-    if not nats_source:
-        raise McpError(
-            ErrorData(
-                code=INVALID_PARAMS,
-                message="NATS_SOURCE is required (from header or environment variable)",
-            )
-        )
-
-    if not nats_port:
-        raise McpError(
-            ErrorData(
-                code=INVALID_PARAMS,
-                message="NATS_PORT is required (from header or environment variable)",
-            )
-        )
-
-    # Clean up NATS source - remove http/https protocol if present
-    if nats_source:
-        nats_source = nats_source.replace("https://", "").replace("http://", "")
-        # Remove trailing slash if present
-        nats_source = nats_source.rstrip("/")
-
-    # Convert use_tls to boolean
     use_tls = use_tls_str.lower() in ("true", "1", "yes")
 
     params = {
@@ -258,10 +271,12 @@ def get_nats_connection_params(request: Optional[Request] = None) -> dict:
         "nats_password": nats_password,
         "nats_token": nats_token,
         "use_tls": use_tls,
+        "derived_from_edge_url": derived_from_edge_url,
     }
 
     logger.debug(
-        f"NATS connection params: source={nats_source}, port={nats_port}, use_tls={use_tls}"
+        f"NATS connection params: source={nats_source}, port={nats_port}, "
+        f"use_tls={use_tls}, derived_from_edge_url={derived_from_edge_url}"
     )
 
     return params
@@ -271,32 +286,44 @@ def get_influx_connection_params(request: Request) -> dict:
     """
     Get InfluxDB connection parameters from request headers.
 
-    Args:
-        request: Starlette request object
+    Host resolution: an explicit INFLUX_HOST header wins; otherwise the host
+    is derived from EDGE_URL (scheme, port, and path stripped) and the
+    returned dict carries derived_from_edge_url=True so tools can tell the
+    caller a fallback was used.
 
     Returns:
         Dictionary containing InfluxDB connection parameters:
         - INFLUX_HOST: InfluxDB server address
-        - INFLUX_PORT: InfluxDB server port
+        - INFLUX_PORT: InfluxDB server port (default 8086)
         - INFLUX_USERNAME: Username for authentication
         - INFLUX_PASSWORD: Password for authentication
         - INFLUX_DB_NAME: Database name
+        - derived_from_edge_url: True when the host came from EDGE_URL
 
     Raises:
         McpError: If required parameters are missing
     """
-    influx_host = request.headers.get("INFLUX_HOST") or request.headers.get("EDGE_URL")
+    influx_host = _data_plane_host(request.headers.get("INFLUX_HOST"))
+    derived_from_edge_url = False
+    if not influx_host:
+        influx_host = _data_plane_host(request.headers.get("EDGE_URL"))
+        derived_from_edge_url = influx_host is not None
+
     influx_port = request.headers.get("INFLUX_PORT", "8086")
     influx_username = request.headers.get("INFLUX_USERNAME")
     influx_password = request.headers.get("INFLUX_PASSWORD")
     influx_db_name = request.headers.get("INFLUX_DB_NAME", "tsdata")
 
-    # Validate required parameters
     if not influx_host:
         raise McpError(
             ErrorData(
                 code=INVALID_PARAMS,
-                message="INFLUX_HOST header is required",
+                message=(
+                    "The InfluxDB host is not configured. Set EDGE_URL "
+                    "(the InfluxDB host is derived from it) or INFLUX_HOST in "
+                    "the MCP configuration. Tell the user one of the two is "
+                    "required for historical data tools."
+                ),
             )
         )
 
@@ -316,21 +343,18 @@ def get_influx_connection_params(request: Request) -> dict:
             )
         )
 
-    # Clean up InfluxDB host - ensure it has http/https protocol
-    if influx_host:
-        # Remove trailing slash if present
-        influx_host = influx_host.rstrip("/")
-
     params = {
         "INFLUX_HOST": influx_host,
         "INFLUX_PORT": int(influx_port),
         "INFLUX_USERNAME": influx_username,
         "INFLUX_PASSWORD": influx_password,
         "INFLUX_DB_NAME": influx_db_name,
+        "derived_from_edge_url": derived_from_edge_url,
     }
 
     logger.debug(
-        f"InfluxDB connection params: host={influx_host}, port={influx_port}, db={influx_db_name}"
+        f"InfluxDB connection params: host={influx_host}, port={influx_port}, "
+        f"db={influx_db_name}, derived_from_edge_url={derived_from_edge_url}"
     )
 
     return params
