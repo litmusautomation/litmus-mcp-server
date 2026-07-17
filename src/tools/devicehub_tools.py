@@ -1,3 +1,4 @@
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Optional, Any
@@ -19,6 +20,8 @@ from litmussdk.devicehub import devices, tags
 from litmussdk.devicehub.tags import Tag
 from litmussdk.devicehub.drivers import list_all_drivers
 from litmussdk.utils import api, api_paths, gql_queries
+
+from .sdk_cli_tools import run_cli_function, CLIFunctionError
 
 # Short-lived cache for the device list, keyed by EDGE_URL.
 # Avoids redundant API round-trips when the LLM calls multiple device tools
@@ -271,16 +274,45 @@ def _extract_tags(raw_registers: list) -> list[dict]:
     return tag_data
 
 
+def _parse_page_args(arguments: dict) -> tuple[int, int]:
+    """Validate and return (limit, offset) pagination arguments."""
+    try:
+        limit = int(arguments.get("limit", _TAG_LIMIT))
+        offset = int(arguments.get("offset", 0))
+    except (TypeError, ValueError):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message="'limit' and 'offset' must be integers",
+            )
+        )
+    if not (1 <= limit <= _TAG_LIMIT):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=f"'limit' must be between 1 and {_TAG_LIMIT}",
+            )
+        )
+    if offset < 0:
+        raise McpError(
+            ErrorData(code=INVALID_PARAMS, message="'offset' must be >= 0")
+        )
+    return limit, offset
+
+
 async def get_devicehub_device_tags(
     request: Request, arguments: dict
 ) -> list[TextContent]:
     """
-    Retrieves tags for a specific device or all devices.
+    Retrieves tags for a specific device or all devices, paginated.
 
-    Always counts first; refuses to list if total exceeds _TAG_LIMIT.
+    Counts first, then returns one page of up to `limit` tags starting at
+    `offset` (GraphQL Limit/SkipCount). Response carries total_count,
+    has_more, and next_offset so callers can page through any tag count.
     """
     try:
         device_name = (arguments.get("device_name") or "").strip()
+        limit, offset = _parse_page_args(arguments)
         connection = get_litmus_connection(request)
 
         if device_name:
@@ -307,25 +339,21 @@ async def get_devicehub_device_tags(
                 .get("ListRegisters", {})
                 .get("TotalCount", 0)
             )
-            if total > _TAG_LIMIT:
-                return format_success_response(
-                    {
-                        "device_name": device_name,
-                        "total_count": total,
-                        "message": (
-                            f"Device '{device_name}' has {total} tags, which exceeds "
-                            f"the limit of {_TAG_LIMIT}. Cannot return the full list."
-                        ),
-                    }
-                )
 
+            # SkipCount is only sent when actually paginating, so the default
+            # first-page call stays compatible with LE builds whose GraphQL
+            # schema predates the field.
+            list_input: dict[str, Any] = {
+                "DeviceID": requested_device.id,
+                "Limit": limit,
+            }
+            if offset:
+                list_input["SkipCount"] = offset
             list_result = api.gql_query(
                 api_paths.DH_GRAPHQL,
                 {
                     "query": gql_queries.LIST_TAGS,
-                    "variables": {
-                        "input": {"DeviceID": requested_device.id, "Limit": _TAG_LIMIT}
-                    },
+                    "variables": {"input": list_input},
                 },
                 connection,
             )
@@ -348,22 +376,15 @@ async def get_devicehub_device_tags(
                 .get("ListRegistersFromAllDevices", {})
                 .get("TotalCount", 0)
             )
-            if total > _TAG_LIMIT:
-                return format_success_response(
-                    {
-                        "total_count": total,
-                        "message": (
-                            f"There are {total} tags across all devices, which exceeds "
-                            f"the limit of {_TAG_LIMIT}. Specify a device_name to narrow the query."
-                        ),
-                    }
-                )
 
+            list_input = {"Limit": limit}
+            if offset:
+                list_input["SkipCount"] = offset
             list_result = api.gql_query(
                 api_paths.DH_GRAPHQL,
                 {
                     "query": _LIST_ALL_TAGS_RAW,
-                    "variables": {"input": {"Limit": _TAG_LIMIT}},
+                    "variables": {"input": list_input},
                 },
                 connection,
             )
@@ -375,13 +396,27 @@ async def get_devicehub_device_tags(
             scope = "all devices"
 
         tag_data = _extract_tags(raw_registers)
-        logger.info(f"Retrieved {len(tag_data)} tags for {scope}")
+        has_more = offset + len(tag_data) < total
+        logger.info(
+            f"Retrieved {len(tag_data)} of {total} tags for {scope} "
+            f"(offset={offset}, limit={limit})"
+        )
 
         result: dict[str, Any] = {
             "count": len(tag_data),
+            "total_count": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": has_more,
             "tags": tag_data,
             "tag_names": [t["tag_name"] for t in tag_data],
         }
+        if has_more:
+            result["next_offset"] = offset + len(tag_data)
+            result["message"] = (
+                f"Returned tags {offset}-{offset + len(tag_data)} of {total}. "
+                f"Call again with offset={offset + len(tag_data)} for the next page."
+            )
         if device_name:
             result["device_name"] = device_name
 
@@ -901,6 +936,45 @@ async def delete_devicehub_tag(request: Request, arguments: dict) -> list[TextCo
         return format_error_response("deletion_failed", str(e))
 
 
+# Tag status is backed by the litmus-cli Go binary: the Python SDK path
+# requires every tag on a device to pass strict pydantic validation before a
+# status can be fetched, so a single quirky tag silently dropped a whole
+# device from the results.
+
+_STATUS_FANOUT_CONCURRENCY = 4
+
+
+async def _cli_device_tag_statuses(
+    request: Request, device_id: str
+) -> tuple[dict, list]:
+    """Return ({tag_id: tag_name}, [{'ID', 'State'}...]) for one device via
+    litmus-cli."""
+    cli_tags = (
+        await run_cli_function(
+            request,
+            "le.devicehub.ListDeviceTags",
+            {"deviceID": device_id, "limit": _TAG_LIMIT},
+        )
+        or []
+    )
+    tag_map = {
+        t.get("ID"): t.get("TagName") or t.get("Name")
+        for t in cli_tags
+        if isinstance(t, dict) and t.get("ID")
+    }
+    if not tag_map:
+        return {}, []
+    states = (
+        await run_cli_function(
+            request,
+            "le.devicehub.TagStatus",
+            {"deviceID": device_id, "tagIDs": list(tag_map.keys())},
+        )
+        or []
+    )
+    return tag_map, [s for s in states if isinstance(s, dict)]
+
+
 async def get_tag_status(request: Request, arguments: dict) -> list[TextContent]:
     """Get OK/ERROR status for tags on a device. Optionally filter to a single tag."""
     try:
@@ -921,30 +995,21 @@ async def get_tag_status(request: Request, arguments: dict) -> list[TextContent]
                 )
             )
 
-        tag_list = tags.list_registers_from_single_device(
-            device, le_connection=connection
-        )
+        tag_map, states = await _cli_device_tag_statuses(request, device.id)
+
+        statuses = [
+            {**s, "tag_name": tag_map.get(s.get("ID", ""), "unknown")}
+            for s in states
+        ]
         if filter_tag:
-            tag_list = [t for t in tag_list if t.tag_name == filter_tag]
-            if not tag_list:
+            statuses = [s for s in statuses if s.get("tag_name") == filter_tag]
+            if not statuses:
                 raise McpError(
                     ErrorData(
                         code=INVALID_PARAMS,
                         message=f"Tag '{filter_tag}' not found on device '{device_name}'.",
                     )
                 )
-
-        if not tag_list:
-            return format_success_response(
-                {"device_name": device_name, "count": 0, "statuses": []}
-            )
-
-        raw_statuses = tags.tag_status(device, tag_list, le_connection=connection)
-        tag_map = {t.id: t.tag_name for t in tag_list}
-        statuses = [
-            {**s, "tag_name": tag_map.get(s.get("ID", ""), "unknown")}
-            for s in raw_statuses
-        ]
 
         return format_success_response(
             {
@@ -956,6 +1021,8 @@ async def get_tag_status(request: Request, arguments: dict) -> list[TextContent]
 
     except McpError:
         raise
+    except CLIFunctionError as e:
+        return format_error_response("status_failed", str(e))
     except Exception as e:
         logger.error(f"Error getting tag status: {e}", exc_info=True)
         return format_error_response("status_failed", str(e))
@@ -969,32 +1036,40 @@ async def get_all_tags_status(request: Request, arguments: dict) -> list[TextCon
     try:
         filter_state = (arguments.get("filter_status", "not_ok") or "").strip().upper()
 
-        connection = get_litmus_connection(request)
-        device_list = devices.list_devices(le_connection=connection)
+        device_list = (
+            await run_cli_function(request, "le.devicehub.ListDevices", {}) or []
+        )
+        device_list = [d for d in device_list if isinstance(d, dict) and d.get("ID")]
 
-        all_statuses = []
-        for device in device_list:
-            try:
-                tag_list = tags.list_registers_from_single_device(
-                    device, le_connection=connection
-                )
-                if not tag_list:
-                    continue
-                raw = tags.tag_status(device, tag_list, le_connection=connection)
-                tag_map = {t.id: t.tag_name for t in tag_list}
-                for s in raw:
-                    all_statuses.append(
-                        {
-                            **s,
-                            "tag_name": tag_map.get(s.get("ID", ""), "unknown"),
-                            "device_name": device.name,
-                            "device_id": device.id,
-                        }
+        semaphore = asyncio.Semaphore(_STATUS_FANOUT_CONCURRENCY)
+        device_errors = []
+
+        async def _one(device: dict) -> list[dict]:
+            async with semaphore:
+                try:
+                    tag_map, states = await _cli_device_tag_statuses(
+                        request, device["ID"]
                     )
-            except Exception as ex:
-                logger.warning(
-                    f"Could not get tag status for device '{device.name}': {ex}"
-                )
+                except Exception as ex:
+                    logger.warning(
+                        f"Could not get tag status for device '{device.get('Name')}': {ex}"
+                    )
+                    device_errors.append(
+                        {"device_name": device.get("Name"), "error": str(ex)}
+                    )
+                    return []
+            return [
+                {
+                    **s,
+                    "tag_name": tag_map.get(s.get("ID", ""), "unknown"),
+                    "device_name": device.get("Name"),
+                    "device_id": device["ID"],
+                }
+                for s in states
+            ]
+
+        per_device = await asyncio.gather(*[_one(d) for d in device_list])
+        all_statuses = [s for group in per_device for s in group]
 
         if filter_state == "NOT_OK":
             all_statuses = [
@@ -1005,16 +1080,21 @@ async def get_all_tags_status(request: Request, arguments: dict) -> list[TextCon
                 s for s in all_statuses if s.get("State", "").upper() == filter_state
             ]
 
-        return format_success_response(
-            {
-                "count": len(all_statuses),
-                "filter_status": filter_state or None,
-                "statuses": all_statuses,
-            }
-        )
+        result: dict[str, Any] = {
+            "count": len(all_statuses),
+            "filter_status": filter_state or None,
+            "statuses": all_statuses,
+            "devices_checked": len(device_list),
+        }
+        if device_errors:
+            result["device_errors"] = device_errors
+
+        return format_success_response(result)
 
     except McpError:
         raise
+    except CLIFunctionError as e:
+        return format_error_response("status_failed", str(e))
     except Exception as e:
         logger.error(f"Error getting all tag statuses: {e}", exc_info=True)
         return format_error_response("status_failed", str(e))
@@ -1116,12 +1196,12 @@ TOOLS = [
         "category": "devicehub.tags",
         "annotations": ToolAnnotations(title="List Device Tags", readOnlyHint=True),
         "description": (
-            "Retrieves tags (data points/registers) with their configuration. "
-            "If device_name is provided, returns tags for that device only. "
-            "If device_name is omitted, returns tags across ALL devices. "
-            "Always performs a count check first - if the total exceeds 1000 the "
-            "tags are NOT returned and you should inform the user of the count and "
-            "ask them to specify a device_name to narrow the query."
+            "Retrieves tags (data points/registers) with their configuration, "
+            "paginated. If device_name is provided, returns tags for that device "
+            "only; otherwise tags across ALL devices. Returns up to `limit` tags "
+            "per call starting at `offset`, plus total_count/has_more/next_offset. "
+            "When has_more is true, call again with offset=next_offset to fetch "
+            "the next page - any total tag count can be paged through."
         ),
         "schema": {
             "type": "object",
@@ -1129,6 +1209,16 @@ TOOLS = [
                 "device_name": {
                     "type": "string",
                     "description": "Name of the device to filter by (omit to query all devices)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": f"Page size, 1-{_TAG_LIMIT} (default {_TAG_LIMIT})",
+                    "default": _TAG_LIMIT,
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Number of tags to skip; use next_offset from the previous page (default 0)",
+                    "default": 0,
                 },
             },
             "required": [],

@@ -67,6 +67,25 @@ def get_litmus_connection(request: Request) -> Any:
     edge_url = request.headers.get("EDGE_URL")
     client_id = request.headers.get("EDGE_API_CLIENT_ID")
     client_secret = request.headers.get("EDGE_API_CLIENT_SECRET")
+    if not edge_url and manager_url and api_token:
+        # LEM credentials are configured but the bridge target is incomplete:
+        # steer the model toward per-call bridge targeting instead of the
+        # generic "EDGE_URL header is required" dead end.
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    "This tool targets a Litmus Edge device, but only LEM "
+                    "credentials are configured. Pass 'project_id' and "
+                    "'device_id' arguments to route this call to a managed "
+                    "edge through the LEM bridge (find ids with "
+                    "lem_list_devices), or set EDGE_MANAGER_PROJECT_ID and "
+                    "EDGE_MANAGER_DEVICE_ID headers, or configure EDGE_URL "
+                    "with EDGE_API_CLIENT_ID/EDGE_API_CLIENT_SECRET for a "
+                    "direct connection."
+                ),
+            )
+        )
     _validate_auth_headers(edge_url, client_id, client_secret)
     try:
         connection = new_le_connection(

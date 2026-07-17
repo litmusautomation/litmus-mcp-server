@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import copy
 import logging
 import asyncio
 import os
@@ -131,14 +132,106 @@ async def handle_read_resource(uri):
     ]
 
 
+# Tool categories that target a Litmus Edge device and therefore can be
+# routed through the LEM bridge on a per-call basis. lem.* categories are
+# excluded: those tools talk to LEM itself and manage project_id themselves.
+_BRIDGEABLE_CATEGORY_PREFIXES = (
+    "devicehub",
+    "digitaltwins",
+    "marketplace",
+    "system",
+    "sdk.fallback",
+)
+
+_BRIDGE_ARG_PROPERTIES = {
+    "project_id": {
+        "type": "string",
+        "description": (
+            "Optional: LEM project id of the target edge device. Only used "
+            "when connecting through Litmus Edge Manager (EDGE_MANAGER_URL "
+            "configured). Together with device_id this routes the call to "
+            "that managed edge via the LEM bridge; find ids with "
+            "lem_list_devices."
+        ),
+    },
+    "device_id": {
+        "type": "string",
+        "description": (
+            "Optional: LEM device id of the target edge device. Only used "
+            "when connecting through Litmus Edge Manager (EDGE_MANAGER_URL "
+            "configured). Together with project_id this routes the call to "
+            "that managed edge via the LEM bridge; find ids with "
+            "lem_list_devices."
+        ),
+    },
+}
+
+
+def _is_bridgeable(tool: dict) -> bool:
+    category = tool.get("category", "")
+    return category.startswith(_BRIDGEABLE_CATEGORY_PREFIXES)
+
+
+def _with_bridge_args(schema: dict) -> dict:
+    """Return a copy of the tool schema with optional LEM bridge targeting
+    arguments added."""
+    schema = copy.deepcopy(schema)
+    properties = schema.setdefault("properties", {})
+    for key, prop in _BRIDGE_ARG_PROPERTIES.items():
+        properties.setdefault(key, prop)
+    return schema
+
+
+class BridgeOverlayRequest:
+    """Request wrapper that overlays per-call LEM bridge target ids onto the
+    connection headers, so downstream get_litmus_connection / CLI env
+    building sees a fully-specified bridge configuration."""
+
+    def __init__(self, request, project_id: str, device_id: str):
+        self._request = request
+        self.scope = getattr(request, "scope", {})
+        self.headers = _OverlayHeaders(
+            request.headers,
+            {
+                "EDGE_MANAGER_PROJECT_ID": project_id,
+                "EDGE_MANAGER_DEVICE_ID": device_id,
+            },
+        )
+
+
+class _OverlayHeaders:
+    def __init__(self, base, overrides: dict):
+        self._base = base
+        self._overrides = {k.lower(): v for k, v in overrides.items() if v}
+
+    def get(self, key, default=None):
+        value = self._overrides.get(key.lower())
+        if value:
+            return value
+        return self._base.get(key, default)
+
+
 @mcp.list_tools()
 async def handle_list_tools() -> list[Tool]:
-    """Return all registered tools from the per-file TOOLS registries."""
+    """Return all registered tools from the per-file TOOLS registries.
+
+    When the client is configured with LEM credentials (EDGE_MANAGER_URL
+    header present), edge-targeting tools additionally advertise optional
+    project_id/device_id arguments for per-call LEM bridge routing.
+    """
+    request = _resolve_request()
+    lem_configured = bool(
+        request is not None and request.headers.get("EDGE_MANAGER_URL")
+    )
     return [
         Tool(
             name=tool["name"],
             description=tool["description"],
-            inputSchema=tool["schema"],
+            inputSchema=(
+                _with_bridge_args(tool["schema"])
+                if lem_configured and _is_bridgeable(tool)
+                else tool["schema"]
+            ),
             annotations=tool.get("annotations"),
         )
         for tool in ALL_TOOLS
@@ -178,8 +271,15 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
             ErrorData(code=INTERNAL_ERROR, message="Request context not available")
         )
 
+    arguments = dict(arguments or {})
+    if _is_bridgeable(tool):
+        project_id = arguments.pop("project_id", "") or ""
+        device_id = arguments.pop("device_id", "") or ""
+        if project_id or device_id:
+            request = BridgeOverlayRequest(request, project_id, device_id)
+
     try:
-        return await tool["handler"](request, arguments or {})
+        return await tool["handler"](request, arguments)
     except McpError:
         raise
     except Exception as e:
