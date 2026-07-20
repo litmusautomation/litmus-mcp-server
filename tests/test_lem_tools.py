@@ -187,8 +187,9 @@ def test_lem_list_devices_success(mock_sdk, mock_conn):
     assert data["count"] == 1
     assert data["total_size"] == 1
     assert data["devices"][0]["id"] == "d1"
-    # Raw page is still nested for callers that need it.
-    assert data["page"]["pagesCount"] == 1
+    assert data["pages_count"] == 1
+    # The raw page must NOT be echoed as well - it doubled the payload.
+    assert "page" not in data
     kwargs = mock_sdk.call_args.kwargs
     assert kwargs["project_id"] == "proj-1"
     assert kwargs["limit"] == 5
