@@ -379,14 +379,8 @@ async def get_historical_data_from_influxdb_tool(
 
     User provides the measurement name and how much data they want (time range).
     """
-    logger.info("Trying")
     params = get_influx_connection_params(request)
     note = _influx_connection_note(params)
-    influx_host = params["INFLUX_HOST"]
-    influx_port = params["INFLUX_PORT"]
-    influx_username = params["INFLUX_USERNAME"]
-    influx_password = params["INFLUX_PASSWORD"]
-    influx_db_name = params["INFLUX_DB_NAME"]
     try:
         if not INFLUXDB_AVAILABLE:
             raise McpError(
@@ -399,6 +393,7 @@ async def get_historical_data_from_influxdb_tool(
         # Extract parameters
         measurement = arguments.get("measurement")
         time_range = arguments.get("time_range", "1h")
+        limit = min(int(arguments.get("limit", 10000)), 100000)
 
         # Validate inputs
         if not measurement:
@@ -426,22 +421,17 @@ async def get_historical_data_from_influxdb_tool(
             )
 
         # Build query - select all fields from the measurement
-        query = f'SELECT * FROM "{measurement}" WHERE time > now() - {time_range}'
+        query = (
+            f'SELECT * FROM "{measurement}" WHERE time > now() - {time_range} '
+            f"LIMIT {limit}"
+        )
 
         logger.info(f"Executing InfluxDB query: {query}")
 
-        # Create InfluxDB client
-        influx_client = influxdb.InfluxDBClient(
-            host=influx_host,
-            port=influx_port,
-            username=influx_username,
-            password=influx_password,
-            database=influx_db_name,
-            ssl=False,
-        )
+        influx_client = _make_influx_client(params)
 
-        # Execute query
-        result = influx_client.query(query, chunked=True, chunk_size=10000)
+        # Execute query (never chunked - see note at _make_influx_client)
+        result = influx_client.query(query)
         points = list(result.get_points())
 
         if not points:
@@ -494,6 +484,16 @@ async def get_historical_data_from_influxdb_tool(
 
 # ── InfluxDB helpers ──────────────────────────────────────────────────────────
 
+# Per-request timeout for the InfluxDB client. Without it, an unreachable
+# host blocks for the OS TCP timeout times the client's retries (~300s),
+# which can starve the whole MCP server.
+INFLUX_TIMEOUT_SECONDS = 15
+
+# NOTE: never pass chunked=True to client.query() - influxdb-python requests
+# msgpack responses, and chunked msgpack bodies make it fail with
+# "unpack(b) received extra data" as soon as a result exceeds one chunk.
+# Bound result sizes with LIMIT instead.
+
 
 def _make_influx_client(params: dict) -> influxdb.InfluxDBClient:
     return influxdb.InfluxDBClient(
@@ -503,7 +503,60 @@ def _make_influx_client(params: dict) -> influxdb.InfluxDBClient:
         password=params["INFLUX_PASSWORD"],
         database=params["INFLUX_DB_NAME"],
         ssl=False,
+        timeout=INFLUX_TIMEOUT_SECONDS,
+        retries=2,
     )
+
+
+def _influx_quote(value: str) -> str:
+    """Escape a value for use inside single quotes in InfluxQL."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _list_measurement_names(client) -> list[str]:
+    points = client.query("SHOW MEASUREMENTS").get_points()
+    return [pt["name"] for pt in points if isinstance(pt, dict) and "name" in pt]
+
+
+def _device_measurement_name(measurement_names: list, device) -> Optional[str]:
+    """Resolve the measurement holding a device's tag data.
+
+    Modern LE writes ALL of a device's registers into one measurement named
+    "<DeviceName>.<DeviceID>", indexed by register_id/tag/topic InfluxDB
+    tags; the NATS output topic (devicehub.alias.*) appears only as a tag
+    value there, not as a measurement name.
+    """
+    exact = f"{device.name}.{device.id}"
+    if exact in measurement_names:
+        return exact
+    if device.id:
+        for name in measurement_names:
+            if device.id in name:
+                return name
+    return None
+
+
+def _tag_data_source(
+    measurement_names: list, device, tag
+) -> tuple[Optional[str], str]:
+    """Return (measurement, where_prefix) for reading one tag's history.
+
+    Prefers a legacy per-topic measurement when one exists; otherwise the
+    per-device measurement filtered by the tag's register_id. The
+    where_prefix is either empty or an InfluxQL condition ending in ' AND '.
+    """
+    topic = _get_output_topic(tag)
+    if topic and topic in measurement_names:
+        return topic, ""
+    device_measurement = _device_measurement_name(measurement_names, device)
+    if device_measurement:
+        return (
+            device_measurement,
+            f"\"register_id\" = '{_influx_quote(tag.id)}' AND ",
+        )
+    # Nothing resolvable: fall back to the raw topic (query returns empty,
+    # matching the pre-existing behavior for absent data).
+    return topic, ""
 
 
 def _find_device(connection, device_name: str):
@@ -608,7 +661,7 @@ async def get_device_historical_data(
         for measurement in matches[:5]:
             try:
                 q = f'SELECT * FROM "{measurement}" WHERE time > now() - {time_range} LIMIT {limit}'
-                r = client.query(q, chunked=True, chunk_size=10000)
+                r = client.query(q)
                 pts = list(r.get_points())
                 results.append(
                     {"measurement": measurement, "count": len(pts), "data": pts}
@@ -685,20 +738,29 @@ async def query_tag_data(request: Request, arguments: dict) -> list[TextContent]
                 )
             )
 
-        output_topic = _get_output_topic(tag)
-        if not output_topic:
-            raise McpError(
-                ErrorData(
-                    code=INVALID_PARAMS,
-                    message=f"Tag '{tag.tag_name}' has no output topic — no data in InfluxDB.",
-                )
-            )
-
         params = get_influx_connection_params(request)
         note = _influx_connection_note(params)
         client = _make_influx_client(params)
-        q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {limit}'
-        r = client.query(q, chunked=True, chunk_size=5000)
+
+        measurement, where_prefix = _tag_data_source(
+            _list_measurement_names(client), device, tag
+        )
+        if not measurement:
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=(
+                        f"Tag '{tag.tag_name}' has no output topic and no "
+                        "per-device measurement was found - no data in InfluxDB."
+                    ),
+                )
+            )
+
+        q = (
+            f'SELECT * FROM "{measurement}" WHERE {where_prefix}'
+            f"time > now() - {time_range} ORDER BY time DESC LIMIT {limit}"
+        )
+        r = client.query(q)
         pts = list(r.get_points())
 
         return format_success_response(
@@ -707,7 +769,8 @@ async def query_tag_data(request: Request, arguments: dict) -> list[TextContent]
                     "device_name": device_name,
                     "tag_name": tag.tag_name,
                     "tag_id": tag.id,
-                    "measurement": output_topic,
+                    "measurement": measurement,
+                    "filtered_by_register_id": bool(where_prefix),
                     "time_range": time_range,
                     "count": len(pts),
                     "data": pts,
@@ -768,22 +831,28 @@ async def get_tag_statistics(request: Request, arguments: dict) -> list[TextCont
                 )
             )
 
-        output_topic = _get_output_topic(tag)
-        if not output_topic:
-            raise McpError(
-                ErrorData(
-                    code=INVALID_PARAMS,
-                    message=f"Tag '{tag.tag_name}' has no output topic.",
-                )
-            )
-
         params = get_influx_connection_params(request)
         note = _influx_connection_note(params)
         client = _make_influx_client(params)
+
+        measurement, where_prefix = _tag_data_source(
+            _list_measurement_names(client), device, tag
+        )
+        if not measurement:
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message=(
+                        f"Tag '{tag.tag_name}' has no output topic and no "
+                        "per-device measurement was found."
+                    ),
+                )
+            )
+
         q = (
             f'SELECT mean("value") AS mean, min("value") AS min, max("value") AS max, '
             f'count("value") AS count, stddev("value") AS stddev '
-            f'FROM "{output_topic}" WHERE time > now() - {time_range}'
+            f'FROM "{measurement}" WHERE {where_prefix}time > now() - {time_range}'
         )
         r = client.query(q)
         pts = list(r.get_points())
@@ -804,7 +873,8 @@ async def get_tag_statistics(request: Request, arguments: dict) -> list[TextCont
                     "device_name": device_name,
                     "tag_name": tag.tag_name,
                     "tag_id": tag.id,
-                    "measurement": output_topic,
+                    "measurement": measurement,
+                    "filtered_by_register_id": bool(where_prefix),
                     "time_range": time_range,
                     "statistics": stats,
                 },
@@ -852,22 +922,26 @@ async def get_device_data_for_inference(
             device, le_connection=connection
         )
 
+        measurement_names = _list_measurement_names(client)
+
         tags_data = []
         for tag in tag_list:
-            output_topic = _get_output_topic(tag)
+            measurement, where_prefix = _tag_data_source(
+                measurement_names, device, tag
+            )
             entry = {
                 "tag_name": tag.tag_name,
                 "tag_id": tag.id,
                 "value_type": tag.value_type,
-                "measurement": output_topic,
+                "measurement": measurement,
             }
 
-            if output_topic and include_statistics:
+            if measurement and include_statistics:
                 try:
                     q = (
                         f'SELECT mean("value") AS mean, min("value") AS min, max("value") AS max, '
                         f'count("value") AS count, stddev("value") AS stddev '
-                        f'FROM "{output_topic}" WHERE time > now() - {time_range}'
+                        f'FROM "{measurement}" WHERE {where_prefix}time > now() - {time_range}'
                     )
                     r = client.query(q)
                     pts = list(r.get_points())
@@ -885,18 +959,21 @@ async def get_device_data_for_inference(
                 except Exception as e:
                     entry["statistics_error"] = str(e)
                     logger.warning(
-                        f"Statistics query failed for topic '{output_topic}': {e}"
+                        f"Statistics query failed for measurement '{measurement}': {e}"
                     )
 
-            if output_topic and sample_size > 0:
+            if measurement and sample_size > 0:
                 try:
-                    q = f'SELECT * FROM "{output_topic}" WHERE time > now() - {time_range} ORDER BY time DESC LIMIT {sample_size}'
+                    q = (
+                        f'SELECT * FROM "{measurement}" WHERE {where_prefix}'
+                        f"time > now() - {time_range} ORDER BY time DESC LIMIT {sample_size}"
+                    )
                     r = client.query(q)
                     entry["recent_samples"] = list(r.get_points())
                 except Exception as e:
                     entry["samples_error"] = str(e)
                     logger.warning(
-                        f"Samples query failed for topic '{output_topic}': {e}"
+                        f"Samples query failed for measurement '{measurement}': {e}"
                     )
 
             tags_data.append(entry)
@@ -1016,6 +1093,11 @@ TOOLS = [
                     "description": "How much historical data to retrieve (e.g., '5m', '1h', '24h', '7d', '30d'). "
                     "Examples: '5m' = last 5 minutes, '1h' = last hour, '24h' = last day. Default: '1h'",
                     "default": "1h",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return (default 10000, max 100000)",
+                    "default": 10000,
                 },
             },
             "required": ["measurement"],

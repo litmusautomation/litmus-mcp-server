@@ -425,6 +425,22 @@ def _make_influx_result(points):
     return rs
 
 
+def _influx_query_dispatch(behavior, measurements=()):
+    """Build a client.query side effect: SHOW MEASUREMENTS returns the given
+    measurement names, everything else hits `behavior` (a result or a
+    callable taking the query string)."""
+
+    def side_effect(q, *args, **kwargs):
+        if q.strip().upper().startswith("SHOW MEASUREMENTS"):
+            return _make_influx_result([{"name": n} for n in measurements])
+        # Mock result objects are callable too; only dispatch real functions.
+        if callable(behavior) and not isinstance(behavior, Mock):
+            return behavior(q)
+        return behavior
+
+    return side_effect
+
+
 @patch("tools.devicehub_tools.get_current_value_on_topic", new_callable=AsyncMock)
 @patch("tools.devicehub_tools.tags.list_registers_from_single_device")
 @patch("tools.devicehub_tools.devices.list_devices")
@@ -485,7 +501,9 @@ def test_connection_status_recent_data_is_connected(
 
     recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     client = MagicMock()
-    client.query.return_value = _make_influx_result([{"time": recent, "value": 1.0}])
+    client.query.side_effect = _influx_query_dispatch(
+        _make_influx_result([{"time": recent, "value": 1.0}])
+    )
     mock_make_client.return_value = client
 
     result = _run(get_device_connection_status(_make_request(), {}))
@@ -523,7 +541,9 @@ def test_connection_status_old_data_is_stale(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
     client = MagicMock()
-    client.query.return_value = _make_influx_result([{"time": old, "value": 1.0}])
+    client.query.side_effect = _influx_query_dispatch(
+        _make_influx_result([{"time": old, "value": 1.0}])
+    )
     mock_make_client.return_value = client
 
     result = _run(get_device_connection_status(_make_request(), {}))
@@ -561,13 +581,13 @@ def test_connection_status_checks_all_topics(
 
     recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-    def query_side_effect(q):
+    def query_behavior(q):
         if "Flowing" in q:
             return _make_influx_result([{"time": recent, "value": 1.0}])
         return _make_influx_result([])
 
     client = MagicMock()
-    client.query.side_effect = query_side_effect
+    client.query.side_effect = _influx_query_dispatch(query_behavior)
     mock_make_client.return_value = client
 
     result = _run(get_device_connection_status(_make_request(), {}))
@@ -577,7 +597,10 @@ def test_connection_status_checks_all_topics(
     assert dev["status"] == "connected"
     assert dev["checked_topic"] == "dh.raw.d-1.Flowing"
     assert dev["checked_topics_count"] == 2
-    assert client.query.call_count == 2
+    select_calls = [
+        c for c in client.query.call_args_list if c.args[0].startswith("SELECT")
+    ]
+    assert len(select_calls) == 2
 
 
 @patch("tools.devicehub_tools._make_influx_client")
@@ -664,17 +687,19 @@ def test_tag_statistics_strips_epoch_zero_timestamp(
     mock_influx_params.return_value = {}
 
     client = MagicMock()
-    client.query.return_value = _make_influx_result(
-        [
-            {
-                "time": "1970-01-01T00:00:00Z",
-                "mean": 5.0,
-                "min": 1.0,
-                "max": 9.0,
-                "count": 100,
-                "stddev": 2.0,
-            }
-        ]
+    client.query.side_effect = _influx_query_dispatch(
+        _make_influx_result(
+            [
+                {
+                    "time": "1970-01-01T00:00:00Z",
+                    "mean": 5.0,
+                    "min": 1.0,
+                    "max": 9.0,
+                    "count": 100,
+                    "stddev": 2.0,
+                }
+            ]
+        )
     )
     mock_make_client.return_value = client
 

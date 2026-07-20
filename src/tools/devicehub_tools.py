@@ -4,12 +4,18 @@ from datetime import datetime, timezone
 from typing import Optional, Any
 from config import logger
 from utils.auth import get_litmus_connection, get_influx_connection_params
-from utils.formatting import format_success_response, format_error_response
+from utils.formatting import (
+    format_success_response,
+    format_error_response,
+    redact_secrets,
+)
 from .data_tools import (
     get_current_value_on_topic,
     _make_influx_client,
     _influx_connection_note,
     _with_connection_note,
+    _list_measurement_names,
+    _device_measurement_name,
 )
 
 from mcp.shared.exceptions import McpError
@@ -159,17 +165,11 @@ async def create_devicehub_device(
 
         # Get driver information
         driver_list = list_all_drivers(le_connection=connection)
-        driver_map = {}
-        driver_names = []
-
-        for driver in driver_list:
-            driver_map[driver.name] = {
-                "id": driver.id,
-                "properties": driver.get_default_properties(),
-            }
-            driver_names.append(driver.name)
-
-        if selected_driver not in driver_names:
+        driver_names = [d.name for d in driver_list]
+        requested_driver = next(
+            (d for d in driver_list if d.name == selected_driver), None
+        )
+        if requested_driver is None:
             raise McpError(
                 ErrorData(
                     code=INVALID_PARAMS,
@@ -177,25 +177,31 @@ async def create_devicehub_device(
                 )
             )
 
-        # Create device
-        device = devices.Device(
-            name=name,
-            properties=driver_map[selected_driver]["properties"],
-            driver=driver_map[selected_driver]["id"],
+        # Create device. The driver is passed as the Driver OBJECT, not its id
+        # string: a string would make the Device model resolve it through the
+        # SDK's env-based default connection (ignoring the per-request
+        # headers), which fails on servers whose env holds no/placeholder
+        # credentials.
+        device = devices.Device.model_validate(
+            {
+                "name": name,
+                "properties": requested_driver.get_default_properties(),
+                "driver": requested_driver,
+            },
+            context={"le_connection": connection},
         )
 
         created_device = devices.create_device(device, le_connection=connection)
 
-        device_dict = (
-            created_device.__dict__
-            if hasattr(created_device, "__dict__")
-            else {"id": str(created_device)}
-        )
-
         logger.info(f"Created device '{name}' with driver '{selected_driver}'")
 
         result = {
-            "device": device_dict,
+            "device": {
+                "id": getattr(created_device, "id", None),
+                "name": getattr(created_device, "name", name),
+                "driver": selected_driver,
+                "description": getattr(created_device, "description", None),
+            },
             "next_steps": [
                 "Update connection properties (IP address, port, etc.)",
                 "Configure tags/registers for data collection",
@@ -575,7 +581,9 @@ def _build_device_info(device: Any) -> dict:
 
     device_info = {k: v for k, v in device_info.items() if v is not None}
 
-    return device_info
+    # Device properties can carry credentials (PLC passwords, OPC-UA private
+    # keys/certs); never hand those to the LLM.
+    return redact_secrets(device_info)
 
 
 def _create_device_summary(device_data: list[dict]) -> dict:
@@ -627,37 +635,48 @@ async def get_device_connection_status(
         note = _influx_connection_note(params)
         client = _make_influx_client(params)
         now_epoch = time.time()
+        measurement_names = _list_measurement_names(client)
 
         results = []
         for device in device_list:
-            output_topics = []
             error = None
-            try:
-                tag_list = tags.list_registers_from_single_device(
-                    device, le_connection=connection
-                )
-                for tag in tag_list:
-                    for tp in tag.topics or []:
-                        if tp.direction == "Output":
-                            output_topics.append(tp.topic)
-            except Exception as e:
-                error = f"tag_listing_failed: {e}"
-                logger.warning(
-                    f"Could not list tags for device '{device.name}': {e}"
-                )
 
-            # Newest data point across all of the device's output topics.
+            # Modern LE stores all of a device's data in one measurement
+            # named "<DeviceName>.<DeviceID>"; probe that first. Legacy
+            # setups (one measurement per output topic) are the fallback.
+            probe_measurements = []
+            device_measurement = _device_measurement_name(
+                measurement_names, device
+            )
+            if device_measurement:
+                probe_measurements = [device_measurement]
+            else:
+                try:
+                    tag_list = tags.list_registers_from_single_device(
+                        device, le_connection=connection
+                    )
+                    for tag in tag_list:
+                        for tp in tag.topics or []:
+                            if tp.direction == "Output":
+                                probe_measurements.append(tp.topic)
+                except Exception as e:
+                    error = f"tag_listing_failed: {e}"
+                    logger.warning(
+                        f"Could not list tags for device '{device.name}': {e}"
+                    )
+
+            # Newest data point across the probed measurements.
             # SELECT last(*) is deliberately avoided: applied to multiple
             # fields, InfluxQL returns the epoch-0 timestamp instead of the
             # point's real time.
             status = "no_data"
             last_seen = None
-            last_seen_topic = None
+            last_seen_measurement = None
             newest_ts = None
-            for output_topic in output_topics:
+            for probe in probe_measurements:
                 try:
                     rs = client.query(
-                        f'SELECT * FROM "{output_topic}" ORDER BY time DESC LIMIT 1'
+                        f'SELECT * FROM "{probe}" ORDER BY time DESC LIMIT 1'
                     )
                     pts = list(rs.get_points())
                     if not pts:
@@ -668,11 +687,11 @@ async def get_device_connection_status(
                     if newest_ts is None or ts_epoch > newest_ts:
                         newest_ts = ts_epoch
                         last_seen = ts_str
-                        last_seen_topic = output_topic
+                        last_seen_measurement = probe
                 except Exception as e:
                     error = f"influx_query_failed: {e}"
                     logger.warning(
-                        f"InfluxDB query failed for topic '{output_topic}': {e}"
+                        f"InfluxDB query failed for measurement '{probe}': {e}"
                     )
 
             if newest_ts is not None:
@@ -684,8 +703,8 @@ async def get_device_connection_status(
                 "device_id": device.id,
                 "status": status,
                 "last_seen": last_seen,
-                "checked_topic": last_seen_topic,
-                "checked_topics_count": len(output_topics),
+                "checked_topic": last_seen_measurement,
+                "checked_topics_count": len(probe_measurements),
             }
             if error:
                 result["error"] = error

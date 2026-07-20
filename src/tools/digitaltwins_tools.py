@@ -11,8 +11,8 @@ from litmussdk.digital_twins import (
     list_all_instances,
     create_instance,
     get_hierarchy,
-    save_hierarchy,
 )
+from litmussdk.utils import api, api_paths, gql_queries
 from utils.auth import get_litmus_connection
 from utils.formatting import format_success_response, format_error_response
 from config import logger
@@ -455,11 +455,63 @@ async def get_hierarchy_tool(request: Request, arguments: dict) -> list[TextCont
         return format_error_response("get_hierarchy_failed", str(e))
 
 
+# Node fields accepted by the SaveAllHierarchy mutation. The getter
+# decorates each node with ID/ModelID/ParentID plus wrapper Name/Attr
+# fields, all of which the save input type rejects with
+# GRAPHQL_VALIDATION_FAILED.
+_SAVE_NODE_FIELDS = (
+    "Position",
+    "Name",
+    "IsFolder",
+    "AttributeID",
+    "AttributeType",
+    "NodeType",
+)
+
+
+def _to_save_hierarchy(hierarchy) -> list:
+    """Convert a hierarchy in get_digital_twin_hierarchy's output shape into
+    the list of SaveAllHierarchyRequest nodes the save mutation accepts, so a
+    get -> save round-trip works as the tool descriptions promise."""
+    if isinstance(hierarchy, dict):
+        if hierarchy.get("Node") is None and "Childs" in hierarchy:
+            # Root wrapper ({"Name": "root", "Node": null, "Childs": [...]})
+            nodes = hierarchy.get("Childs") or []
+        else:
+            nodes = [hierarchy]
+    elif isinstance(hierarchy, list):
+        nodes = hierarchy
+    else:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message="'hierarchy_json' must be a hierarchy object or array of nodes",
+            )
+        )
+
+    save_nodes = []
+    for raw in nodes:
+        if not isinstance(raw, dict):
+            continue
+        node = raw.get("Node") or {}
+        save_node = {k: node.get(k) for k in _SAVE_NODE_FIELDS if k in node}
+        if "Name" not in save_node and raw.get("Name") is not None:
+            save_node["Name"] = raw.get("Name")
+        save_nodes.append(
+            {
+                "Node": save_node,
+                "Childs": _to_save_hierarchy(raw.get("Childs") or []),
+            }
+        )
+    return save_nodes
+
+
 async def save_hierarchy_tool(request: Request, arguments: dict) -> list[TextContent]:
     """
     Saves a new hierarchy configuration to a digital twin model.
 
-    The hierarchy must be in the exact JSON format used by Digital Twins.
+    Accepts the exact shape returned by get_digital_twin_hierarchy and
+    transforms it into the save mutation's input format.
     """
     try:
         connection = get_litmus_connection(request)
@@ -483,12 +535,28 @@ async def save_hierarchy_tool(request: Request, arguments: dict) -> list[TextCon
                 )
             )
 
-        # Save hierarchy
-        result_data = save_hierarchy(
-            model_id=model_id,
-            hierarchy_json=hierarchy_json,
-            le_connection=connection,
+        # Save hierarchy, converted from the getter's shape to the save
+        # mutation's input shape
+        save_nodes = _to_save_hierarchy(hierarchy_json)
+        if not save_nodes:
+            raise McpError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="'hierarchy_json' contains no hierarchy nodes",
+                )
+            )
+        # The GQL mutation is called directly: litmussdk's save_hierarchy
+        # reads the response key 'SaveHierarchy' while the mutation is named
+        # 'SaveAllHierarchy', so it raises KeyError even on success.
+        gql_result = api.gql_query(
+            api_paths.DT_GRAPHQL,
+            {
+                "query": gql_queries.DT_SAVE_HIERARCHY,
+                "variables": {"modelId": model_id, "input": save_nodes},
+            },
+            connection,
         )
+        result_data = gql_result.get("data", {}).get("SaveAllHierarchy")
 
         logger.info(f"Saved hierarchy for model {model_id}")
 
@@ -738,8 +806,9 @@ TOOLS = [
         "annotations": ToolAnnotations(title="Save Digital Twin Hierarchy", readOnlyHint=False, destructiveHint=True),
         "description": (
             "Saves a new hierarchy configuration to a Digital Twin model. "
-            "The hierarchy must be in the exact JSON format used by Digital Twins. "
-            "Use get_digital_twin_hierarchy first to see the expected format."
+            "Accepts the exact shape returned by get_digital_twin_hierarchy "
+            "(a get -> modify -> save round-trip works); extra read-only "
+            "fields (ID, ModelID, ParentID, Attr) are stripped automatically."
         ),
         "schema": {
             "type": "object",

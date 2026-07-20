@@ -203,7 +203,7 @@ async def stop_packet_capture(request: Request, arguments: dict) -> list[TextCon
 _GET_SYSTEM_EVENTS_DESC = (
     "Retrieves system events and logs from Litmus Edge. "
     "Filter by time range, component, and severity. "
-    "Use get_system_event_stats for queue health and throughput metrics instead."
+    "Use get_system_event_stats for event store statistics instead."
 )
 
 _GET_SYSTEM_EVENTS_SCHEMA = {
@@ -261,9 +261,11 @@ TOOLS = [
         "category": "system.events",
         "annotations": ToolAnnotations(title="Get System Event Stats", readOnlyHint=True),
         "description": (
-            "Returns event manager statistics: queue sizes, processing rates, memory, health indicators. "
-            "Use this to check system health and event pipeline throughput. "
-            "Use get_system_events to read actual event messages."
+            "Returns event manager statistics as reported by the LE API. "
+            "NOTE: current LE versions report only the event store size in "
+            "bytes ({\"size\": <int>}); richer metrics appear only when the "
+            "edge provides them. Use get_system_events to read actual event "
+            "messages."
         ),
         "schema": {"type": "object", "properties": {}, "required": []},
         "handler": get_system_event_stats,

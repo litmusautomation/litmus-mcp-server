@@ -28,7 +28,11 @@ from litmussdk.system import network, device_management
 from config import DEFAULT_TIMEOUT
 
 from utils.auth import get_lem_connection, get_lem_project_id
-from utils.formatting import format_success_response, format_error_response
+from utils.formatting import (
+    format_success_response,
+    format_error_response,
+    redact_secrets,
+)
 from config import logger
 
 
@@ -53,10 +57,10 @@ async def lem_list_devices_tool(
             connection=connection,
         )
         # The LEM API returns the page as {pageNum, pagesCount, size, totalSize,
-        # elements: [...]}. Surface elements/totalSize at the top level so
-        # callers don't have to know the shape; keep the raw page nested.
+        # elements: [...]}. Surface elements/totalSize at the top level; the
+        # raw page is NOT echoed back as well, since that doubled the payload.
         page_dict = result if isinstance(result, dict) else {}
-        devices = page_dict.get("elements") or []
+        devices = redact_secrets(page_dict.get("elements") or [])
         logger.info(
             f"LEM list_devices project={project_id} page={page} limit={limit} "
             f"returned={len(devices)} total={page_dict.get('totalSize')}"
@@ -68,7 +72,6 @@ async def lem_list_devices_tool(
                 "total_size": page_dict.get("totalSize"),
                 "page_num": page_dict.get("pageNum"),
                 "pages_count": page_dict.get("pagesCount"),
-                "page": page_dict,
             }
         )
     except McpError:
@@ -100,7 +103,7 @@ async def lem_get_device_details_tool(
             connection=connection,
         )
         logger.info(f"LEM device_details project={project_id} device={device_id}")
-        return format_success_response({"device": result})
+        return format_success_response({"device": redact_secrets(result)})
     except McpError:
         raise
     except Exception as e:
