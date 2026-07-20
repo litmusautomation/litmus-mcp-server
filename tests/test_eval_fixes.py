@@ -220,42 +220,41 @@ def test_tag_source_final_fallback_is_raw_topic():
     assert where == ""
 
 
-# ── create_devicehub_device connection path ──────────────────────────────────
+# ── create_devicehub_device via litmus-cli ───────────────────────────────────
 
 
-@patch("tools.devicehub_tools.devices.create_device")
-@patch("tools.devicehub_tools.devices.Device.model_validate")
-@patch("tools.devicehub_tools.list_all_drivers")
-@patch("tools.devicehub_tools.get_litmus_connection")
-def test_create_device_passes_driver_object_and_connection_context(
-    mock_connection, mock_list_drivers, mock_validate, mock_create
-):
-    """Regression: passing the driver id string made the Device model resolve
-    it through the SDK's env-based default connection (the placeholder-host
-    failure); the Driver object plus explicit context avoids that."""
+def test_create_device_goes_through_cli_not_python_sdk():
+    """Regression: the Python SDK's Device model resolved driver id strings
+    through its env-based default connection (the placeholder-host failure)
+    and its pydantic objects broke response serialization. Creation now runs
+    entirely through litmus-cli with the request-derived environment."""
+    import tools.devicehub_tools as dh_tools
     from tools.devicehub_tools import create_devicehub_device
 
-    connection = MagicMock()
-    mock_connection.return_value = connection
-    driver = MagicMock()
-    driver.name = "Generator"
-    driver.get_default_properties.return_value = {"pollingInterval": "1000"}
-    mock_list_drivers.return_value = [driver]
+    driver = {"ID": "drv-1", "Name": "Generator", "Properties": [{"Name": "p"}]}
+    calls = []
 
-    created = MagicMock()
-    created.id = "NEW-ID"
-    created.name = "dev-1"
-    created.description = ""
-    mock_validate.return_value = MagicMock()
-    mock_create.return_value = created
+    async def fake_cli(request, function, args):
+        calls.append(function)
+        if function == "le.devicehub.ListDrivers":
+            return [driver]
+        assert function == "le.devicehub.CreateDefaultDevice"
+        assert args["driver"] == driver
+        assert args["name"] == "dev-1"
+        return {"ID": "NEW-ID", "Name": "dev-1", "Description": ""}
 
-    result = _run(
-        create_devicehub_device(
-            _make_request(), {"name": "dev-1", "selected_driver": "Generator"}
+    with patch.object(dh_tools, "run_cli_function", side_effect=fake_cli), patch(
+        "tools.devicehub_tools.get_litmus_connection"
+    ) as mock_conn, patch(
+        "tools.devicehub_tools.devices.create_device"
+    ) as mock_sdk_create:
+        result = _run(
+            create_devicehub_device(
+                _make_request(), {"name": "dev-1", "selected_driver": "Generator"}
+            )
         )
-    )
-    data = _parse(result)
 
+    data = _parse(result)
     assert data["success"] is True
     assert data["device"] == {
         "id": "NEW-ID",
@@ -263,10 +262,10 @@ def test_create_device_passes_driver_object_and_connection_context(
         "driver": "Generator",
         "description": "",
     }
-    payload = mock_validate.call_args.args[0]
-    assert payload["driver"] is driver
-    assert mock_validate.call_args.kwargs["context"] == {
-        "le_connection": connection
-    }
-    mock_create.assert_called_once()
-    assert mock_create.call_args.kwargs["le_connection"] is connection
+    assert calls == [
+        "le.devicehub.ListDrivers",
+        "le.devicehub.CreateDefaultDevice",
+    ]
+    # The Python SDK must be completely out of the creation path.
+    mock_conn.assert_not_called()
+    mock_sdk_create.assert_not_called()

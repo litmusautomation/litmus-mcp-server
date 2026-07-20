@@ -161,13 +161,18 @@ async def create_devicehub_device(
                 )
             )
 
-        connection = get_litmus_connection(request)
-
-        # Get driver information
-        driver_list = list_all_drivers(le_connection=connection)
-        driver_names = [d.name for d in driver_list]
+        # Device creation goes through litmus-cli: the Python SDK's Device
+        # model resolves drivers through its env-based default connection
+        # (the placeholder-host bug) and its pydantic objects don't
+        # serialize; the Go path takes the driver JSON verbatim and fills
+        # required properties from the driver's defaults.
+        driver_list = (
+            await run_cli_function(request, "le.devicehub.ListDrivers", {}) or []
+        )
+        driver_list = [d for d in driver_list if isinstance(d, dict)]
+        driver_names = sorted(d.get("Name") for d in driver_list if d.get("Name"))
         requested_driver = next(
-            (d for d in driver_list if d.name == selected_driver), None
+            (d for d in driver_list if d.get("Name") == selected_driver), None
         )
         if requested_driver is None:
             raise McpError(
@@ -177,30 +182,21 @@ async def create_devicehub_device(
                 )
             )
 
-        # Create device. The driver is passed as the Driver OBJECT, not its id
-        # string: a string would make the Device model resolve it through the
-        # SDK's env-based default connection (ignoring the per-request
-        # headers), which fails on servers whose env holds no/placeholder
-        # credentials.
-        device = devices.Device.model_validate(
-            {
-                "name": name,
-                "properties": requested_driver.get_default_properties(),
-                "driver": requested_driver,
-            },
-            context={"le_connection": connection},
+        created = await run_cli_function(
+            request,
+            "le.devicehub.CreateDefaultDevice",
+            {"driver": requested_driver, "name": name, "params": {}},
         )
-
-        created_device = devices.create_device(device, le_connection=connection)
+        created = created if isinstance(created, dict) else {}
 
         logger.info(f"Created device '{name}' with driver '{selected_driver}'")
 
         result = {
             "device": {
-                "id": getattr(created_device, "id", None),
-                "name": getattr(created_device, "name", name),
+                "id": created.get("ID"),
+                "name": created.get("Name", name),
                 "driver": selected_driver,
-                "description": getattr(created_device, "description", None),
+                "description": created.get("Description"),
             },
             "next_steps": [
                 "Update connection properties (IP address, port, etc.)",
@@ -541,26 +537,38 @@ async def get_current_value_of_devicehub_tag(
 def _find_device_by_name(
     connection: Any, device_name: str, request=None
 ) -> Optional[Any]:
-    """Find a device by name, using a short-lived cache to avoid redundant API calls."""
+    """Find a device by name, using a short-lived cache to avoid redundant API calls.
+
+    A cache miss on the name triggers one fresh fetch: a device created
+    moments ago (e.g. create_devicehub_device followed by create_devicehub_tag)
+    must be findable before the cached list expires.
+    """
     cache_key = ""
     if request is not None:
         cache_key = request.headers.get("EDGE_URL") or ""
 
+    def _search(device_list):
+        return next((d for d in device_list if d.name == device_name), None)
+
     now = time.monotonic()
+    served_from_cache = False
     if cache_key:
         cached = _device_list_cache.get(cache_key)
         if cached and now - cached[1] < _DEVICE_LIST_TTL:
             device_list = cached[0]
+            served_from_cache = True
         else:
             device_list = devices.list_devices(le_connection=connection)
             _device_list_cache[cache_key] = (device_list, now)
     else:
         device_list = devices.list_devices(le_connection=connection)
 
-    for device in device_list:
-        if device.name == device_name:
-            return device
-    return None
+    device = _search(device_list)
+    if device is None and served_from_cache:
+        device_list = devices.list_devices(le_connection=connection)
+        _device_list_cache[cache_key] = (device_list, time.monotonic())
+        device = _search(device_list)
+    return device
 
 
 def _build_device_info(device: Any) -> dict:

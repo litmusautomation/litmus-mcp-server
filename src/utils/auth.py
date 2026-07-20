@@ -328,10 +328,12 @@ def get_influx_connection_params(request: Request) -> dict:
         influx_host = _data_plane_host(request.headers.get("EDGE_URL"))
         derived_from_edge_url = influx_host is not None
 
-    influx_port = request.headers.get("INFLUX_PORT", "8086")
+    # `or` fallbacks: stdio mode materializes unset env vars as empty-string
+    # headers, which must not override the defaults (int('') crashed here).
+    influx_port = request.headers.get("INFLUX_PORT") or "8086"
     influx_username = request.headers.get("INFLUX_USERNAME")
     influx_password = request.headers.get("INFLUX_PASSWORD")
-    influx_db_name = request.headers.get("INFLUX_DB_NAME", "tsdata")
+    influx_db_name = request.headers.get("INFLUX_DB_NAME") or "tsdata"
 
     if not influx_host:
         raise McpError(
@@ -362,9 +364,19 @@ def get_influx_connection_params(request: Request) -> dict:
             )
         )
 
+    try:
+        influx_port_int = int(influx_port)
+    except (TypeError, ValueError):
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=f"INFLUX_PORT must be an integer, got '{influx_port}'",
+            )
+        )
+
     params = {
         "INFLUX_HOST": influx_host,
-        "INFLUX_PORT": int(influx_port),
+        "INFLUX_PORT": influx_port_int,
         "INFLUX_USERNAME": influx_username,
         "INFLUX_PASSWORD": influx_password,
         "INFLUX_DB_NAME": influx_db_name,

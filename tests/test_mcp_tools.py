@@ -146,29 +146,30 @@ def test_get_devices_filter_by_driver(mock_list_devices, mock_connection):
 # ── create_devicehub_device ─────────────────────────────────────────────────
 
 
-@patch("tools.devicehub_tools.get_litmus_connection")
-@patch("tools.devicehub_tools.list_all_drivers")
-@patch("tools.devicehub_tools.devices.create_device")
-@patch("tools.devicehub_tools.devices.Device")
-def test_create_device_success(
-    mock_Device, mock_create, mock_list_drivers, mock_connection
-):
-    """Creates device and returns success."""
-    mock_connection.return_value = MagicMock()
-    driver = MagicMock()
-    driver.name = "ModbusTCP"
-    driver.id = "drv-1"
-    driver.get_default_properties.return_value = {"ip": "10.0.0.1"}
-    mock_list_drivers.return_value = [driver]
-    # Use a simple namespace so __dict__ works correctly
-    created = type("Device", (), {"id": "dev-1", "name": "NewDevice"})()
-    mock_create.return_value = created
+def test_create_device_success():
+    """Creates a device through litmus-cli and returns its new ID."""
+    driver = {"ID": "drv-1", "Name": "ModbusTCP", "Properties": []}
 
-    args = {"name": "NewDevice", "selected_driver": "ModbusTCP"}
-    result = _run(create_devicehub_device(_make_request(), args))
+    async def fake_cli(request, function, args):
+        if function == "le.devicehub.ListDrivers":
+            return [driver]
+        assert function == "le.devicehub.CreateDefaultDevice"
+        # The driver JSON from ListDrivers must be passed through verbatim
+        assert args == {"driver": driver, "name": "NewDevice", "params": {}}
+        return {"ID": "dev-1", "Name": "NewDevice", "Description": ""}
+
+    with patch.object(devicehub_tools, "run_cli_function", side_effect=fake_cli):
+        result = _run(
+            create_devicehub_device(
+                _make_request(),
+                {"name": "NewDevice", "selected_driver": "ModbusTCP"},
+            )
+        )
     data = _parse(result)
 
     assert data["success"] is True
+    assert data["device"]["id"] == "dev-1"
+    assert data["device"]["driver"] == "ModbusTCP"
     assert "next_steps" in data
 
 
@@ -190,25 +191,23 @@ def test_create_device_missing_driver():
             _run(create_devicehub_device(_make_request(), {"name": "Dev"}))
 
 
-@patch("tools.devicehub_tools.get_litmus_connection")
-@patch("tools.devicehub_tools.list_all_drivers")
-def test_create_device_invalid_driver(mock_list_drivers, mock_connection):
+def test_create_device_invalid_driver():
     """Unknown driver raises McpError with available drivers listed."""
-    mock_connection.return_value = MagicMock()
-    driver = MagicMock()
-    driver.name = "ModbusTCP"
-    driver.id = "drv-1"
-    driver.get_default_properties.return_value = {}
-    mock_list_drivers.return_value = [driver]
 
-    with pytest.raises(McpError) as exc_info:
-        _run(
-            create_devicehub_device(
-                _make_request(), {"name": "Dev", "selected_driver": "BadDriver"}
+    async def fake_cli(request, function, args):
+        assert function == "le.devicehub.ListDrivers"
+        return [{"ID": "drv-1", "Name": "ModbusTCP"}]
+
+    with patch.object(devicehub_tools, "run_cli_function", side_effect=fake_cli):
+        with pytest.raises(McpError) as exc_info:
+            _run(
+                create_devicehub_device(
+                    _make_request(), {"name": "Dev", "selected_driver": "BadDriver"}
+                )
             )
-        )
 
     assert "not found" in str(exc_info.value).lower()
+    assert "ModbusTCP" in str(exc_info.value)
 
 
 # ── get_devicehub_device_tags ───────────────────────────────────────────────
