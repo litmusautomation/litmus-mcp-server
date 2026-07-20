@@ -302,6 +302,28 @@ def test_get_all_tags_status_covers_every_device_and_surfaces_errors():
     ]
 
 
+def test_get_all_tags_status_error_filter_aliases_failed_state():
+    """LE reports 'Failed' (RegisterState enum), so filter_status='ERROR' must
+    match Failed tags instead of silently matching nothing."""
+
+    async def fake_cli(request, function, args):
+        if function == "le.devicehub.ListDevices":
+            return [{"ID": "dev-1", "Name": "Alpha"}]
+        if function == "le.devicehub.ListDeviceTags":
+            return DEVICE_TAGS
+        return [
+            {"ID": "tag-1", "State": "OK"},
+            {"ID": "tag-2", "State": "Failed"},
+        ]
+
+    with patch.object(dh_tools, "run_cli_function", side_effect=fake_cli):
+        data = _parse(
+            _run(get_all_tags_status(_make_request(), {"filter_status": "ERROR"}))
+        )
+    assert data["count"] == 1
+    assert data["statuses"][0]["State"] == "Failed"
+
+
 def test_get_all_tags_status_filter_all_returns_everything():
     async def fake_cli(request, function, args):
         if function == "le.devicehub.ListDevices":

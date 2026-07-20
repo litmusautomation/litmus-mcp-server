@@ -375,7 +375,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `create_devicehub_tag`                 | Create a new tag (register) on a device. Driver-required properties auto-fill from defaults. |
 |                           | `update_devicehub_tag`                 | Update mutable fields of an existing tag (display name, description, properties). |
 |                           | `delete_devicehub_tag`                 | Delete a tag from a device. Destructive. |
-|                           | `get_tag_status`                       | Return OK/ERROR status for tags on a specific device. Optionally filter to a single tag. |
+|                           | `get_tag_status`                       | Return runtime state (OK/Failed/Unknown) for tags on a specific device. Optionally filter to a single tag. |
 |                           | `get_all_tags_status`                  | Return tag status across all devices. Defaults to non-OK only so issues surface first. |
 | **Device Identity**       | `get_litmusedge_friendly_name`         | Get the human-readable name assigned to the Litmus Edge device. |
 |                           | `set_litmusedge_friendly_name`         | Update the friendly name of the Litmus Edge device. |
