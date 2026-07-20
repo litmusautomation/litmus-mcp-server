@@ -1035,6 +1035,10 @@ async def get_all_tags_status(request: Request, arguments: dict) -> list[TextCon
     """
     try:
         filter_state = (arguments.get("filter_status", "not_ok") or "").strip().upper()
+        # The LE RegisterState enum is OK/Failed/Unknown; accept the commonly
+        # guessed 'ERROR' as an alias for 'Failed'.
+        if filter_state == "ERROR":
+            filter_state = "FAILED"
 
         device_list = (
             await run_cli_function(request, "le.devicehub.ListDevices", {}) or []
@@ -1363,7 +1367,8 @@ TOOLS = [
         "category": "devicehub.tags",
         "annotations": ToolAnnotations(title="Get Tag Status", readOnlyHint=True),
         "description": (
-            "Returns OK/ERROR status for tags on a specific device. "
+            "Returns the runtime state for tags on a specific device. "
+            "State is one of OK, Failed, or Unknown (LE RegisterState enum). "
             "Optionally filter to a single tag by name. "
             "Use this to diagnose which tags are failing on a device."
         ),
@@ -1388,16 +1393,17 @@ TOOLS = [
         "category": "devicehub.tags",
         "annotations": ToolAnnotations(title="Get All Tags Status", readOnlyHint=True),
         "description": (
-            "Returns tag status across ALL devices. Defaults to returning only non-OK tags "
-            "so the LLM sees actionable issues first. Pass filter_status='' to see all. "
-            "Use get_tag_status for a single device."
+            "Returns tag status across ALL devices. Tag state is one of OK, "
+            "Failed, or Unknown (LE RegisterState enum). Defaults to returning "
+            "only non-OK tags so the LLM sees actionable issues first. Pass "
+            "filter_status='' to see all. Use get_tag_status for a single device."
         ),
         "schema": {
             "type": "object",
             "properties": {
                 "filter_status": {
                     "type": "string",
-                    "description": "Filter by state: 'not_ok' (default), 'OK', 'ERROR', or '' for all",
+                    "description": "Filter by state: 'not_ok' (default), 'OK', 'Failed', 'Unknown', or '' for all",
                     "default": "not_ok",
                 },
             },
