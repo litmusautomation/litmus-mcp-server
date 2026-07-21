@@ -116,10 +116,8 @@ def test_tool_names_within_directory_length_limit():
         assert len(tool["name"]) <= 64, f"{tool['name']}: name exceeds 64 chars"
 
 
-def test_get_device_logs_alias_points_to_get_system_events_handler():
-    """get_device_logs is the deprecation alias for get_system_events."""
-    canonical = TOOL_BY_NAME["get_system_events"]
-    alias = TOOL_BY_NAME["get_device_logs"]
-    assert alias.get("deprecated") is True
-    assert alias["handler"] is canonical["handler"]
-    assert "DEPRECATED" in alias["description"]
+def test_get_device_logs_alias_removed():
+    """The deprecated get_device_logs alias was removed in favor of
+    get_system_events and must not be reintroduced."""
+    assert "get_device_logs" not in TOOL_BY_NAME
+    assert "get_system_events" in TOOL_BY_NAME

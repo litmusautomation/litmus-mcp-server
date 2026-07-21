@@ -9,7 +9,9 @@ from starlette.requests import Request
 from litmussdk.system import events as sys_events, network as sys_network
 
 
-async def get_device_logs(request: Request, arguments: dict) -> list[TextContent]:
+async def get_system_events_tool(
+    request: Request, arguments: dict
+) -> list[TextContent]:
     try:
         now = int(time.time())
         from_ts = int(arguments.get("from_timestamp", now - 3600))
@@ -242,19 +244,7 @@ TOOLS = [
         "annotations": ToolAnnotations(title="Get System Events", readOnlyHint=True),
         "description": _GET_SYSTEM_EVENTS_DESC,
         "schema": _GET_SYSTEM_EVENTS_SCHEMA,
-        "handler": get_device_logs,
-    },
-    {
-        "name": "get_device_logs",
-        "category": "system.events",
-        "annotations": ToolAnnotations(title="Get Device Logs (Deprecated)", readOnlyHint=True),
-        "description": (
-            "(DEPRECATED, use `get_system_events`. Will be removed in next minor release.) "
-            + _GET_SYSTEM_EVENTS_DESC
-        ),
-        "schema": _GET_SYSTEM_EVENTS_SCHEMA,
-        "handler": get_device_logs,
-        "deprecated": True,
+        "handler": get_system_events_tool,
     },
     {
         "name": "get_system_event_stats",

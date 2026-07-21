@@ -310,7 +310,6 @@ async def verify_system():
         )
     await step("get_cloud_activation_status", "cloud status", {})
     await step("get_system_events", "recent events", {"limit": 5})
-    await step("get_device_logs", "deprecated alias still works", {})
     await step("get_system_event_stats", "event stats", {})
     await step("get_firewall_rules", "firewall", {})
     await step("get_network_interface_info", "network", {})
