@@ -36,9 +36,10 @@ ALLOWED_CATEGORIES = {
     "lem.tenant",
     "lem.bridge",
     "sdk.fallback",
+    "server.info",
 }
 
-EXPECTED_CANONICAL_COUNT = 60
+EXPECTED_CANONICAL_COUNT = 61
 
 
 def test_every_entry_well_formed():

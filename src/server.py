@@ -23,7 +23,7 @@ from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 
-from config import MCP_PORT
+from config import MCP_PORT, server_version
 from tools.devicehub_tools import TOOLS as _DH_TOOLS
 from tools.dm_tools import TOOLS as _DM_TOOLS
 from tools.marketplace_tools import TOOLS as _MKT_TOOLS
@@ -78,23 +78,12 @@ def _server_icons() -> list[Icon] | None:
     ]
 
 
-def _server_version() -> str | None:
-    """Project version from pyproject.toml; the project is a uv virtual
-    project (not an installed distribution), so package metadata is absent."""
-    pyproject = _Path(__file__).resolve().parent.parent / "pyproject.toml"
-    try:
-        import tomllib
-
-        with pyproject.open("rb") as f:
-            return tomllib.load(f)["project"]["version"]
-    except Exception:
-        return None
 
 
 # Create MCP server
 mcp = Server(
     "LitmusMCPServer",
-    version=_server_version(),
+    version=server_version(),
     website_url="https://litmus.io",
     icons=_server_icons(),
 )

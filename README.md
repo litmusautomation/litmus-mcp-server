@@ -391,7 +391,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 |                           | `get_tag_statistics`                   | Aggregate stats for a tag: mean, min, max, stddev, count, plus baseline range (mean +/- 2 sigma). |
 |                           | `get_device_data_for_inference`        | Composite payload for AI inference: device metadata, all tags, per-tag stats, and recent samples. |
 | **System, Events**        | `get_system_events`                    | Retrieve system events filtered by time range, component, and severity (INFO/WARN/ALERT/ERROR). |
-|                           | `get_system_event_stats`               | Event manager statistics as reported by the LE API (current LE versions report the event store size). |
+|                           | `get_system_event_stats`               | System and event health snapshot: event store size, last-hour event counts by severity, memory/storage usage, CPU count. |
+| **Server**                | `get_mcp_server_info`                  | Version info about the MCP server itself (server, litmussdk, litmus-cli, Python). Needs no edge connection. |
 | **System, Network**       | `get_firewall_rules`                   | Return configured firewall rules: ports, protocols, ALLOW/DENY actions. |
 |                           | `get_network_interface_info`           | Network interface details: IP, MAC, gateway, link status, MTU, speed. Defaults to `eth0`. |
 |                           | `get_packet_capture_interfaces`        | List network interfaces available for packet capture. |
