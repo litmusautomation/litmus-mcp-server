@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import tempfile
 import urllib.request
@@ -140,10 +141,10 @@ def _cli_asset_name() -> str:
     return f"litmus-cli-{os_name}-{arch}{suffix}"
 
 
-def _bootstrap_target() -> Path:
+def _bootstrap_target(tag: Optional[str] = None) -> Path:
     """Version-scoped install path, so a pin bump re-downloads naturally."""
     name = "litmus-cli.exe" if platform.system() == "Windows" else "litmus-cli"
-    return _BOOTSTRAP_BASE_DIR / _pinned_cli_version() / name
+    return _BOOTSTRAP_BASE_DIR / (tag or _pinned_cli_version()) / name
 
 
 def _fetch(url: str) -> bytes:
@@ -151,13 +152,50 @@ def _fetch(url: str) -> bytes:
         return resp.read()
 
 
-def _bootstrap_cli_binary() -> str:
-    """Download the pinned litmus-cli release, verify its SHA256 against the
-    release's SHA256SUMS, and install it under the user cache dir. Blocking;
-    run in a thread."""
-    tag = _pinned_cli_version()
+def version_key(text: str) -> tuple:
+    """Numeric sort key for version-ish strings ('cli-v0.8.0', 'v.1.1.1')."""
+    return tuple(int(x) for x in re.findall(r"\d+", text or ""))
+
+
+def get_latest_cli_tag() -> Optional[str]:
+    """Newest cli-v* release tag from the litmus-sdk-releases repo, or None
+    when none are visible. Blocking; run in a thread."""
+    api_url = (
+        "https://api.github.com/repos/litmusautomation/litmus-sdk-releases"
+        "/releases?per_page=30"
+    )
+    releases = json.loads(_fetch(api_url))
+    tags = [
+        r.get("tag_name")
+        for r in releases
+        if isinstance(r, dict) and str(r.get("tag_name", "")).startswith("cli-v")
+    ]
+    return max(tags, key=version_key) if tags else None
+
+
+async def upgrade_cli_binary() -> tuple:
+    """Install the newest litmus-cli release (checksum-verified) and make
+    this server process use it from now on. Returns (tag, path)."""
+    tag = await asyncio.to_thread(get_latest_cli_tag)
+    if not tag:
+        raise RuntimeError("no cli-v* releases found on litmus-sdk-releases")
+    path = await asyncio.to_thread(_bootstrap_cli_binary, tag)
+    # Later resolves honor these overrides (LITMUS_CLI_PATH has top
+    # precedence), so the upgraded binary wins for the lifetime of the
+    # process; a restart reverts to the configured pin/path.
+    os.environ["LITMUS_CLI_VERSION"] = tag
+    os.environ["LITMUS_CLI_PATH"] = path
+    logger.info(f"litmus-cli upgraded to {tag} at {path}")
+    return tag, path
+
+
+def _bootstrap_cli_binary(tag: Optional[str] = None) -> str:
+    """Download a litmus-cli release (the pin by default), verify its SHA256
+    against the release's SHA256SUMS, and install it under the user cache
+    dir. Blocking; run in a thread."""
+    tag = tag or _pinned_cli_version()
     asset = _cli_asset_name()
-    target = _bootstrap_target()
+    target = _bootstrap_target(tag)
     if target.is_file() and os.access(target, os.X_OK):
         return str(target)
 

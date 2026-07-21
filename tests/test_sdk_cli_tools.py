@@ -6,6 +6,7 @@ approval gate, the header-to-env forwarding contract, and error handling.
 
 import asyncio
 import json
+import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -366,6 +367,51 @@ def test_ensure_binary_bootstraps_when_nothing_found(monkeypatch, tmp_path):
     monkeypatch.setattr(sdk_cli_tools, "_bootstrap_cli_binary", fake_bootstrap)
     with patch("tools.sdk_cli_tools.shutil.which", return_value=None):
         assert run(sdk_cli_tools._ensure_cli_binary()) == str(installed)
+
+
+def test_version_key_orders_release_tags():
+    assert sdk_cli_tools.version_key("cli-v0.10.0") > sdk_cli_tools.version_key(
+        "cli-v0.9.9"
+    )
+    assert sdk_cli_tools.version_key("v.1.1.1") > sdk_cli_tools.version_key("1.1.0")
+    assert sdk_cli_tools.version_key("litmus-cli v0.8.0") == (0, 8, 0)
+    assert sdk_cli_tools.version_key("dev") == ()
+
+
+def test_get_latest_cli_tag_picks_highest_cli_release(monkeypatch):
+    releases = json.dumps(
+        [
+            {"tag_name": "cli-v0.8.0"},
+            {"tag_name": "sdk-v2.7.4"},
+            {"tag_name": "cli-v0.10.1"},
+            {"tag_name": "cli-v0.9.0"},
+        ]
+    ).encode()
+    monkeypatch.setattr(sdk_cli_tools, "_fetch", lambda url: releases)
+    assert sdk_cli_tools.get_latest_cli_tag() == "cli-v0.10.1"
+
+
+def test_upgrade_cli_binary_installs_latest_and_overrides_env(monkeypatch, tmp_path):
+    monkeypatch.setattr(sdk_cli_tools, "_BOOTSTRAP_BASE_DIR", tmp_path)
+    monkeypatch.delenv("LITMUS_CLI_PATH", raising=False)
+    monkeypatch.delenv("LITMUS_CLI_VERSION", raising=False)
+    monkeypatch.setattr(sdk_cli_tools, "get_latest_cli_tag", lambda: "cli-v9.9.9")
+
+    def fake_bootstrap(tag=None):
+        assert tag == "cli-v9.9.9"
+        target = sdk_cli_tools._bootstrap_target(tag)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"bin")
+        target.chmod(0o755)
+        return str(target)
+
+    monkeypatch.setattr(sdk_cli_tools, "_bootstrap_cli_binary", fake_bootstrap)
+    tag, path = run(sdk_cli_tools.upgrade_cli_binary())
+    assert tag == "cli-v9.9.9"
+    assert os.environ["LITMUS_CLI_VERSION"] == "cli-v9.9.9"
+    assert os.environ["LITMUS_CLI_PATH"] == path
+    # the resolver now picks the upgraded binary
+    assert _resolve_cli_binary() == path
 
 
 def test_ensure_binary_wraps_download_failure(monkeypatch, tmp_path):

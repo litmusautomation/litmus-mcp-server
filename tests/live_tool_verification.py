@@ -316,8 +316,10 @@ async def verify_system():
         or "missing enriched blocks",
     )
     await step(
-        "get_mcp_server_info", "server info", {},
-        check=lambda r: bool(r.get("mcp_server_version")) or "no server version",
+        "get_mcp_server_info", "server info + update check",
+        {"check_updates": True},
+        check=lambda r: (bool(r.get("mcp_server_version")) and "updates" in r)
+        or "missing version or updates block",
     )
     await step("get_firewall_rules", "firewall", {})
     await step("get_network_interface_info", "network", {})

@@ -163,12 +163,37 @@ async def get_system_event_stats(
         return format_error_response("query_failed", str(e))
 
 
+_MCP_TAGS_URL = (
+    "https://api.github.com/repos/litmusautomation/litmus-mcp-server"
+    "/tags?per_page=30"
+)
+
+
 async def get_mcp_server_info(
     request: Request, arguments: dict
 ) -> list[TextContent]:
-    """Version and environment info about the MCP server itself. Requires no
-    edge connection, so it always works - useful for support triage."""
+    """Version and environment info about the MCP server itself, with an
+    optional update check against GitHub and an optional litmus-cli upgrade.
+    The base info requires no edge connection, so it always works."""
+    import asyncio as _asyncio
+    import json as _json
+
+    from tools.sdk_cli_tools import (
+        _resolve_cli_binary,
+        _run_cli,
+        _build_cli_env,
+        _fetch,
+        _pinned_cli_version,
+        get_latest_cli_tag,
+        upgrade_cli_binary,
+        version_key,
+    )
+
     try:
+        arguments = arguments or {}
+        upgrade_cli = bool(arguments.get("upgrade_cli"))
+        check_updates = bool(arguments.get("check_updates")) or upgrade_cli
+
         info: dict = {
             "mcp_server_version": server_version(),
             "python_version": platform.python_version(),
@@ -179,25 +204,87 @@ async def get_mcp_server_info(
         except Exception:
             info["litmussdk_version"] = None
 
-        from tools.sdk_cli_tools import _resolve_cli_binary, _run_cli, _build_cli_env
-
-        try:
-            binary = _resolve_cli_binary()
-            info["litmus_cli_path"] = binary
+        async def _read_cli_version():
+            try:
+                binary = _resolve_cli_binary()
+            except McpError:
+                return None, None
             returncode, stdout, _ = await _run_cli(
                 ["--version"], _build_cli_env(request)
             )
-            first_line = (stdout or "").strip().splitlines()
-            info["litmus_cli_version"] = (
-                first_line[0] if returncode == 0 and first_line else None
-            )
-        except McpError:
-            info["litmus_cli_path"] = None
-            info["litmus_cli_version"] = None
+            lines = (stdout or "").strip().splitlines()
+            return binary, (lines[0] if returncode == 0 and lines else None)
+
+        binary, cli_version = await _read_cli_version()
+        info["litmus_cli_path"] = binary
+        info["litmus_cli_version"] = cli_version
+        info["litmus_cli_pinned_release"] = _pinned_cli_version()
+        if binary is None:
             info["litmus_cli_note"] = (
                 "litmus-cli not installed; it is downloaded automatically on "
                 "first use of a CLI-backed tool"
             )
+
+        if check_updates:
+            updates: dict = {}
+            try:
+                latest_cli = await _asyncio.to_thread(get_latest_cli_tag)
+                updates["litmus_cli_latest_release"] = latest_cli
+                if latest_cli and cli_version and version_key(cli_version):
+                    updates["litmus_cli_update_available"] = version_key(
+                        latest_cli
+                    ) > version_key(cli_version)
+                else:
+                    updates["litmus_cli_update_available"] = None
+            except Exception as e:
+                updates["litmus_cli_check_error"] = str(e)
+
+            try:
+                tags = _json.loads(await _asyncio.to_thread(_fetch, _MCP_TAGS_URL))
+                names = [
+                    t.get("name")
+                    for t in tags
+                    if isinstance(t, dict) and version_key(t.get("name", ""))
+                ]
+                latest_mcp = max(names, key=version_key) if names else None
+                updates["mcp_server_latest_release"] = latest_mcp
+                current = info["mcp_server_version"]
+                if latest_mcp and current:
+                    available = version_key(latest_mcp) > version_key(current)
+                    updates["mcp_server_update_available"] = available
+                    if available:
+                        updates["mcp_server_update_note"] = (
+                            "A newer MCP server release exists. Update by "
+                            "pulling the latest release from "
+                            "https://github.com/litmusautomation/litmus-mcp-server "
+                            "(or rebuilding the Docker image) and restarting; "
+                            "the server cannot upgrade itself in place."
+                        )
+                else:
+                    updates["mcp_server_update_available"] = None
+            except Exception as e:
+                updates["mcp_server_check_error"] = str(e)
+
+            info["updates"] = updates
+
+        if upgrade_cli:
+            try:
+                tag, path = await upgrade_cli_binary()
+                _, new_version = await _read_cli_version()
+                info["litmus_cli_upgrade"] = {
+                    "upgraded_to": tag,
+                    "path": path,
+                    "active_version": new_version,
+                    "note": (
+                        "Upgrade is active for this server process; a restart "
+                        "reverts to the configured pin unless LITMUS_CLI_PATH "
+                        "is updated."
+                    ),
+                }
+                info["litmus_cli_path"] = path
+                info["litmus_cli_version"] = new_version
+            except Exception as e:
+                info["litmus_cli_upgrade_error"] = str(e)
 
         return format_success_response(info)
 
@@ -389,15 +476,40 @@ TOOLS = [
     {
         "name": "get_mcp_server_info",
         "category": "server.info",
+        # readOnlyHint=True despite upgrade_cli: the only mutation is the
+        # server's own CLI cache (same as the automatic bootstrap that
+        # read-only CLI-backed tools already perform); no user or edge data
+        # is touched, and a restart reverts to the pin.
         "annotations": ToolAnnotations(title="Get MCP Server Info", readOnlyHint=True),
         "description": (
             "Returns version information about this MCP server itself: server "
-            "version, litmussdk version, litmus-cli version and path, Python "
+            "version, litmussdk version, litmus-cli version/path/pin, Python "
             "and platform. Needs no edge connection - always available. Use "
             "when the user asks what version they are running or when "
-            "gathering support/triage information."
+            "gathering support/triage information. Pass check_updates=true to "
+            "also compare against the latest GitHub releases (requires "
+            "internet on the server host) and report update availability. "
+            "Pass upgrade_cli=true to download and switch to the newest "
+            "litmus-cli release (checksum-verified, affects only this server "
+            "process; the MCP server itself cannot self-upgrade and only "
+            "reports how to update)."
         ),
-        "schema": {"type": "object", "properties": {}, "required": []},
+        "schema": {
+            "type": "object",
+            "properties": {
+                "check_updates": {
+                    "type": "boolean",
+                    "description": "Also check GitHub for newer MCP server and litmus-cli releases (default false)",
+                    "default": False,
+                },
+                "upgrade_cli": {
+                    "type": "boolean",
+                    "description": "Download and activate the newest litmus-cli release for this server process (implies check_updates)",
+                    "default": False,
+                },
+            },
+            "required": [],
+        },
         "handler": get_mcp_server_info,
     },
     {
