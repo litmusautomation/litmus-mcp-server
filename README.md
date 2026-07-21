@@ -71,7 +71,11 @@ docker run -d --name litmus-mcp-server --platform linux/amd64 -p 8000:8000 ghcr.
 
 ## HTTPS Deployment
 
-The container serves plain HTTP and is intended to sit behind a TLS-terminating reverse proxy in production. [`deploy/docker-compose.https.yml`](deploy/docker-compose.https.yml) ships that pattern using [Caddy](https://caddyserver.com/), which obtains and renews Let's Encrypt certificates automatically:
+There are two supported ways to serve HTTPS: a TLS-terminating reverse proxy with automatic certificates (recommended when the server has a public hostname), or native TLS with your own certificate files (for private networks with a corporate CA).
+
+### Reverse proxy with automatic certificates
+
+The container serves plain HTTP by default and can sit behind a TLS-terminating reverse proxy. [`deploy/docker-compose.https.yml`](deploy/docker-compose.https.yml) ships that pattern using [Caddy](https://caddyserver.com/), which obtains and renews Let's Encrypt certificates automatically:
 
 ```bash
 # DNS A/AAAA record for mcp.example.com must point at this machine
@@ -84,6 +88,30 @@ MCP clients then connect to `https://mcp.example.com/mcp` (no port) with the sam
 - Certificates persist in the `caddy_data` volume across restarts.
 - For private networks without public DNS, uncomment `tls internal` in [`deploy/Caddyfile`](deploy/Caddyfile) to use Caddy's internal CA instead (clients must trust that CA).
 - Any other TLS-terminating proxy (Traefik, nginx, a cloud load balancer) works the same way: forward to port 8000 and keep SSE responses unbuffered.
+
+### Native TLS (bring your own certificate)
+
+When the server runs on a private network without public DNS (so Let's Encrypt cannot issue a certificate), the server can terminate TLS itself using a certificate and key you provide, for example one issued by your corporate CA:
+
+```yaml
+services:
+  litmus-mcp-server:
+    image: ghcr.io/litmusautomation/litmus-mcp-server:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - /opt/litmus-mcp/certs:/certs:ro
+    environment:
+      SSL_CERTFILE: /certs/server.crt
+      SSL_KEYFILE: /certs/server.key
+```
+
+MCP clients then connect to `https://<hostname>:8000/mcp`. Notes:
+
+- `SSL_CERTFILE` and `SSL_KEYFILE` are plain environment variables (like `ENABLE_STDIO`), not `.env` settings. Setting only one of them, or pointing at a missing file, aborts startup with an error instead of silently serving plain HTTP.
+- `SSL_KEYFILE_PASSWORD` is available for encrypted private keys.
+- The certificate must be issued for the hostname clients use, and clients must trust its CA. Self-signed certificates are rejected by claude.ai and Claude Desktop, so use a CA your machines already trust.
+- Unlike the Caddy pattern, renewal is manual: replace the files and restart the container before the certificate expires.
 
 ---
 

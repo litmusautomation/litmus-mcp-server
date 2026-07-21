@@ -20,6 +20,33 @@ def ssl_config():
     return ssl_ctx
 
 
+def tls_settings() -> dict:
+    """Native TLS for the HTTP transports, from SSL_CERTFILE / SSL_KEYFILE
+    environment variables (plain process env, like ENABLE_STDIO; not .env).
+
+    Returns uvicorn ssl kwargs when both are set, {} when neither is.
+    Partial or unreadable configuration raises instead of falling back to
+    plain HTTP, which the operator would mistake for HTTPS.
+    """
+    certfile = os.getenv("SSL_CERTFILE", "").strip()
+    keyfile = os.getenv("SSL_KEYFILE", "").strip()
+    if not certfile and not keyfile:
+        return {}
+    if not (certfile and keyfile):
+        raise ValueError(
+            "SSL_CERTFILE and SSL_KEYFILE must be set together to enable TLS "
+            f"(got SSL_CERTFILE={certfile!r}, SSL_KEYFILE={keyfile!r})"
+        )
+    for name, path in (("SSL_CERTFILE", certfile), ("SSL_KEYFILE", keyfile)):
+        if not os.path.isfile(path):
+            raise ValueError(f"{name} is not a readable file: {path}")
+    kwargs = {"ssl_certfile": certfile, "ssl_keyfile": keyfile}
+    password = os.getenv("SSL_KEYFILE_PASSWORD", "")
+    if password:
+        kwargs["ssl_keyfile_password"] = password
+    return kwargs
+
+
 def server_version():
     """Project version from pyproject.toml; the project is a uv virtual
     project (not an installed distribution), so package metadata is absent."""
