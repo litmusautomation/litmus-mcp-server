@@ -310,8 +310,17 @@ async def verify_system():
         )
     await step("get_cloud_activation_status", "cloud status", {})
     await step("get_system_events", "recent events", {"limit": 5})
-    await step("get_device_logs", "deprecated alias still works", {})
-    await step("get_system_event_stats", "event stats", {})
+    await step(
+        "get_system_event_stats", "enriched health snapshot", {},
+        check=lambda r: ("event_store" in r and "memory" in r and "health" in r)
+        or "missing enriched blocks",
+    )
+    await step(
+        "get_mcp_server_info", "server info + update check",
+        {"check_updates": True},
+        check=lambda r: (bool(r.get("mcp_server_version")) and "updates" in r)
+        or "missing version or updates block",
+    )
     await step("get_firewall_rules", "firewall", {})
     await step("get_network_interface_info", "network", {})
     await step("get_packet_capture_interfaces", "pcap interfaces", {})
