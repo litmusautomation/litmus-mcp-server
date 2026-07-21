@@ -535,8 +535,14 @@ if __name__ == "__main__":
         logger.info("STDIO mode enabled")
         asyncio.run(run_stdio_server())
     else:
-        # HTTP mode - serves both Streamable HTTP and legacy SSE transports
-        logger.info(f"HTTP mode enabled - Starting on port {MCP_PORT}")
-        logger.info(f"Streamable HTTP endpoint: http://0.0.0.0:{MCP_PORT}/mcp")
-        logger.info(f"SSE endpoint (legacy): http://0.0.0.0:{MCP_PORT}/sse")
-        uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)
+        # HTTP mode - serves both Streamable HTTP and legacy SSE transports.
+        # SSL_CERTFILE / SSL_KEYFILE enable native TLS on the same port.
+        from config import tls_settings
+
+        ssl_kwargs = tls_settings()
+        scheme = "https" if ssl_kwargs else "http"
+        tls_note = " with TLS" if ssl_kwargs else ""
+        logger.info(f"HTTP mode enabled - Starting on port {MCP_PORT}{tls_note}")
+        logger.info(f"Streamable HTTP endpoint: {scheme}://0.0.0.0:{MCP_PORT}/mcp")
+        logger.info(f"SSE endpoint (legacy): {scheme}://0.0.0.0:{MCP_PORT}/sse")
+        uvicorn.run(app, host="0.0.0.0", port=MCP_PORT, **ssl_kwargs)
