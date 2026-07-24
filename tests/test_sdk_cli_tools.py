@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from mcp.shared.exceptions import McpError
 
-import tools.sdk_cli_tools as sdk_cli_tools
+from tools import sdk_cli_tools
 from tools.sdk_cli_tools import (
     _build_cli_env,
     _is_read_function,

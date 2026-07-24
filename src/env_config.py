@@ -5,9 +5,9 @@ Handles .env file I/O, credential loading, Edge instance management,
 and model/API key selection.
 """
 
-import os
 import logging
-from typing import Tuple
+import os
+
 import dotenv
 
 # ── Path constants ──────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ def _get_env_vars(env_file, override):
     env_vars = {}
 
     if os.path.exists(path_to_env):
-        with open(path_to_env, "r") as file:
+        with open(path_to_env) as file:
             for line in file:
                 if "=" in line:
                     k, v = line.strip().split("=", 1)
@@ -120,8 +120,7 @@ def mcp_env_remover(key: str, env_file: str = ".env"):
 
     env_vars.pop(key, None)
     with open(path_to_env, "w") as file:
-        for k, v in env_vars.items():
-            file.write(f"{k}={v}\n")
+        file.writelines(f"{k}={v}\n" for k, v in env_vars.items())
 
     print(f"Removed {key} in {env_file}")
 
@@ -131,8 +130,7 @@ def mcp_env_updater(key: str, value: str | bool, env_file: str = ".env"):
     env_vars[key] = value
 
     with open(path_to_env, "w") as file:
-        for k, v in env_vars.items():
-            file.write(f"{k}={v}\n")
+        file.writelines(f"{k}={v}\n" for k, v in env_vars.items())
 
     print(f"Updated {key} in {env_file}")
 
@@ -314,7 +312,7 @@ def migrate_legacy_lem_settings():
 # ── Model / API key selection ───────────────────────────────────────────────
 
 
-def check_model_key() -> Tuple[bool, str]:
+def check_model_key() -> tuple[bool, str]:
     anthropic_exists = os.environ.get(key_of_anthropic_api_key)
     openai_exists = os.environ.get(key_of_openai_api_key)
     gemini_exists = os.environ.get(key_of_gemini_api_key)

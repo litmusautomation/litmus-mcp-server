@@ -35,15 +35,19 @@ import shutil
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
-from starlette.requests import Request
 from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
-from mcp.types import TextContent, ToolAnnotations
+from mcp.types import (
+    INTERNAL_ERROR,
+    INVALID_PARAMS,
+    ErrorData,
+    TextContent,
+    ToolAnnotations,
+)
+from starlette.requests import Request
 
 from config import logger
-from utils.formatting import format_success_response, format_error_response
+from utils.formatting import format_error_response, format_success_response
 
 # Request headers forwarded verbatim to the CLI environment. The CLI resolves
 # config as profile < .env < environment < flags, so these always win over
@@ -71,7 +75,7 @@ _LEM_BRIDGE_HEADERS = (
 _CLI_TIMEOUT_SECONDS = 120
 _RELEASES_URL = "https://github.com/litmusautomation/litmus-sdk-releases/releases"
 
-_isolated_dir: Optional[str] = None
+_isolated_dir: str | None = None
 
 
 def _get_isolated_dir() -> str:
@@ -100,7 +104,7 @@ _BOOTSTRAP_BASE_DIR = Path.home() / ".cache" / "litmus-mcp-server" / "bin"
 
 _DOWNLOAD_TIMEOUT_SECONDS = 60
 
-_bootstrap_lock: Optional[asyncio.Lock] = None
+_bootstrap_lock: asyncio.Lock | None = None
 
 
 def _pinned_cli_version() -> str:
@@ -141,7 +145,7 @@ def _cli_asset_name() -> str:
     return f"litmus-cli-{os_name}-{arch}{suffix}"
 
 
-def _bootstrap_target(tag: Optional[str] = None) -> Path:
+def _bootstrap_target(tag: str | None = None) -> Path:
     """Version-scoped install path, so a pin bump re-downloads naturally."""
     name = "litmus-cli.exe" if platform.system() == "Windows" else "litmus-cli"
     return _BOOTSTRAP_BASE_DIR / (tag or _pinned_cli_version()) / name
@@ -157,7 +161,7 @@ def version_key(text: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", text or ""))
 
 
-def get_latest_cli_tag() -> Optional[str]:
+def get_latest_cli_tag() -> str | None:
     """Newest cli-v* release tag from the litmus-sdk-releases repo, or None
     when none are visible. Blocking; run in a thread."""
     api_url = (
@@ -189,7 +193,7 @@ async def upgrade_cli_binary() -> tuple:
     return tag, path
 
 
-def _bootstrap_cli_binary(tag: Optional[str] = None) -> str:
+def _bootstrap_cli_binary(tag: str | None = None) -> str:
     """Download a litmus-cli release (the pin by default), verify its SHA256
     against the release's SHA256SUMS, and install it under the user cache
     dir. Blocking; run in a thread."""
@@ -345,7 +349,7 @@ async def _run_cli(argv: list, env: dict) -> tuple:
         stdout, stderr = await asyncio.wait_for(
             process.communicate(), timeout=_CLI_TIMEOUT_SECONDS
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         process.kill()
         await process.wait()
         raise McpError(

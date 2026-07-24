@@ -11,25 +11,26 @@ Parse with json.loads(result[0].text) and check "success" key.
 
 import asyncio
 import json
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, Mock, MagicMock, patch
-from starlette.requests import Request
-
-import sys
 import os
+import sys
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
+from starlette.requests import Request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mcp.shared.exceptions import McpError
-import tools.devicehub_tools as devicehub_tools
+
+from tools import devicehub_tools
 from tools.devicehub_tools import (
-    get_litmusedge_driver_list,
-    get_devicehub_devices,
     create_devicehub_device,
-    get_devicehub_device_tags,
     get_current_value_of_devicehub_tag,
     get_device_connection_status,
+    get_devicehub_device_tags,
+    get_devicehub_devices,
+    get_litmusedge_driver_list,
 )
 from tools.dm_tools import (
     get_litmusedge_friendly_name,
@@ -498,7 +499,7 @@ def test_connection_status_recent_data_is_connected(
     mock_list_registers.return_value = [_make_tag()]
     mock_influx_params.return_value = {}
 
-    recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    recent = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     client = MagicMock()
     client.query.side_effect = _influx_query_dispatch(
         _make_influx_result([{"time": recent, "value": 1.0}])
@@ -536,7 +537,7 @@ def test_connection_status_old_data_is_stale(
     mock_list_registers.return_value = [_make_tag()]
     mock_influx_params.return_value = {}
 
-    old = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime(
+    old = (datetime.now(UTC) - timedelta(hours=2)).strftime(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
     client = MagicMock()
@@ -578,7 +579,7 @@ def test_connection_status_checks_all_topics(
     ]
     mock_influx_params.return_value = {}
 
-    recent = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    recent = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     def query_behavior(q):
         if "Flowing" in q:

@@ -15,14 +15,9 @@ from starlette.requests import Request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from mcp.shared.exceptions import McpError  # noqa: E402
+from mcp.shared.exceptions import McpError
 
-from utils.auth import (  # noqa: E402
-    _default_admin_url,
-    get_lem_connection,
-    get_lem_project_id,
-)
-from tools.lem_tools import (  # noqa: E402
+from tools.lem_tools import (
     lem_bridge_get_le_info_tool,
     lem_bridge_list_devicehub_devices_tool,
     lem_dashboard_usage_tool,
@@ -40,7 +35,11 @@ from tools.lem_tools import (  # noqa: E402
     lem_list_device_versions_tool,
     lem_list_devices_tool,
 )
-
+from utils.auth import (
+    _default_admin_url,
+    get_lem_connection,
+    get_lem_project_id,
+)
 
 _LEM_HEADERS = {
     "EDGE_MANAGER_URL": "https://lem.example.com",

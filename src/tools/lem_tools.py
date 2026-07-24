@@ -1,14 +1,9 @@
-from starlette.requests import Request
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, TextContent, ToolAnnotations
-
-from litmussdk.lem.lifecycle.edgedevs.general import (
-    get_devices_paginated,
-    get_current_device_details,
-    get_device_versions,
-    get_device_tags,
-    get_license_expiry_in_x_days,
-    get_expired_licenses,
+from litmussdk.devicehub import devices as devicehub_devices
+from litmussdk.lem.companies import (
+    get_company_details,
+    get_company_projects,
+    get_project_details,
+    list_all_company_stats,
 )
 from litmussdk.lem.lifecycle.dashboard import (
     dashboard_usage,
@@ -16,24 +11,27 @@ from litmussdk.lem.lifecycle.dashboard import (
     get_project_alerts,
     get_system_time,
 )
-from litmussdk.lem.companies import (
-    list_all_company_stats,
-    get_company_details,
-    get_company_projects,
-    get_project_details,
+from litmussdk.lem.lifecycle.edgedevs.general import (
+    get_current_device_details,
+    get_device_tags,
+    get_device_versions,
+    get_devices_paginated,
+    get_expired_licenses,
+    get_license_expiry_in_x_days,
 )
+from litmussdk.system import device_management, network
 from litmussdk.utils.conn import new_lem_bridge_connection
-from litmussdk.devicehub import devices as devicehub_devices
-from litmussdk.system import network, device_management
-from config import DEFAULT_TIMEOUT
+from mcp.shared.exceptions import McpError
+from mcp.types import INVALID_PARAMS, ErrorData, TextContent, ToolAnnotations
+from starlette.requests import Request
 
+from config import DEFAULT_TIMEOUT, logger
 from utils.auth import get_lem_connection, get_lem_project_id
 from utils.formatting import (
-    format_success_response,
     format_error_response,
+    format_success_response,
     redact_secrets,
 )
-from config import logger
 
 
 async def lem_list_devices_tool(

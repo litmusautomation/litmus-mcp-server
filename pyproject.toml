@@ -56,5 +56,16 @@ exclude = [
 ]
 line-length = 88
 indent-width = 4
+
+[tool.ruff.lint]
+# Selected explicitly rather than relying on ruff's defaults: those changed in
+# ruff 0.16 (new families added, pycodestyle E4 dropped) and broke CI, which
+# ran an unpinned `uvx ruff`. E4/E7/E9/F was the effective set before; the rest
+# are deliberate additions covering the mechanically enforceable rules 0.16
+# surfaced. The judgment-heavy families it also added (BLE, S, SIM, TRY, G,
+# LOG, ASYNC, DTZ, PLW) are not enabled yet; adopting them needs a per-site
+# review, mostly of blind `except Exception` handlers.
+select = ["E4", "E7", "E9", "F", "I", "UP", "RUF", "FURB", "PLR0402"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"

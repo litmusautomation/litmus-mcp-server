@@ -7,6 +7,7 @@ such as documentation, configuration files, or other contextual data.
 
 import logging
 from typing import Any
+
 import httpx
 from mcp.types import TextContent
 
@@ -133,10 +134,10 @@ async def fetch_documentation_content(url: str) -> str:
 
     except httpx.HTTPError as e:
         logger.error(f"Error fetching documentation from {url}: {e}")
-        return f"Error fetching documentation: {str(e)}"
+        return f"Error fetching documentation: {e!s}"
     except Exception as e:
         logger.error(f"Unexpected error fetching {url}: {e}")
-        return f"Error: {str(e)}"
+        return f"Error: {e!s}"
 
 
 async def read_documentation_resource(uri: str) -> list[TextContent]:

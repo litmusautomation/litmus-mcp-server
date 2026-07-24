@@ -1,29 +1,32 @@
 import asyncio
 import difflib
-import re
-import nats
 import json
-import pandas as pd
-from typing import Optional
+import re
 from datetime import datetime
 
-from config import logger, ssl_config
-
-from utils.formatting import format_success_response, format_error_response
-from utils.auth import (
-    get_nats_connection_params,
-    get_influx_connection_params,
-    get_litmus_connection,
+import influxdb
+import nats
+import pandas as pd
+from litmussdk.devicehub import devices as dh_devices
+from litmussdk.devicehub import tags as dh_tags
+from mcp.shared.exceptions import McpError
+from mcp.types import (
+    INTERNAL_ERROR,
+    INVALID_PARAMS,
+    ErrorData,
+    TextContent,
+    ToolAnnotations,
 )
-
 from numpy import zeros
 from starlette.requests import Request
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
-from mcp.types import TextContent, ToolAnnotations
 
-import influxdb
-from litmussdk.devicehub import devices as dh_devices, tags as dh_tags
+from config import logger, ssl_config
+from utils.auth import (
+    get_influx_connection_params,
+    get_litmus_connection,
+    get_nats_connection_params,
+)
+from utils.formatting import format_error_response, format_success_response
 
 INFLUXDB_AVAILABLE = True
 
@@ -31,7 +34,7 @@ INFLUXDB_AVAILABLE = True
 NATS_TIMEOUT = 30  # seconds
 
 
-def _nats_connection_note(params: dict) -> Optional[str]:
+def _nats_connection_note(params: dict) -> str | None:
     """Human/LLM-facing note when the broker address was derived from EDGE_URL."""
     if params.get("derived_from_edge_url"):
         return (
@@ -43,7 +46,7 @@ def _nats_connection_note(params: dict) -> Optional[str]:
     return None
 
 
-def _influx_connection_note(params: dict) -> Optional[str]:
+def _influx_connection_note(params: dict) -> str | None:
     """Human/LLM-facing note when the InfluxDB address was derived from EDGE_URL."""
     if params.get("derived_from_edge_url"):
         return (
@@ -55,21 +58,21 @@ def _influx_connection_note(params: dict) -> Optional[str]:
     return None
 
 
-def _with_connection_note(result: dict, note: Optional[str]) -> dict:
+def _with_connection_note(result: dict, note: str | None) -> dict:
     if note:
         result["connection_note"] = note
     return result
 
 
-def _error_with_note(message: str, note: Optional[str]) -> str:
+def _error_with_note(message: str, note: str | None) -> str:
     return f"{message} ({note})" if note else message
 
 
 async def get_current_value_on_topic(
     topic: str,
-    nats_source: Optional[str] = None,
-    nats_port: Optional[str] = None,
-    request: Optional[Request] = None,
+    nats_source: str | None = None,
+    nats_port: str | None = None,
+    request: Request | None = None,
 ) -> dict:
     """
     Subscribes to a NATS topic and retrieves the next published message.
@@ -238,9 +241,9 @@ async def _nc_single_topic(
     nats_port: str,
     nats_subscription_topic: str,
     stop_event: asyncio.Event,
-    nats_user: Optional[str] = None,
-    nats_password: Optional[str] = None,
-    nats_token: Optional[str] = None,
+    nats_user: str | None = None,
+    nats_password: str | None = None,
+    nats_token: str | None = None,
     use_tls: bool = True,
 ) -> dict:
     """
@@ -274,7 +277,7 @@ async def _nc_single_topic(
         await nc.subscribe(nats_subscription_topic, cb=message_handler)
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=NATS_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise McpError(
                 ErrorData(
                     code=INTERNAL_ERROR,
@@ -300,9 +303,9 @@ async def _collect_multiple_values_from_topic(
     topic: str,
     stop_event: asyncio.Event,
     num_samples: int = 10,
-    nats_user: Optional[str] = None,
-    nats_password: Optional[str] = None,
-    nats_token: Optional[str] = None,
+    nats_user: str | None = None,
+    nats_password: str | None = None,
+    nats_token: str | None = None,
     use_tls: bool = True,
 ) -> dict:
     """
@@ -350,7 +353,7 @@ async def _collect_multiple_values_from_topic(
         await nc.subscribe(topic, cb=message_handler)
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=NATS_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise McpError(
                 ErrorData(
                     code=INTERNAL_ERROR,
@@ -518,7 +521,7 @@ def _list_measurement_names(client) -> list[str]:
     return [pt["name"] for pt in points if isinstance(pt, dict) and "name" in pt]
 
 
-def _device_measurement_name(measurement_names: list, device) -> Optional[str]:
+def _device_measurement_name(measurement_names: list, device) -> str | None:
     """Resolve the measurement holding a device's tag data.
 
     Modern LE writes ALL of a device's registers into one measurement named
@@ -538,7 +541,7 @@ def _device_measurement_name(measurement_names: list, device) -> Optional[str]:
 
 def _tag_data_source(
     measurement_names: list, device, tag
-) -> tuple[Optional[str], str]:
+) -> tuple[str | None, str]:
     """Return (measurement, where_prefix) for reading one tag's history.
 
     Prefers a legacy per-topic measurement when one exists; otherwise the
@@ -566,7 +569,7 @@ def _find_device(connection, device_name: str):
     return None
 
 
-def _get_output_topic(tag) -> Optional[str]:
+def _get_output_topic(tag) -> str | None:
     for tp in tag.topics or []:
         if tp.direction == "Output":
             return tp.topic

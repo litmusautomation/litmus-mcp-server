@@ -1,9 +1,5 @@
-from typing import Any, Optional
-from starlette.requests import Request
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
 import logging
-
+from typing import Any
 from urllib.parse import urlparse
 
 from litmussdk.utils.conn import (
@@ -11,6 +7,10 @@ from litmussdk.utils.conn import (
     new_lem_bridge_connection,
     new_lem_connection,
 )
+from mcp.shared.exceptions import McpError
+from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
+from starlette.requests import Request
+
 from config import DEFAULT_TIMEOUT, NATS_PORT
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def get_litmus_connection(request: Request) -> Any:
             raise McpError(
                 ErrorData(
                     code=INTERNAL_ERROR,
-                    message=f"Failed to connect via LEM bridge: {str(e)}",
+                    message=f"Failed to connect via LEM bridge: {e!s}",
                 )
             ) from e
 
@@ -102,7 +102,7 @@ def get_litmus_connection(request: Request) -> Any:
         raise McpError(
             ErrorData(
                 code=INTERNAL_ERROR,
-                message=f"Failed to connect to Litmus Edge: {str(e)}",
+                message=f"Failed to connect to Litmus Edge: {e!s}",
             )
         ) from e
 
@@ -166,7 +166,7 @@ def get_lem_connection(request: Request) -> Any:
         raise McpError(
             ErrorData(
                 code=INTERNAL_ERROR,
-                message=f"Failed to connect to Litmus Edge Manager: {str(e)}",
+                message=f"Failed to connect to Litmus Edge Manager: {e!s}",
             )
         ) from e
 
@@ -212,7 +212,7 @@ def _validate_auth_headers(edge_url: str, client_id: str, client_secret: str) ->
         )
 
 
-def _data_plane_host(raw: Optional[str]) -> Optional[str]:
+def _data_plane_host(raw: str | None) -> str | None:
     """Extract the bare hostname from an address such as
     'https://edge.example.com:8443', '10.0.0.5:443', or 'edge.example.com/'.
     Returns None when nothing parseable was given."""
@@ -227,7 +227,7 @@ def _data_plane_host(raw: Optional[str]) -> Optional[str]:
         return None
 
 
-def get_nats_connection_params(request: Optional[Request] = None) -> dict:
+def get_nats_connection_params(request: Request | None = None) -> dict:
     """
     Get NATS connection parameters from request headers.
 

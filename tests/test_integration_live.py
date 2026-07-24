@@ -206,8 +206,8 @@ def test_tag_crud_cycle(request_obj, crud_target):
     """create_devicehub_tag → update_devicehub_tag → delete_devicehub_tag."""
     from tools.devicehub_tools import (
         create_devicehub_tag,
-        update_devicehub_tag,
         delete_devicehub_tag,
+        update_devicehub_tag,
     )
 
     device_name = crud_target["device"].name

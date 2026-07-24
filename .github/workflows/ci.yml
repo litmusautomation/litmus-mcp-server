@@ -15,7 +15,10 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
-      - run: uvx ruff check .
+      # Pinned via the lint dependency group in uv.lock. An unpinned `uvx ruff`
+      # picks up new releases mid-flight, so ruff 0.16's changed default rule
+      # set failed CI on an unrelated dependency bump.
+      - run: uv run --only-group lint ruff check .
 
   test:
     name: Tests (pytest)

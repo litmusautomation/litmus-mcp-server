@@ -2,7 +2,7 @@
 Per-session conversation history and chat utilities.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
 # Maximum number of user/assistant pairs to keep per session
 MAX_HISTORY_PAIRS = 5
@@ -14,7 +14,7 @@ _SESSIONS: dict[str, list] = {}
 STREAMING_ALLOWED = True
 
 
-def get_conversation_history(session_id: str) -> List[Dict[str, Any]]:
+def get_conversation_history(session_id: str) -> list[dict[str, Any]]:
     """Return a copy of the conversation history for the given session."""
     return list(_SESSIONS.get(session_id, []))
 
@@ -35,7 +35,7 @@ def update_conversation_history(
         _SESSIONS[session_id] = history[-MAX_HISTORY_PAIRS * 2 :]
 
 
-def get_chat_log(conversation_history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def get_chat_log(conversation_history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Format raw conversation history into user/assistant display pairs."""
     chat_log = []
     for i in range(0, len(conversation_history), 2):
@@ -49,7 +49,7 @@ def get_chat_log(conversation_history: List[Dict[str, Any]]) -> List[Dict[str, A
     return chat_log
 
 
-def check_streaming_status(current_route: str) -> Tuple[bool, str]:
+def check_streaming_status(current_route: str) -> tuple[bool, str]:
     redirect = False
     new_route = current_route
 

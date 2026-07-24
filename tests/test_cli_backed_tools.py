@@ -19,14 +19,14 @@ if str(SRC) not in sys.path:
 
 from mcp.shared.exceptions import McpError  # noqa: E402
 
-import tools.digitaltwins_tools as dt_tools  # noqa: E402
 import tools.devicehub_tools as dh_tools  # noqa: E402
+import tools.digitaltwins_tools as dt_tools  # noqa: E402
+from tools.devicehub_tools import get_all_tags_status, get_tag_status  # noqa: E402
 from tools.digitaltwins_tools import (  # noqa: E402
-    list_static_attributes_tool,
     list_dynamic_attributes_tool,
+    list_static_attributes_tool,
     list_transformations_tool,
 )
-from tools.devicehub_tools import get_tag_status, get_all_tags_status  # noqa: E402
 from tools.sdk_cli_tools import CLIFunctionError  # noqa: E402
 
 

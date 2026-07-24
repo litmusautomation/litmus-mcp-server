@@ -1,69 +1,69 @@
-import os
-import secrets
 import asyncio
 import logging
-import warnings
-import urllib3
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import (
-    HTMLResponse,
-    RedirectResponse,
-    StreamingResponse,
-    JSONResponse,
-)
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.status import HTTP_303_SEE_OTHER
-import uvicorn
-from anthropic import AsyncAnthropic
+import os
+import secrets
 import subprocess
 import sys
+import warnings
+from contextlib import asynccontextmanager
 
+import urllib3
+import uvicorn
+from anthropic import AsyncAnthropic
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.status import HTTP_303_SEE_OTHER
+
+from client_utils import MCPClient
+from conversation import (
+    clear_all_sessions,
+    get_chat_log,
+    get_conversation_history,
+    markdown_to_html,
+    update_conversation_history,
+)
 from env_config import (
-    mcp_env_loader,
-    mcp_env_updater,
-    mcp_env_remover,
-    key_of_anthropic_api_key,
-    key_of_openai_api_key,
-    key_of_gemini_api_key,
-    check_model_key,
-    MODEL_NAME_ANTHROPIC,
-    MODEL_NAME_OPENAI,
-    MODEL_NAME_GEMINI,
-    MODEL_PREFERENCE,
-    PREFERRED_MODEL_ID,
     ACTIVE_EDGE_INSTANCE,
     ACTIVE_LEM_CONNECTION,
     CLIENT_SESSION_TIMEOUT_SECONDS,
-    CLIENT_SESSION_TIMEOUT_SECONDS_MIN,
     CLIENT_SESSION_TIMEOUT_SECONDS_MAX,
-    SAVE_SETTINGS_ALLOWED_KEYS,
-    get_edge_instances,
-    next_edge_instance_index,
-    remove_edge_instance,
-    activate_edge_instance,
-    get_lem_connections,
-    next_lem_connection_index,
-    remove_lem_connection,
-    activate_lem_connection,
+    CLIENT_SESSION_TIMEOUT_SECONDS_MIN,
     JINJA_TEMPLATE_DIR,
+    MODEL_NAME_ANTHROPIC,
+    MODEL_NAME_GEMINI,
+    MODEL_NAME_OPENAI,
+    MODEL_PREFERENCE,
+    PREFERRED_MODEL_ID,
+    SAVE_SETTINGS_ALLOWED_KEYS,
     STATIC_DIR,
+    activate_edge_instance,
+    activate_lem_connection,
+    check_model_key,
+    get_edge_instances,
+    get_lem_connections,
+    key_of_anthropic_api_key,
+    key_of_gemini_api_key,
+    key_of_openai_api_key,
+    mcp_env_loader,
+    mcp_env_remover,
+    mcp_env_updater,
+    next_edge_instance_index,
+    next_lem_connection_index,
+    remove_edge_instance,
+    remove_lem_connection,
 )
-from conversation import (
-    get_conversation_history,
-    update_conversation_history,
-    get_chat_log,
-    markdown_to_html,
-    clear_all_sessions,
-)
-from client_utils import MCPClient
-from tools.resource_tools import DOCUMENTATION_RESOURCES
 from server import ALL_TOOLS
+from tools.resource_tools import DOCUMENTATION_RESOURCES
 
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
@@ -471,8 +471,9 @@ async def api_add_edge_instance(
 
         def _fetch_name_lem():
             import json as _json
-            from litmussdk.utils.conn import new_lem_bridge_connection
+
             from litmussdk.utils.api import direct_request
+            from litmussdk.utils.conn import new_lem_bridge_connection
 
             conn = new_lem_bridge_connection(
                 edge_manager_url=manager_url,
@@ -537,8 +538,9 @@ async def api_add_edge_instance(
 
     def _fetch_name():
         import json as _json
-        from litmussdk.utils.conn import new_le_connection
+
         from litmussdk.utils.api import direct_request
+        from litmussdk.utils.conn import new_le_connection
 
         conn = new_le_connection(
             edge_url=url,
@@ -764,11 +766,13 @@ async def api_lem_test():
     validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
 
     def _probe():
+        from litmussdk.lem.companies import list_all_company_stats as _stats
         from litmussdk.lem.lifecycle.dashboard import (
             deployment_info as _deploy,
+        )
+        from litmussdk.lem.lifecycle.dashboard import (
             get_system_time as _time,
         )
-        from litmussdk.lem.companies import list_all_company_stats as _stats
 
         conn = _build_lem_connection(manager_url, api_token, validate_cert)
         out = {"status": "ok"}
@@ -1061,6 +1065,7 @@ async def health_check(request: Request):
 def _run_health_checks(connection, base_url: str) -> dict:
     """Run all service health checks using the given connection and base URL."""
     import json as _json
+
     from litmussdk.utils.api import direct_request
 
     def _get(path):

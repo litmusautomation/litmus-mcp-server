@@ -13,8 +13,9 @@ Key cases:
 
 import os
 import sys
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -25,8 +26,7 @@ from env_config import _get_env_vars
 
 def _write_env(path, content: dict):
     with open(path, "w") as f:
-        for k, v in content.items():
-            f.write(f"{k}={v}\n")
+        f.writelines(f"{k}={v}\n" for k, v in content.items())
 
 
 # ── Fix A: branch taken when .env is not found ─────────────────────────────
@@ -235,7 +235,7 @@ class TestLemConnectionHelpers:
         assert next_lem_connection_index() == 3
 
     def test_activate_lem_connection_writes_main_vars(self, monkeypatch):
-        from env_config import activate_lem_connection, ACTIVE_LEM_CONNECTION
+        from env_config import ACTIVE_LEM_CONNECTION, activate_lem_connection
 
         monkeypatch.setenv("LEM_CONNECTION_2_URL", "https://lem.example.com")
         monkeypatch.setenv("LEM_CONNECTION_2_TOKEN", "tok-2")
@@ -263,7 +263,7 @@ class TestLemConnectionHelpers:
         """Activating a bridge edge instance overrides EDGE_MANAGER_URL/TOKEN, so
         ACTIVE_LEM_CONNECTION must be cleared to reflect that the LEM creds now
         belong to the edge instance, not a standalone connection."""
-        from env_config import activate_edge_instance, ACTIVE_LEM_CONNECTION
+        from env_config import ACTIVE_LEM_CONNECTION, activate_edge_instance
 
         monkeypatch.setenv("EDGE_INSTANCE_5_TYPE", "lem")
         monkeypatch.setenv("EDGE_INSTANCE_5_URL", "https://bridge-lem.example.com")
@@ -290,7 +290,7 @@ class TestLegacyLemMigration:
     """migrate_legacy_lem_settings: lift EDGE_MANAGER_URL/EDGE_API_TOKEN into LEM_CONNECTION_1."""
 
     def test_migration_creates_first_connection(self, monkeypatch):
-        from env_config import migrate_legacy_lem_settings, ACTIVE_LEM_CONNECTION
+        from env_config import ACTIVE_LEM_CONNECTION, migrate_legacy_lem_settings
 
         monkeypatch.setenv("EDGE_MANAGER_URL", "https://legacy-lem.example.com")
         monkeypatch.setenv("EDGE_API_TOKEN", "legacy-tok")
@@ -359,7 +359,7 @@ class TestLegacyLemMigration:
     ):
         """If EDGE_MANAGER_PROJECT_ID is set, the legacy creds belong to a bridge
         instance, not a standalone connection. Migrate them but don't auto-activate."""
-        from env_config import migrate_legacy_lem_settings, ACTIVE_LEM_CONNECTION
+        from env_config import ACTIVE_LEM_CONNECTION, migrate_legacy_lem_settings
 
         monkeypatch.setenv("EDGE_MANAGER_URL", "https://legacy.example.com")
         monkeypatch.setenv("EDGE_API_TOKEN", "tok")

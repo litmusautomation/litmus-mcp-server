@@ -2,10 +2,11 @@
 Pytest configuration and shared fixtures for Litmus MCP Server tests
 """
 
-import pytest
-import sys
 import os
-from unittest.mock import Mock, MagicMock
+import sys
+from unittest.mock import MagicMock, Mock
+
+import pytest
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
