@@ -14,9 +14,24 @@ env:
   PLATFORMS: "linux/amd64"
 
 jobs:
+  version-check:
+    name: Check declared versions are consistent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # On a tag the versions must also equal the tag; on branches and pull
+      # requests there is no tag, so they only have to agree with each other.
+      - name: Check versions
+        run: |
+          sh scripts/check-versions.sh \
+            "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+
   docker-build:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     name: Build Docker image (ghcr.io/litmusautomation/litmus-mcp-server)
+    needs: version-check
     runs-on: ubuntu-latest
     permissions:
       contents: read
