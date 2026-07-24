@@ -23,13 +23,40 @@ Download `litmus-mcp.mcpb` from the releases page and open it with
 Claude Desktop (or double-click it). Fill in the configuration dialog
 and start chatting.
 
+`Litmus MCP Server URL`, `Litmus Edge URL`, `Edge OAuth2 Client ID` and
+`Edge OAuth2 Client Secret` are required; the launcher checks all four
+before connecting and names any that are missing. The NATS and InfluxDB
+fields are optional and only enable the real-time and historical data
+tools.
+
+## Transport security
+
+Your configuration is forwarded to the Litmus MCP Server as request
+headers, which means the Edge client secret and any NATS or InfluxDB
+passwords travel with every request. To keep them off the wire in
+cleartext:
+
+- `https://` URLs are always accepted. This is the recommended setup;
+  see [HTTPS Deployment](../README.md#https-deployment).
+- `http://` URLs are accepted for loopback hosts only (`localhost`,
+  `127.0.0.0/8`, `::1`), where the traffic never leaves the machine.
+- `http://` URLs pointing anywhere else are refused, and the extension
+  will not start until you switch to `https://`. If the network is
+  genuinely trusted, you can enable `Allow insecure HTTP` in the
+  extension's configuration; the launcher then connects but logs a
+  warning on every start.
+
 ## Build from source
 
 ```bash
 cd desktop-extension
 npm install --omit=dev
+npm test
 npx @anthropic-ai/mcpb pack . litmus-mcp.mcpb
 ```
+
+`npm test` runs the launcher's configuration and transport-security
+tests with the built-in Node test runner and needs no dev dependencies.
 
 ## Privacy Policy
 
@@ -43,4 +70,5 @@ https://litmus.io/privacy-policy
 
 ## License
 
-Apache-2.0, same as the parent repository.
+MIT, same as the parent repository. The full text ships in the bundle as
+`LICENSE`.

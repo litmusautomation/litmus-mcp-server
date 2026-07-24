@@ -5,8 +5,19 @@ on:
     types: [published]
 
 jobs:
+  version-check:
+    name: Check declared versions match the release tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check versions
+        run: sh scripts/check-versions.sh "${{ github.event.release.tag_name }}"
+
   pack-and-upload:
     name: Pack litmus-mcp.mcpb and attach to release
+    needs: version-check
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,6 +35,12 @@ jobs:
 
       - name: Install runtime dependencies
         run: npm install --omit=dev
+
+      - name: Test launcher
+        run: npm test
+
+      - name: Validate manifest
+        run: npx --yes @anthropic-ai/mcpb validate manifest.json
 
       - name: Pack extension
         run: npx --yes @anthropic-ai/mcpb pack . litmus-mcp.mcpb
