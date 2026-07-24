@@ -2,18 +2,22 @@ import platform
 import time
 from importlib import metadata as importlib_metadata
 
-from config import logger, server_version
-from utils.auth import get_litmus_connection
-from utils.formatting import format_success_response, format_error_response
-
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, TextContent, ToolAnnotations
-from starlette.requests import Request
 from litmussdk.system import (
     events as sys_events,
-    network as sys_network,
+)
+from litmussdk.system import (
     general as sys_general,
 )
+from litmussdk.system import (
+    network as sys_network,
+)
+from mcp.shared.exceptions import McpError
+from mcp.types import INVALID_PARAMS, ErrorData, TextContent, ToolAnnotations
+from starlette.requests import Request
+
+from config import logger, server_version
+from utils.auth import get_litmus_connection
+from utils.formatting import format_error_response, format_success_response
 
 
 async def get_system_events_tool(
@@ -179,11 +183,11 @@ async def get_mcp_server_info(
     import json as _json
 
     from tools.sdk_cli_tools import (
-        _resolve_cli_binary,
-        _run_cli,
         _build_cli_env,
         _fetch,
         _pinned_cli_version,
+        _resolve_cli_binary,
+        _run_cli,
         get_latest_cli_tag,
         upgrade_cli_binary,
         version_key,

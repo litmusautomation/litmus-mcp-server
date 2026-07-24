@@ -21,8 +21,8 @@ from server import (  # noqa: E402
     _is_bridgeable,
     _with_bridge_args,
 )
-from utils.auth import get_litmus_connection  # noqa: E402
 from tools.sdk_cli_tools import _build_cli_env  # noqa: E402
+from utils.auth import get_litmus_connection  # noqa: E402
 
 
 def _make_request(headers):

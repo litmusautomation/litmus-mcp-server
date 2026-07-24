@@ -17,15 +17,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mcp.shared.exceptions import McpError
 
-from utils.auth import (
-    _data_plane_host,
-    get_nats_connection_params,
-    get_influx_connection_params,
-)
 from tools.data_tools import (
     _get_connect_options,
-    _nats_connection_note,
     _influx_connection_note,
+    _nats_connection_note,
+)
+from utils.auth import (
+    _data_plane_host,
+    get_influx_connection_params,
+    get_nats_connection_params,
 )
 
 

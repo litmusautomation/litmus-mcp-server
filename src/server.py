@@ -1,41 +1,45 @@
+import asyncio
 import base64
 import contextlib
 import copy
 import logging
-import asyncio
 import os
 import warnings
-
 from contextvars import ContextVar
 from pathlib import Path as _Path
 
 import urllib3
 from mcp.server import Server
-
 from mcp.server.sse import SseServerTransport
 from mcp.server.stdio import stdio_server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.types import Icon, Tool, TextContent
 from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INTERNAL_ERROR, METHOD_NOT_FOUND
+from mcp.types import (
+    INTERNAL_ERROR,
+    METHOD_NOT_FOUND,
+    ErrorData,
+    Icon,
+    TextContent,
+    Tool,
+)
 from starlette.applications import Starlette
-from starlette.routing import Route, Mount
 from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Mount, Route
 
 from config import MCP_PORT, server_version
-from tools.devicehub_tools import TOOLS as _DH_TOOLS
-from tools.dm_tools import TOOLS as _DM_TOOLS
-from tools.marketplace_tools import TOOLS as _MKT_TOOLS
 from tools.data_tools import TOOLS as _DATA_TOOLS
+from tools.devicehub_tools import TOOLS as _DH_TOOLS
 from tools.digitaltwins_tools import TOOLS as _DT_TOOLS
-from tools.system_tools import TOOLS as _SYS_TOOLS
+from tools.dm_tools import TOOLS as _DM_TOOLS
 from tools.lem_tools import TOOLS as _LEM_TOOLS
-from tools.sdk_cli_tools import TOOLS as _SDK_CLI_TOOLS
+from tools.marketplace_tools import TOOLS as _MKT_TOOLS
 from tools.resource_tools import (
     get_documentation_resource_list,
     read_documentation_resource,
 )
+from tools.sdk_cli_tools import TOOLS as _SDK_CLI_TOOLS
+from tools.system_tools import TOOLS as _SYS_TOOLS
 
 ALL_TOOLS = (
     _DH_TOOLS
@@ -276,7 +280,7 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         raise McpError(
             ErrorData(
                 code=INTERNAL_ERROR,
-                message=f"Tool execution failed: {str(e)}",
+                message=f"Tool execution failed: {e!s}",
             )
         ) from e
 
@@ -528,6 +532,7 @@ app = Starlette(
 
 if __name__ == "__main__":
     import uvicorn
+
     from config import ENABLE_STDIO
 
     if ENABLE_STDIO:

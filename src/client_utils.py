@@ -1,15 +1,14 @@
 import os
-from typing import Optional, Iterable, cast
+from collections.abc import Iterable
 from contextlib import AsyncExitStack, asynccontextmanager
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from typing import cast
 
+from agents import Agent, ModelSettings, Runner, gen_trace_id, trace
+from agents.mcp import MCPServerSse
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ToolParam
-
-from agents import Agent, Runner, gen_trace_id, trace
-from agents.mcp import MCPServerSse
-from agents import ModelSettings
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
 from env_config import (
     CLIENT_SESSION_TIMEOUT_SECONDS,
@@ -80,7 +79,7 @@ _system_prompt = (
 
 class MCPClient:
     def __init__(self):
-        self.anthropic: Optional[AsyncAnthropic] = None
+        self.anthropic: AsyncAnthropic | None = None
         self._anthropic_key: str = ""
         self.model_used = None
 

@@ -5,17 +5,18 @@ Tests the header-based authentication system that extracts credentials
 from MCP request headers and creates isolated connections.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from starlette.requests import Request
-
-import sys
 import os
+import sys
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+from starlette.requests import Request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from utils.auth import get_litmus_connection
 from mcp.shared.exceptions import McpError
+
+from utils.auth import get_litmus_connection
 
 # ==================== Test: Valid Authentication ====================
 

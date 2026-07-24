@@ -1,33 +1,39 @@
 import asyncio
 import time
-from datetime import datetime, timezone
-from typing import Optional, Any
+from datetime import UTC, datetime
+from typing import Any
+
+from litmussdk.devicehub import devices, tags
+from litmussdk.devicehub.drivers import list_all_drivers
+from litmussdk.devicehub.tags import Tag
+from litmussdk.utils import api, api_paths, gql_queries
+from mcp.shared.exceptions import McpError
+from mcp.types import (
+    INTERNAL_ERROR,
+    INVALID_PARAMS,
+    ErrorData,
+    TextContent,
+    ToolAnnotations,
+)
+from starlette.requests import Request
+
 from config import logger
-from utils.auth import get_litmus_connection, get_influx_connection_params
+from utils.auth import get_influx_connection_params, get_litmus_connection
 from utils.formatting import (
-    format_success_response,
     format_error_response,
+    format_success_response,
     redact_secrets,
 )
+
 from .data_tools import (
-    get_current_value_on_topic,
-    _make_influx_client,
-    _influx_connection_note,
-    _with_connection_note,
-    _list_measurement_names,
     _device_measurement_name,
+    _influx_connection_note,
+    _list_measurement_names,
+    _make_influx_client,
+    _with_connection_note,
+    get_current_value_on_topic,
 )
-
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData, INVALID_PARAMS, INTERNAL_ERROR
-from mcp.types import TextContent, ToolAnnotations
-from starlette.requests import Request
-from litmussdk.devicehub import devices, tags
-from litmussdk.devicehub.tags import Tag
-from litmussdk.devicehub.drivers import list_all_drivers
-from litmussdk.utils import api, api_paths, gql_queries
-
-from .sdk_cli_tools import run_cli_function, CLIFunctionError
+from .sdk_cli_tools import CLIFunctionError, run_cli_function
 
 # Short-lived cache for the device list, keyed by EDGE_URL.
 # Avoids redundant API round-trips when the LLM calls multiple device tools
@@ -536,7 +542,7 @@ async def get_current_value_of_devicehub_tag(
 
 def _find_device_by_name(
     connection: Any, device_name: str, request=None
-) -> Optional[Any]:
+) -> Any | None:
     """Find a device by name, using a short-lived cache to avoid redundant API calls.
 
     A cache miss on the name triggers one fresh fetch: a device created
@@ -690,8 +696,8 @@ async def get_device_connection_status(
                     if not pts:
                         continue
                     ts_str = pts[0].get("time", "")
-                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    ts_epoch = ts.replace(tzinfo=timezone.utc).timestamp()
+                    ts = datetime.fromisoformat(ts_str)
+                    ts_epoch = ts.replace(tzinfo=UTC).timestamp()
                     if newest_ts is None or ts_epoch > newest_ts:
                         newest_ts = ts_epoch
                         last_seen = ts_str
