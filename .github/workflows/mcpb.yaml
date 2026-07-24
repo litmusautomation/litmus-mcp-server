@@ -25,6 +25,12 @@ jobs:
       - name: Install runtime dependencies
         run: npm install --omit=dev
 
+      - name: Test launcher
+        run: npm test
+
+      - name: Validate manifest
+        run: npx --yes @anthropic-ai/mcpb validate manifest.json
+
       - name: Pack extension
         run: npx --yes @anthropic-ai/mcpb pack . litmus-mcp.mcpb
 
