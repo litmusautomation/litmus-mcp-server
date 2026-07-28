@@ -144,6 +144,31 @@ DOCUMENTATION_RESOURCES = {
         "uri": f"{LITMUS_API_BASE}/workflows/agents.md",
         "mimeType": "text/markdown",
     },
+    # Full upstream index. Broader than the overview resource, which lists what
+    # this server serves; this lists everything the API portal publishes,
+    # including per-component pages and reference material not exposed here.
+    "litmus://docs/api/index": {
+        "name": "Litmus API Documentation Index",
+        "description": (
+            "Machine-readable index of every Litmus API documentation page: "
+            "product and component routers, workflow recipes, and reference "
+            "material"
+        ),
+        "uri": f"{LITMUS_API_BASE}/llms.txt",
+        "mimeType": "text/markdown",
+    },
+    # The payload shape the NATS topic tools return, so a caller can read a
+    # tag value without reverse-engineering the fields.
+    "litmus://docs/reference/message-format": {
+        "name": "DeviceHub Message Format",
+        "description": (
+            "The flat JSON shape a tag value is published in (value, tagName, "
+            "deviceID, datatype and friends), with a JSONata cheatsheet. This "
+            "is what get_current_value_from_topic returns"
+        ),
+        "uri": f"{LITMUS_API_BASE}/reference/devicehub-message-format.md",
+        "mimeType": "text/markdown",
+    },
 }
 
 
@@ -153,15 +178,20 @@ DOCUMENTATION_RESOURCES = {
 _MARKDOWN_MIN_BYTES = 200
 
 
+# URLs that already name a text file are fetched as they are: the api.litmus.io
+# routers (.md) and its llms.txt index have no "<page>.md" twin to look for.
+_DIRECT_SUFFIXES = (".md", ".txt")
+
+
 def _markdown_url(url: str) -> str:
     """Markdown twin of a documentation page.
 
     docs.litmus.io (Archbee) serves one at "<page>.md" for every page: a few
     KB of prose instead of a ~300 KB HTML bundle whose <main> is mostly
-    navigation and inlined JavaScript. URLs that already name a .md file (the
-    api.litmus.io agent routers) are returned unchanged.
+    navigation and inlined JavaScript. URLs that already name a text file are
+    returned unchanged.
     """
-    return url if url.endswith(".md") else f"{url}.md"
+    return url if url.endswith(_DIRECT_SUFFIXES) else f"{url}.md"
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -194,7 +224,12 @@ async def _fetch_markdown(client: httpx.AsyncClient, url: str) -> str | None:
         return None
     if response.status_code != 200:
         return None
-    if "markdown" not in response.headers.get("content-type", "").lower():
+    content_type = response.headers.get("content-type", "").lower()
+    # A URL naming a text file is trusted to serve one, and llms.txt comes back
+    # as text/plain. For a docs page the twin must announce itself as markdown,
+    # or an HTML shell served as text/plain would slip through.
+    accepted = ("markdown", "plain") if url.endswith(_DIRECT_SUFFIXES) else ("markdown",)
+    if not any(kind in content_type for kind in accepted):
         return None
     body = response.text.lstrip()
     if body.startswith("<"):
@@ -267,6 +302,8 @@ def _resource_index() -> str:
         "",
         f"- Product documentation: {LITMUS_DOCS_BASE}",
         f"- API reference and per-product routers: {LITMUS_API_BASE}/agents.md",
+        "- Pages not served as resources here, including per-component API docs "
+        "and reference material, are indexed by `litmus://docs/api/index`.",
         "- Tools on this server: call `litmus_sdk_discover` to browse the full "
         "litmus-cli function catalog when no dedicated tool covers an operation.",
     ]
