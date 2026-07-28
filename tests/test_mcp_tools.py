@@ -460,7 +460,9 @@ def test_get_tag_value_passes_le_connection_to_sdk(
     device = _make_device()
     mock_list_devices.return_value = [device]
     mock_list_registers.return_value = [_make_tag()]
-    mock_get_value.return_value = {"value": 42}
+    # (payload, delivering subject); the subject is reported separately so a
+    # wildcard subscription can be traced back to a concrete NATS subject.
+    mock_get_value.return_value = ({"value": 42}, "devicehub.alias.TestDevice.Temp")
 
     result = _run(
         get_current_value_of_devicehub_tag(
