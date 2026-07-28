@@ -24,7 +24,27 @@ const HEADER_VARS = [
   "INFLUX_DB_NAME",
   "INFLUX_USERNAME",
   "INFLUX_PASSWORD",
+  // Litmus Unify authenticates separately from Litmus Edge. Without these the
+  // server hides the unify.* namespace from discovery rather than advertising
+  // functions that cannot authenticate.
+  "UNS_URL",
+  "UNS_USERNAME",
+  "UNS_PASSWORD",
   "VALIDATE_CERTIFICATE",
+];
+
+// Settings that are only meaningful together: configuring one without the
+// others yields a connection error from the SDK naming internal option names
+// rather than the fields the dialog shows, so they are checked here instead.
+const GROUPED_VARS = [
+  {
+    label: "Litmus Unify",
+    names: [
+      ["UNS_URL", "Litmus Unify URL"],
+      ["UNS_USERNAME", "Litmus Unify Username"],
+      ["UNS_PASSWORD", "Litmus Unify Password"],
+    ],
+  },
 ];
 
 // Fields the server cannot authenticate without, with the labels the
@@ -118,6 +138,21 @@ function buildLaunch(env) {
     const port = Number(value);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new ConfigError(`'${label}' must be a port number, got ${value}`);
+    }
+  }
+
+  for (const { label, names } of GROUPED_VARS) {
+    const set = names.filter(([name]) => readVar(env, name));
+    if (set.length && set.length !== names.length) {
+      const absent = names
+        .filter(([name]) => !readVar(env, name))
+        .map(([, fieldLabel]) => fieldLabel);
+      throw new ConfigError(
+        `${label} is partly configured: ${absent.join(", ")} ` +
+          `${absent.length > 1 ? "are" : "is"} still empty. Fill ${
+            absent.length > 1 ? "them" : "it"
+          } in, or clear the ${label} settings entirely to skip it.`
+      );
     }
   }
 
