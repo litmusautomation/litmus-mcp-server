@@ -63,7 +63,17 @@ _FORWARDED_HEADERS = (
     "EDGE_MANAGER_DEVICE_ID",
     "VALIDATE_CERTIFICATE",
     "TIMEOUT_SECONDS",
+    # Litmus Unify. Without these the CLI's 40 unify.* functions all fail on
+    # "missing unifyURL, unifyUsername, unifyPassword", so the namespace is
+    # also hidden from litmus_sdk_discover when UNS_URL is absent.
+    "UNS_URL",
+    "UNS_USERNAME",
+    "UNS_PASSWORD",
+    "UNS_VALIDATE_CERTIFICATE",
 )
+
+# Credential header that decides whether the unify.* namespace is reachable.
+_UNIFY_HEADER = "UNS_URL"
 
 _LEM_BRIDGE_HEADERS = (
     "EDGE_MANAGER_URL",
@@ -365,10 +375,28 @@ async def _run_cli(argv: list, env: dict) -> tuple:
     )
 
 
+def _strip_unify(listing: str) -> str:
+    """Drop the unify.* group from a `litmus-cli list` listing.
+
+    The catalog is grouped as an unindented namespace header followed by
+    indented `  unify.Func(args)` lines, so the group ends at the next
+    unindented line. Advertising functions that cannot authenticate is worse
+    than not advertising them: a client burns a call and gets a config error
+    it has no way to act on.
+    """
+    kept, skipping = [], False
+    for line in listing.splitlines():
+        if line and not line[0].isspace():
+            skipping = line.strip() == "unify"
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept)
+
+
 async def discover_litmus_sdk_functions(
     request: Request, arguments: dict | None = None
 ) -> list[TextContent]:
-    """Browse the SDK function catalog via `litmus-cli list [prefix]`."""
+    """Browse the SDK/CLI function catalog via `litmus-cli list [prefix]`."""
     prefix = (arguments or {}).get("prefix", "")
     argv = ["list"] + ([prefix] if prefix else [])
     try:
@@ -378,9 +406,19 @@ async def discover_litmus_sdk_functions(
                 "sdk_discover_failed", (stderr or stdout).strip()
             )
         logger.info(f"litmus-cli list {prefix or '(all)'} succeeded")
-        return format_success_response(
-            {"prefix": prefix or None, "functions": stdout.strip()}
-        )
+        listing = stdout.strip()
+        if not request.headers.get(_UNIFY_HEADER):
+            listing = _strip_unify(listing).strip()
+            if not listing:
+                # Asked for unify.* specifically, with no Unify connection.
+                return format_error_response(
+                    "unify_not_configured",
+                    "The unify.* namespace needs a Litmus Unify connection: send "
+                    "UNS_URL, UNS_USERNAME and UNS_PASSWORD as connection "
+                    "headers (plus UNS_VALIDATE_CERTIFICATE=false for a "
+                    "self-signed certificate). No other namespace requires them.",
+                )
+        return format_success_response({"prefix": prefix or None, "functions": listing})
     except McpError:
         raise
     except Exception as e:
@@ -547,10 +585,17 @@ TOOLS = [
         "name": "litmus_sdk_discover",
         "category": "sdk.fallback",
         "description": (
-            "Browses the full Litmus SDK function catalog (~550 functions). Litmus "
+            "Browses the full Litmus SDK / litmus-cli function catalog (~550 "
+            "functions). Use this for any request phrased in terms of the SDK, "
+            "the CLI, litmus-cli, or a Litmus function or endpoint that the "
+            "dedicated tools do not cover; those names all refer to this same "
+            "catalog. Litmus "
             "Edge packages live under the 'le.' prefix (le.devicehub, le.analytics, "
             "le.digitaltwins, le.flows, le.integrations, le.marketplace, le.opc, "
-            "le.system); lem.* and unify.* are top-level. Use this ONLY when no "
+            "le.system); lem.* and unify.* are top-level, and unify.* is listed "
+            "only when the connection carries UNS_URL / UNS_USERNAME / "
+            "UNS_PASSWORD, since it cannot authenticate without them. Use this "
+            "ONLY when no "
             "dedicated tool covers the operation, to find a function for "
             "litmus_sdk_read or litmus_sdk_write. Optionally pass a dotted-path "
             "prefix (e.g. 'le.integrations' or 'lem.Get') to narrow the listing. "
@@ -572,15 +617,19 @@ TOOLS = [
             },
             "required": [],
         },
-        "annotations": ToolAnnotations(title="Discover SDK Functions", readOnlyHint=True),
+        "annotations": ToolAnnotations(
+            title="Discover SDK / CLI Functions", readOnlyHint=True
+        ),
         "handler": discover_litmus_sdk_functions,
     },
     {
         "name": "litmus_sdk_read",
         "category": "sdk.fallback",
         "description": (
-            "FALLBACK - READ-ONLY. Invokes a single read-only Litmus SDK function "
-            "by dotted path via the litmus-cli dispatcher (SDK reference: "
+            "FALLBACK - READ-ONLY. Invokes a single read-only Litmus SDK / "
+            "litmus-cli function by dotted path via the litmus-cli dispatcher; "
+            "this is the tool for a read phrased as running an SDK function, a "
+            "CLI command, or litmus-cli (SDK reference: "
             "https://docs.litmus.io/litmus-mcp-server). Only functions whose final "
             "path segment starts with Get, List, Browse, Describe, Read, Search, "
             "Find, Query, or Count are accepted; anything else is rejected and "
@@ -607,7 +656,9 @@ TOOLS = [
             },
             "required": ["function"],
         },
-        "annotations": ToolAnnotations(title="Read SDK Function", readOnlyHint=True),
+        "annotations": ToolAnnotations(
+            title="Read SDK / CLI Function", readOnlyHint=True
+        ),
         "handler": read_litmus_sdk_function,
     },
     {
@@ -615,7 +666,9 @@ TOOLS = [
         "category": "sdk.fallback",
         "description": (
             "FALLBACK - POTENTIALLY DESTRUCTIVE. Invokes a state-changing Litmus "
-            "SDK function by dotted path via the litmus-cli dispatcher (SDK "
+            "SDK / litmus-cli function by dotted path via the litmus-cli "
+            "dispatcher; this is the tool for a write phrased as running an SDK "
+            "function, a CLI command, or litmus-cli (SDK "
             "reference: https://docs.litmus.io/litmus-mcp-server). Use ONLY when "
             "no dedicated tool covers the operation, with a path returned by "
             "litmus_sdk_discover. Many SDK functions modify or delete device "
@@ -654,7 +707,7 @@ TOOLS = [
             "required": ["function", "user_approved"],
         },
         "annotations": ToolAnnotations(
-            title="Write SDK Function", destructiveHint=True, readOnlyHint=False
+            title="Write SDK / CLI Function", destructiveHint=True, readOnlyHint=False
         ),
         "handler": write_litmus_sdk_function,
     },

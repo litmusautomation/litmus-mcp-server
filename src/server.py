@@ -116,12 +116,21 @@ async def handle_list_resources():
 
 @mcp.read_resource()
 async def handle_read_resource(uri):
-    """Read a specific documentation resource."""
+    """Read a specific documentation resource.
+
+    `uri` arrives as a pydantic AnyUrl and has to be stringified: the
+    resource registry is keyed by str, so an AnyUrl never matches and every
+    lookup would fall through to the unknown-resource message. The SDK wants
+    str content, not the TextContent objects the registry returns; handing it
+    a TextContent makes its str/bytes match fall through and yields a
+    ReadResourceResult holding None, which fails validation.
+    """
     from mcp.server.lowlevel.helper_types import ReadResourceContents
 
-    text_contents = await read_documentation_resource(uri)
+    text_contents = await read_documentation_resource(str(uri))
     return [
-        ReadResourceContents(content=t, mime_type="text/plain") for t in text_contents
+        ReadResourceContents(content=t.text, mime_type="text/markdown")
+        for t in text_contents
     ]
 
 
@@ -330,8 +339,12 @@ async def lifespan(app):
         yield
 
 
-# SSE endpoint handler
-sse = SseServerTransport("/messages")
+# SSE endpoint handler. This path is what the stream's opening "endpoint" event
+# advertises as the URI to POST requests to, so it must be the form the mounted
+# route actually serves. Starlette serves the slashed form and answers
+# "/messages" with a 307 to "/messages/", and a client that does not replay a
+# POST body across a redirect never delivers a single message.
+sse = SseServerTransport("/messages/")
 
 
 # SSE endpoint handler
@@ -459,6 +472,10 @@ wrapped_post_handler = ContextCapturingMiddleware(sse.handle_post_message)
 app = Starlette(
     routes=[
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
+        # Starlette normalizes a Mount path to its un-slashed form and serves
+        # the slashed one, redirecting "/messages" to "/messages/". The path
+        # advertised on the stream therefore has to carry the slash; see the
+        # SseServerTransport construction above.
         Mount("/messages", app=wrapped_post_handler),
         # OAuth discovery endpoints - return proper JSON errors
         Route(

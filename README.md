@@ -137,7 +137,7 @@ docker run -d --name litmus-mcp-server \
 
 **Multiple Litmus Edge instances:** The Web UI lets you register and switch between multiple Litmus Edge devices from a single MCP server. Each instance keeps its own URL and OAuth2 credentials; the active instance's credentials are mirrored into `EDGE_URL` / `EDGE_API_CLIENT_ID` / `EDGE_API_CLIENT_SECRET` automatically. Manage instances under **Config → Litmus Edge Instances**, or check status per-instance from the **Health** page.
 
-**Live Litmus documentation as MCP Resources:** The server exposes `litmus://docs/<section>` URIs that fetch live content from [docs.litmus.io](https://docs.litmus.io) on demand, so MCP-aware clients can pull current reference material directly into the model's context.
+**Live Litmus documentation as MCP Resources:** The server exposes `litmus://docs/<section>` URIs that fetch live content from [docs.litmus.io](https://docs.litmus.io) on demand, so MCP-aware clients can pull current reference material directly into the model's context. Pages are fetched as markdown (a few KB each) rather than rendered HTML (a few hundred KB, mostly navigation), falling back to HTML only where no markdown version is published. `litmus://docs/api` resolves to the API portal's agent router at [api.litmus.io/agents.md](https://api.litmus.io/agents.md), which links onward to per-product routers.
 
 If you deploy the MCP server and web client on separate hosts, set `MCP_SSE_URL` to point the web client at the server:
 
@@ -390,7 +390,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 
 ## Available Tools
 
-59 tools across 12 categories. Tools accept structured arguments and return JSON.
+61 tools across 13 categories. Tools accept structured arguments and return JSON.
 
 | Category                  | Function Name                          | Description |
 |---------------------------|----------------------------------------|-------------|

@@ -73,9 +73,12 @@ async def get_current_value_on_topic(
     nats_source: str | None = None,
     nats_port: str | None = None,
     request: Request | None = None,
-) -> dict:
+) -> tuple[dict, str | None]:
     """
     Subscribes to a NATS topic and retrieves the next published message.
+
+    Returns the decoded payload and the subject it arrived on, which differs
+    from `topic` when `topic` is a wildcard.
 
     Explicitly passed nats_source/nats_port win over the request-resolved
     values (which themselves fall back to the EDGE_URL host).
@@ -91,7 +94,7 @@ async def get_current_value_on_topic(
     nats_port = nats_port or params.get("nats_port") or "4222"
 
     stop_event = asyncio.Event()
-    final_message = await _nc_single_topic(
+    return await _nc_single_topic(
         nats_source,
         nats_port,
         topic,
@@ -101,7 +104,6 @@ async def get_current_value_on_topic(
         nats_token=params.get("nats_token"),
         use_tls=params.get("use_tls", True),
     )
-    return final_message
 
 
 async def get_current_value_on_topic_tool(
@@ -122,12 +124,17 @@ async def get_current_value_on_topic_tool(
             )
 
         note = _nats_connection_note(get_nats_connection_params(request))
-        message = await get_current_value_on_topic(topic=topic, request=request)
+        message, subject = await get_current_value_on_topic(
+            topic=topic, request=request
+        )
 
-        logger.info(f"Retrieved value from topic: {topic}")
+        logger.info(f"Retrieved value from topic: {topic} (subject: {subject})")
 
+        # 'topic' echoes what was asked for, 'subject' names what actually
+        # delivered the message; they differ whenever 'topic' is a wildcard.
         result = {
             "topic": topic,
+            "subject": subject,
             "data": message,
         }
 
@@ -194,8 +201,11 @@ async def get_multiple_values_from_topic_tool(
 
         logger.info(f"Collected {num_samples} samples from topic: {topic}")
 
+        # 'topic' echoes what was asked for, 'subjects' names what actually
+        # delivered the samples; they differ whenever 'topic' is a wildcard.
         result = {
             "topic": topic,
+            "subjects": output["subjects"],
             "num_samples": num_samples,
             "values": output["values"].tolist(),  # Convert numpy array to list
             "timestamps": output["humanTimestamps"],
@@ -245,9 +255,13 @@ async def _nc_single_topic(
     nats_password: str | None = None,
     nats_token: str | None = None,
     use_tls: bool = True,
-) -> dict:
+) -> tuple[dict, str | None]:
     """
-    Subscribe to a single topic and return a single message.
+    Subscribe to a single topic and return a single message and its subject.
+
+    The subject is reported separately from the requested topic because a
+    subscription may be a wildcard, in which case the requested pattern does
+    not name the subject that actually delivered the message.
     """
 
     connect_options = _get_connect_options(
@@ -261,9 +275,10 @@ async def _nc_single_topic(
     nc = await nats.connect(**connect_options)
 
     result_message = {}
+    result_subject = None
 
     async def message_handler(msg):
-        nonlocal result_message
+        nonlocal result_message, result_subject
         if result_message:
             stop_event.set()
             return
@@ -271,6 +286,7 @@ async def _nc_single_topic(
         data = msg.data.decode()
         message = json.loads(data)
         result_message = message
+        result_subject = msg.subject
         stop_event.set()
 
     try:
@@ -294,7 +310,7 @@ async def _nc_single_topic(
         except Exception:
             await nc.close()
 
-    return result_message
+    return result_message, result_subject
 
 
 async def _collect_multiple_values_from_topic(
@@ -324,6 +340,10 @@ async def _collect_multiple_values_from_topic(
     results = {
         "humanTimestamps": ["" for _ in range(num_samples)],
         "values": zeros(num_samples),
+        # Distinct subjects that delivered samples, in first-seen order. A
+        # wildcard subscription can be fed by several subjects, so the
+        # requested pattern alone does not identify the data's origin.
+        "subjects": [],
     }
     counter = 0
 
@@ -341,6 +361,10 @@ async def _collect_multiple_values_from_topic(
         human_ts = str(datetime.fromtimestamp(timestamp / 1000))
 
         if counter < num_samples:
+            # Recorded here, not before the bound check, so the list names
+            # only subjects that actually contributed a returned sample.
+            if msg.subject not in results["subjects"]:
+                results["subjects"].append(msg.subject)
             results["values"][counter] = value
             results["humanTimestamps"][counter] = human_ts
             counter += 1

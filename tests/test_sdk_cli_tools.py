@@ -260,6 +260,74 @@ def test_discover_without_prefix_lists_all():
     assert mock.call_args.args[0] == ["list"]
 
 
+# ------------------------------------------------------------- unify namespace
+#
+# The CLI catalog always contains the 40 unify.* functions, but they need a
+# Litmus Unify connection that most deployments do not have. Advertising them
+# unconditionally spends a client's tool call on a config error it cannot act
+# on, so the group is hidden unless UNS_URL is present.
+
+CATALOG = (
+    "le.devicehub\n"
+    "  le.devicehub.ListDevices()\n"
+    "  le.devicehub.CreateDevice(name)\n"
+    "unify\n"
+    "  unify.CreateAccount(username, acType)\n"
+    "  unify.DeleteAccount(accountID)\n"
+    "lem\n"
+    "  lem.ListDevices()\n"
+)
+
+UNIFY_HEADERS = {
+    **EDGE_HEADERS,
+    "UNS_URL": "https://unify.example.com",
+    "UNS_USERNAME": "uns-user",
+    "UNS_PASSWORD": "uns-pass",
+}
+
+
+def test_env_forwards_unify_headers():
+    env = _build_cli_env(FakeRequest(UNIFY_HEADERS))
+    assert env["UNS_URL"] == "https://unify.example.com"
+    assert env["UNS_USERNAME"] == "uns-user"
+    assert env["UNS_PASSWORD"] == "uns-pass"
+
+
+def test_discover_hides_unify_without_credentials():
+    mock = AsyncMock(return_value=(0, CATALOG, ""))
+    with patch("tools.sdk_cli_tools._run_cli", mock):
+        result = run(discover_litmus_sdk_functions(FakeRequest(EDGE_HEADERS), {}))
+    functions = json.loads(result[0].text)["functions"]
+    assert "unify." not in functions
+    # Only the unify group goes; the groups on either side of it stay.
+    assert "le.devicehub.ListDevices" in functions
+    assert "lem.ListDevices" in functions
+
+
+def test_discover_keeps_unify_when_configured():
+    mock = AsyncMock(return_value=(0, CATALOG, ""))
+    with patch("tools.sdk_cli_tools._run_cli", mock):
+        result = run(discover_litmus_sdk_functions(FakeRequest(UNIFY_HEADERS), {}))
+    functions = json.loads(result[0].text)["functions"]
+    assert "unify.CreateAccount" in functions
+
+
+def test_discover_unify_prefix_without_credentials_explains_itself():
+    """An empty listing would read as "no such functions", which is wrong."""
+    mock = AsyncMock(return_value=(0, "unify\n  unify.CreateAccount(username)\n", ""))
+    with patch("tools.sdk_cli_tools._run_cli", mock):
+        result = run(
+            discover_litmus_sdk_functions(
+                FakeRequest(EDGE_HEADERS), {"prefix": "unify"}
+            )
+        )
+    payload = json.loads(result[0].text)
+    assert payload["success"] is False
+    assert payload["error"] == "unify_not_configured"
+    for header in ("UNS_URL", "UNS_USERNAME", "UNS_PASSWORD"):
+        assert header in payload["message"]
+
+
 # ---------------------------------------------------------------- binary resolution
 
 

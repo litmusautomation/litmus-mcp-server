@@ -518,7 +518,7 @@ async def get_current_value_of_devicehub_tag(
             )
 
         # Read current value
-        value_data = await get_current_value_on_topic(
+        value_data, subject = await get_current_value_on_topic(
             topic=requested_value_from_topic, request=request
         )
 
@@ -528,6 +528,7 @@ async def get_current_value_of_devicehub_tag(
             "device_name": device_name,
             "tag_name": tag_name or requested_tag.tag_name,
             "tag_id": tag_id or requested_tag.id,
+            "subject": subject,
             "data": value_data,
         }
 
