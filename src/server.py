@@ -167,12 +167,24 @@ _BRIDGE_ARG_PROPERTIES = {
             "bridge."
         ),
     },
+    # Declared, despite being superseded, because the schemas reject unknown
+    # arguments: an undeclared alias would be refused by validation before the
+    # dispatcher could accept it, which would break the very clients the alias
+    # exists for. Described as deprecated so a model picks lem_device_id.
+    "device_id": {
+        "type": "string",
+        "description": (
+            "DEPRECATED, use lem_device_id. Accepted only for compatibility "
+            "with clients configured before the rename; this is the LEM device "
+            "id, not the DeviceHub device id."
+        ),
+    },
 }
 
 # Superseded by lem_device_id. The old name meant the LEM device id here while
 # meaning the DeviceHub device id in tool payloads, which is the ambiguity the
 # rename removes. Still accepted so existing clients and saved prompts keep
-# working; it is not advertised in any schema.
+# working.
 _LEGACY_BRIDGE_DEVICE_ARG = "device_id"
 
 
@@ -188,6 +200,24 @@ def _with_bridge_args(schema: dict) -> dict:
     properties = schema.setdefault("properties", {})
     for key, prop in _BRIDGE_ARG_PROPERTIES.items():
         properties.setdefault(key, prop)
+    return schema
+
+
+def _strict(schema: dict) -> dict:
+    """Return a copy of the schema that rejects arguments it does not declare.
+
+    The SDK validates tool input against the advertised schema, so this turns a
+    misspelled argument into an error naming it instead of a silent fallback to
+    the default. That matters most where a default changes the data rather than
+    the page: asking for 7 days of history, typing the range argument wrong and
+    silently receiving 1 hour reads as an answer to the question asked.
+
+    Applied centrally rather than written into each tool's dict so it cannot be
+    forgotten on a new tool, and so no tool's schema is mutated in place.
+    """
+    schema = copy.deepcopy(schema)
+    schema.setdefault("type", "object")
+    schema["additionalProperties"] = False
     return schema
 
 
@@ -224,21 +254,25 @@ class _OverlayHeaders:
 async def handle_list_tools() -> list[Tool]:
     """Return all registered tools from the per-file TOOLS registries.
 
-    When the client is configured with LEM credentials (EDGE_MANAGER_URL
-    header present), edge-targeting tools additionally advertise optional
-    project_id/lem_device_id arguments for per-call LEM bridge routing.
+    Edge-targeting tools always advertise the optional project_id and
+    lem_device_id arguments for per-call LEM bridge routing, whether or not
+    this particular connection is configured for LEM. Advertising them only to
+    LEM-configured clients would be wrong now that the schemas reject unknown
+    arguments: the SDK keeps ONE process-wide tool cache which every
+    list_tools call clears and refreshes, so on a server with more than one
+    client the last listing decides what everybody is validated against. A
+    non-LEM client listing tools would strip the bridge arguments and a
+    LEM-configured client's next bridged call would be rejected as sending
+    something unexpected. The arguments are inert without LEM credentials, so
+    advertising them unconditionally costs nothing and removes the race.
     """
-    request = _resolve_request()
-    lem_configured = bool(
-        request is not None and request.headers.get("EDGE_MANAGER_URL")
-    )
     return [
         Tool(
             name=tool["name"],
             description=tool["description"],
-            inputSchema=(
+            inputSchema=_strict(
                 _with_bridge_args(tool["schema"])
-                if lem_configured and _is_bridgeable(tool)
+                if _is_bridgeable(tool)
                 else tool["schema"]
             ),
             annotations=tool.get("annotations"),
