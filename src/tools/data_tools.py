@@ -28,6 +28,8 @@ from utils.auth import (
 )
 from utils.formatting import format_error_response, format_success_response
 
+from .sdk_cli_tools import run_cli_function
+
 INFLUXDB_AVAILABLE = True
 
 # How long to wait for a NATS message before giving up
@@ -311,6 +313,183 @@ async def _nc_single_topic(
             await nc.close()
 
     return result_message, result_subject
+
+
+# ── topic discovery ─────────────────────────────────────────────────────────
+#
+# The two topic-reading tools need an exact subject, and nothing else on the
+# server lists what exists, so a caller had to know subjects out of band. No
+# single Litmus API returns every topic either: each component publishes its
+# own, so they are collected from all three that expose them and merged.
+
+# Tags scanned before the DeviceHub sweep stops. A fleet can hold tens of
+# thousands of tags at two topics each; stopping is reported in the response
+# rather than passed off as a complete listing.
+_MAX_TAG_SCAN = 2000
+_TAG_SCAN_PAGE = 500
+
+_TOPIC_SOURCES = ("analytics", "devicehub", "digitaltwins")
+
+
+async def _topics_from_analytics(request: Request) -> list[dict]:
+    """Topics known to the analytics engine: the broadest single registry.
+
+    Needs Litmus Edge 4.0.x or later; older firmware rejects the call, which
+    the caller sees as this source being unavailable.
+    """
+    rows = await run_cli_function(request, "le.analytics.GetTopics", {}) or []
+    return [
+        {
+            "topic": row.get("Topic"),
+            "direction": row.get("Direction"),
+            "format": row.get("Format"),
+        }
+        for row in rows
+        if isinstance(row, dict) and row.get("Topic")
+    ]
+
+
+async def _topics_from_devicehub(request: Request) -> tuple[list[dict], int, int]:
+    """Topics attached to DeviceHub tags, with the total tag count and how
+    many tags were actually scanned."""
+    found: list[dict] = []
+    scanned = 0
+    total = 0
+    offset = 0
+    while scanned < _MAX_TAG_SCAN:
+        page = await run_cli_function(
+            request,
+            "le.devicehub.ListAllTags",
+            {"limit": min(_TAG_SCAN_PAGE, _MAX_TAG_SCAN - scanned), "offset": offset},
+        )
+        if not isinstance(page, dict):
+            break
+        registers = page.get("Registers") or []
+        total = page.get("TotalCount") or total
+        for tag in registers:
+            if not isinstance(tag, dict):
+                continue
+            for topic in tag.get("Topics") or []:
+                if isinstance(topic, dict) and topic.get("Topic"):
+                    found.append(
+                        {
+                            "topic": topic["Topic"],
+                            "direction": topic.get("Direction"),
+                            "format": topic.get("Format"),
+                            "interval_ms": topic.get("IntervalMs"),
+                            "owner": tag.get("TagName") or tag.get("Name"),
+                        }
+                    )
+        scanned += len(registers)
+        offset += len(registers)
+        if page.get("Last") or not registers:
+            break
+    return found, total, scanned
+
+
+async def _topics_from_digitaltwins(request: Request) -> list[dict]:
+    """Topics each digital twin instance publishes its assembled payload on."""
+    instances = (
+        await run_cli_function(request, "le.digitaltwins.ListAllInstances", {}) or []
+    )
+    return [
+        {
+            "topic": inst.get("Topic"),
+            "direction": "Output",
+            "owner": inst.get("Name"),
+        }
+        for inst in instances
+        if isinstance(inst, dict) and inst.get("Topic")
+    ]
+
+
+async def list_nats_topics(request: Request, arguments: dict) -> list[TextContent]:
+    """Lists NATS topics published across Litmus Edge components."""
+    arguments = arguments or {}
+    requested = arguments.get("sources") or list(_TOPIC_SOURCES)
+    if isinstance(requested, str):
+        requested = [requested]
+    unknown = [s for s in requested if s not in _TOPIC_SOURCES]
+    if unknown:
+        raise McpError(
+            ErrorData(
+                code=INVALID_PARAMS,
+                message=(
+                    f"Unknown source(s) {unknown}; valid sources are "
+                    f"{list(_TOPIC_SOURCES)}"
+                ),
+            )
+        )
+
+    pattern = (arguments.get("pattern") or "").strip().lower()
+    limit = max(1, min(int(arguments.get("limit", 200)), 1000))
+    offset = max(0, int(arguments.get("offset", 0)))
+
+    # Keyed by topic string: the same subject legitimately appears in more than
+    # one component's view, and a caller wants one row naming all of them.
+    merged: dict[str, dict] = {}
+    status: dict[str, dict] = {}
+
+    for source in requested:
+        try:
+            if source == "analytics":
+                rows = await _topics_from_analytics(request)
+                status[source] = {"status": "ok", "topics_found": len(rows)}
+            elif source == "devicehub":
+                rows, total_tags, scanned = await _topics_from_devicehub(request)
+                status[source] = {
+                    "status": "ok",
+                    "topics_found": len(rows),
+                    "tags_scanned": scanned,
+                    "tags_total": total_tags,
+                }
+                if total_tags > scanned:
+                    status[source]["status"] = "partial"
+                    status[source]["note"] = (
+                        f"stopped after {scanned} of {total_tags} tags "
+                        f"({_MAX_TAG_SCAN} tag scan limit); narrow with "
+                        "'pattern' or read tags per device with "
+                        "get_devicehub_device_tags"
+                    )
+            else:
+                rows = await _topics_from_digitaltwins(request)
+                status[source] = {"status": "ok", "topics_found": len(rows)}
+        except Exception as e:
+            # One component being unavailable (old firmware, disabled feature)
+            # must not hide the topics the others do publish.
+            logger.warning(f"Topic source '{source}' unavailable: {e}")
+            status[source] = {"status": "unavailable", "reason": str(e)}
+            continue
+
+        for row in rows:
+            entry = merged.setdefault(
+                row["topic"], {"topic": row["topic"], "sources": []}
+            )
+            if source not in entry["sources"]:
+                entry["sources"].append(source)
+            for key, value in row.items():
+                if key != "topic" and value is not None:
+                    entry.setdefault(key, value)
+
+    topics = sorted(merged.values(), key=lambda t: t["topic"])
+    if pattern:
+        topics = [t for t in topics if pattern in t["topic"].lower()]
+
+    page = topics[offset : offset + limit]
+    result = {
+        "topics": page,
+        "total_count": len(topics),
+        "has_more": offset + len(page) < len(topics),
+        "next_offset": offset + len(page),
+        "sources": status,
+    }
+    if not topics and all(s.get("status") == "unavailable" for s in status.values()):
+        return format_error_response(
+            "topic_discovery_failed",
+            "No topic source could be queried: "
+            + "; ".join(f"{k}: {v.get('reason')}" for k, v in status.items()),
+        )
+    return format_success_response(result)
 
 
 async def _collect_multiple_values_from_topic(
@@ -1038,12 +1217,68 @@ async def get_device_data_for_inference(
 
 TOOLS = [
     {
+        "name": "list_nats_topics",
+        "category": "nats.topics",
+        "annotations": ToolAnnotations(title="List NATS Topics", readOnlyHint=True),
+        "description": (
+            "Lists the NATS topics that exist on this Litmus Edge instance, so "
+            "topics can be discovered instead of guessed. Call this FIRST when "
+            "you need a topic for get_current_value_from_topic or "
+            "get_multiple_values_from_topic and do not already know the exact "
+            "subject. Topics are collected from every component that publishes "
+            "them and merged: 'analytics' (the broadest registry, Litmus Edge "
+            "4.0.x+), 'devicehub' (per-tag input/output topics) and "
+            "'digitaltwins' (per-instance payload topics). Each result names "
+            "which sources reported it. Narrow large fleets with 'pattern'. If "
+            "one component is unavailable the others are still returned, and "
+            "the per-source status says which was skipped and why. Note: users "
+            "may call these 'datahub subscribe topics' or 'pubsub topics'."
+        ),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": list(_TOPIC_SOURCES)},
+                    "description": (
+                        "Components to query (default: all three). Restrict this "
+                        "when you only care about, say, digital twin topics."
+                    ),
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": (
+                        "Case-insensitive substring filter on the topic name, "
+                        "e.g. 'Machine1' or 'PartMade'"
+                    ),
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Page size, 1-1000 (default 200)",
+                    "default": 200,
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": (
+                        "Number of topics to skip; use next_offset from the "
+                        "previous page (default 0)"
+                    ),
+                    "default": 0,
+                },
+            },
+            "required": [],
+        },
+        "handler": list_nats_topics,
+    },
+    {
         "name": "get_current_value_from_topic",
         "category": "nats.topics",
         "annotations": ToolAnnotations(title="Get Current Topic Value", readOnlyHint=True),
         "description": (
             "Gets the current value from a NATS topic. "
             "Subscribes to the topic and returns the next published message. "
+            "Requires the exact subject: call list_nats_topics first if you do "
+            "not already know it, rather than guessing. "
             "Note: User may refer to NATS topics as 'datahub subscribe topic' or 'pubsub topic'."
         ),
         "schema": {
@@ -1067,6 +1302,8 @@ TOOLS = [
             "WARNING: This function blocks until num_samples messages are received. "
             "Use this for time-series data collection, trend analysis, or creating charts. "
             "Does NOT retrieve historical data - waits for new messages. "
+            "Requires the exact subject: call list_nats_topics first if you do "
+            "not already know it, rather than guessing. "
             "Note: User may refer to NATS topics as 'datahub subscribe topic' or 'pubsub topic'."
         ),
         "schema": {

@@ -39,7 +39,7 @@ ALLOWED_CATEGORIES = {
     "server.info",
 }
 
-EXPECTED_CANONICAL_COUNT = 61
+EXPECTED_CANONICAL_COUNT = 62
 
 
 def test_every_entry_well_formed():

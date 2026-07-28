@@ -145,6 +145,45 @@ def test_markdown_url_appends_suffix_but_never_doubles_it():
     assert _markdown_url("https://api.litmus.io/agents.md") == (
         "https://api.litmus.io/agents.md"
     )
+    # llms.txt already names a file; appending .md would 404 it.
+    assert _markdown_url("https://api.litmus.io/llms.txt") == (
+        "https://api.litmus.io/llms.txt"
+    )
+
+
+def test_text_plain_is_accepted_for_a_named_text_file():
+    """llms.txt is served as text/plain, and is fetched in one request."""
+    seen = []
+
+    async def handler(request):
+        seen.append(str(request.url))
+        return _fake_response(content_type="text/plain", text="# Litmus API\n" + "z" * 300)
+
+    with _mocked_http(handler):
+        body = run(fetch_documentation_content("https://api.litmus.io/llms.txt"))
+
+    assert seen == ["https://api.litmus.io/llms.txt"], "no .md probe, no HTML fallback"
+    assert body.startswith("# Litmus API")
+
+
+def test_text_plain_is_still_rejected_for_a_docs_page():
+    """Only a named text file gets the text/plain allowance.
+
+    A docs page whose twin answers as text/plain is most likely the app shell,
+    so it must still fall back to the HTML URL.
+    """
+
+    async def handler(request):
+        if str(request.url).endswith(".md"):
+            return _fake_response(content_type="text/plain", text=SPA_SHELL)
+        return _fake_response(
+            content_type="text/html", text="<html><main>real page</main></html>"
+        )
+
+    with _mocked_http(handler):
+        body = run(fetch_documentation_content("https://docs.litmus.io/x"))
+
+    assert "real page" in body
 
 
 def test_strip_frontmatter_removes_only_the_leading_block():

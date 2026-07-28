@@ -151,22 +151,29 @@ _BRIDGE_ARG_PROPERTIES = {
         "description": (
             "Optional: LEM project id of the target edge device. Only used "
             "when connecting through Litmus Edge Manager (EDGE_MANAGER_URL "
-            "configured). Together with device_id this routes the call to "
+            "configured). Together with lem_device_id this routes the call to "
             "that managed edge via the LEM bridge; find ids with "
             "lem_list_devices."
         ),
     },
-    "device_id": {
+    "lem_device_id": {
         "type": "string",
         "description": (
-            "Optional: LEM device id of the target edge device. Only used "
-            "when connecting through Litmus Edge Manager (EDGE_MANAGER_URL "
-            "configured). Together with project_id this routes the call to "
-            "that managed edge via the LEM bridge; find ids with "
-            "lem_list_devices."
+            "Optional: LEM device id of the target edge device, as returned by "
+            "lem_list_devices. This is NOT the DeviceHub device id returned by "
+            "get_devicehub_devices. Only used when connecting through Litmus "
+            "Edge Manager (EDGE_MANAGER_URL configured). Together with "
+            "project_id this routes the call to that managed edge via the LEM "
+            "bridge."
         ),
     },
 }
+
+# Superseded by lem_device_id. The old name meant the LEM device id here while
+# meaning the DeviceHub device id in tool payloads, which is the ambiguity the
+# rename removes. Still accepted so existing clients and saved prompts keep
+# working; it is not advertised in any schema.
+_LEGACY_BRIDGE_DEVICE_ARG = "device_id"
 
 
 def _is_bridgeable(tool: dict) -> bool:
@@ -219,7 +226,7 @@ async def handle_list_tools() -> list[Tool]:
 
     When the client is configured with LEM credentials (EDGE_MANAGER_URL
     header present), edge-targeting tools additionally advertise optional
-    project_id/device_id arguments for per-call LEM bridge routing.
+    project_id/lem_device_id arguments for per-call LEM bridge routing.
     """
     request = _resolve_request()
     lem_configured = bool(
@@ -276,7 +283,14 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
     arguments = dict(arguments or {})
     if _is_bridgeable(tool):
         project_id = arguments.pop("project_id", "") or ""
-        device_id = arguments.pop("device_id", "") or ""
+        device_id = arguments.pop("lem_device_id", "") or ""
+        legacy_device_id = arguments.pop(_LEGACY_BRIDGE_DEVICE_ARG, "") or ""
+        if legacy_device_id and not device_id:
+            logger.warning(
+                f"{name}: '{_LEGACY_BRIDGE_DEVICE_ARG}' is deprecated for LEM "
+                "bridge routing, use 'lem_device_id'"
+            )
+            device_id = legacy_device_id
         if project_id or device_id:
             request = BridgeOverlayRequest(request, project_id, device_id)
 
