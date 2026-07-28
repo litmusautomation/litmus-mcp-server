@@ -16,6 +16,8 @@ you configure.
 - Litmus Edge OAuth2 API credentials (System > API Access on the device).
 - Optional: NATS and InfluxDB credentials for the real-time and
   historical data tools.
+- Optional: Litmus Unify URL, username and password, to reach the
+  `unify.*` SDK functions.
 
 ## Install
 
@@ -28,6 +30,13 @@ and start chatting.
 before connecting and names any that are missing. The NATS and InfluxDB
 fields are optional and only enable the real-time and historical data
 tools.
+
+The three Litmus Unify fields are optional too, but only work as a set:
+Unify authenticates separately from Litmus Edge, so filling in one and
+leaving the others empty is refused with a message naming what is still
+blank. Leave all three empty to skip Unify, in which case the server
+hides the `unify.*` functions from discovery rather than advertising
+functions that cannot authenticate.
 
 ## Transport security
 

@@ -168,3 +168,61 @@ test("the opt-in does not weaken anything over https", () => {
 test("resolves the bundled mcp-remote entry point", () => {
   assert.match(resolveMcpRemote(), /mcp-remote/);
 });
+
+// ── Litmus Unify ─────────────────────────────────────────────────────────────
+//
+// Unify authenticates separately from Litmus Edge, so its settings are optional
+// but only meaningful as a set. Without them the server hides the unify.*
+// namespace from discovery instead of advertising functions that cannot
+// authenticate, so forwarding all three is what makes the namespace reachable.
+
+const UNIFY = {
+  UNS_URL: "https://unify.example.com",
+  UNS_USERNAME: "uns-user",
+  UNS_PASSWORD: "uns-pass",
+};
+
+test("forwards the Unify headers when all three are set", () => {
+  const sent = headers(buildLaunch(env(UNIFY)).args);
+  assert.equal(sent.UNS_URL, "https://unify.example.com");
+  assert.equal(sent.UNS_USERNAME, "uns-user");
+  assert.equal(sent.UNS_PASSWORD, "uns-pass");
+});
+
+test("sends no Unify headers when none are set", () => {
+  const sent = headers(buildLaunch(env({})).args);
+  for (const name of Object.keys(UNIFY)) {
+    assert.equal(name in sent, false, `${name} should not be sent`);
+  }
+});
+
+test("a partly configured Unify names the empty fields", () => {
+  const err = configError(
+    () => buildLaunch(env({ UNS_URL: UNIFY.UNS_URL })),
+    "url only"
+  );
+  assert.match(err.message, /Litmus Unify is partly configured/);
+  assert.match(err.message, /Litmus Unify Username/);
+  assert.match(err.message, /Litmus Unify Password/);
+  // Clearing the group has to be offered as the alternative to filling it in.
+  assert.match(err.message, /clear the Litmus Unify settings entirely/);
+});
+
+test("a partly configured Unify is singular about one empty field", () => {
+  const err = configError(
+    () => buildLaunch(env({ UNS_URL: UNIFY.UNS_URL, UNS_USERNAME: "u" })),
+    "password missing"
+  );
+  assert.match(err.message, /Litmus Unify Password is still empty/);
+});
+
+test("unsubstituted Unify placeholders count as unset, not as partial config", () => {
+  const { args } = buildLaunch(
+    env({
+      UNS_URL: "${user_config.uns_url}",
+      UNS_USERNAME: "${user_config.uns_username}",
+      UNS_PASSWORD: "${user_config.uns_password}",
+    })
+  );
+  assert.equal("UNS_URL" in headers(args), false);
+});

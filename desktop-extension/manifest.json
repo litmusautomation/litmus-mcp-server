@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "litmus-mcp",
   "display_name": "Litmus MCP",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Connect Claude to Litmus Edge industrial devices through your Litmus MCP Server.",
   "long_description": "Gives Claude access to your Litmus Edge deployment: browse DeviceHub devices and tags, read real-time and historical process data, manage Digital Twins, inspect system health, and reach the full Litmus SDK surface. This extension bridges Claude Desktop to a Litmus MCP Server you run on your own network (see https://github.com/litmusautomation/litmus-mcp-server); your credentials are stored in the operating system keychain and sent only to that server.",
   "author": {
@@ -38,6 +38,9 @@
         "INFLUX_DB_NAME": "${user_config.influx_db_name}",
         "INFLUX_USERNAME": "${user_config.influx_username}",
         "INFLUX_PASSWORD": "${user_config.influx_password}",
+        "UNS_URL": "${user_config.uns_url}",
+        "UNS_USERNAME": "${user_config.uns_username}",
+        "UNS_PASSWORD": "${user_config.uns_password}",
         "VALIDATE_CERTIFICATE": "${user_config.validate_certificate}",
         "LITMUS_ALLOW_INSECURE_HTTP": "${user_config.allow_insecure_http}"
       }
@@ -112,6 +115,22 @@
       "type": "string",
       "title": "InfluxDB Password (optional)",
       "description": "DataHub password",
+      "sensitive": true
+    },
+    "uns_url": {
+      "type": "string",
+      "title": "Litmus Unify URL (optional)",
+      "description": "Base URL of a Litmus Unify instance, e.g. https://unify.example.com. Only needed to reach the unify.* SDK functions, which authenticate separately from Litmus Edge; leave empty to skip."
+    },
+    "uns_username": {
+      "type": "string",
+      "title": "Litmus Unify Username (optional)",
+      "description": "Required when Litmus Unify URL is set"
+    },
+    "uns_password": {
+      "type": "string",
+      "title": "Litmus Unify Password (optional)",
+      "description": "Required when Litmus Unify URL is set",
       "sensitive": true
     },
     "validate_certificate": {

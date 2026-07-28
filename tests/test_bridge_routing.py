@@ -67,8 +67,11 @@ def test_with_bridge_args_adds_optional_ids_without_mutating_original():
     injected = _with_bridge_args(original)
     assert "project_id" in injected["properties"]
     assert "lem_device_id" in injected["properties"]
-    # The old ambiguous name is accepted at call time but never advertised.
-    assert "device_id" not in injected["properties"]
+    # The deprecated alias has to be declared as well: schemas reject unknown
+    # arguments, so leaving it out would make validation refuse it before the
+    # dispatcher could accept it, breaking the clients it exists for.
+    assert "device_id" in injected["properties"]
+    assert "DEPRECATED" in injected["properties"]["device_id"]["description"]
     assert "project_id" not in original["properties"]
     # bridge ids are never required
     assert "project_id" not in injected.get("required", [])
