@@ -108,7 +108,7 @@ def _get_isolated_dir() -> str:
 # same release the Dockerfile pins) instead of hard-failing the CLI-backed
 # tools.
 
-_FALLBACK_CLI_VERSION = "cli-v0.7.0"  # used only when Dockerfile is absent
+_FALLBACK_CLI_VERSION = "cli-v0.9.0"  # used only when Dockerfile is absent
 
 _BOOTSTRAP_BASE_DIR = Path.home() / ".cache" / "litmus-mcp-server" / "bin"
 
