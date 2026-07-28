@@ -137,7 +137,7 @@ docker run -d --name litmus-mcp-server \
 
 **Multiple Litmus Edge instances:** The Web UI lets you register and switch between multiple Litmus Edge devices from a single MCP server. Each instance keeps its own URL and OAuth2 credentials; the active instance's credentials are mirrored into `EDGE_URL` / `EDGE_API_CLIENT_ID` / `EDGE_API_CLIENT_SECRET` automatically. Manage instances under **Config → Litmus Edge Instances**, or check status per-instance from the **Health** page.
 
-**Live Litmus documentation as MCP Resources:** The server exposes `litmus://docs/<section>` URIs that fetch live content from [docs.litmus.io](https://docs.litmus.io) on demand, so MCP-aware clients can pull current reference material directly into the model's context. Pages are fetched as markdown (a few KB each) rather than rendered HTML (a few hundred KB, mostly navigation), falling back to HTML only where no markdown version is published. `litmus://docs/api` resolves to the API portal's agent router at [api.litmus.io/agents.md](https://api.litmus.io/agents.md), which links onward to per-product routers.
+**Live Litmus documentation as MCP Resources:** The server exposes `litmus://docs/<section>` URIs that fetch live content from [docs.litmus.io](https://docs.litmus.io) on demand, so MCP-aware clients can pull current reference material directly into the model's context. Pages are fetched as markdown (a few KB each) rather than rendered HTML (a few hundred KB, mostly navigation), falling back to HTML only where no markdown version is published. `litmus://docs/api` resolves to the API portal's agent router at [api.litmus.io/agents.md](https://api.litmus.io/agents.md), and the per-product routers it links to are exposed directly as `litmus://docs/api/edge`, `litmus://docs/api/edgemanager` and `litmus://docs/api/unify`, alongside `litmus://docs/cli` for the litmus-cli guide and `litmus://docs/workflows` for multi-step task recipes.
 
 If you deploy the MCP server and web client on separate hosts, set `MCP_SSE_URL` to point the web client at the server:
 
@@ -390,7 +390,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 
 ## Available Tools
 
-61 tools across 13 categories. Tools accept structured arguments and return JSON.
+62 tools across 13 categories. Tools accept structured arguments and return JSON.
 
 | Category                  | Function Name                          | Description |
 |---------------------------|----------------------------------------|-------------|
@@ -410,7 +410,8 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 | **Cloud / LEM Activation**| `get_cloud_activation_status`          | Check cloud registration and Litmus Edge Manager (LEM) connection status. |
 | **Docker Management**     | `get_all_containers_on_litmusedge`     | List all Docker containers running on Litmus Edge Marketplace. |
 |                           | `run_docker_container_on_litmusedge`   | Deploy and run a new Docker container on Litmus Edge Marketplace. |
-| **NATS Topics** *         | `get_current_value_from_topic`         | Subscribe to a NATS topic and return the next published message. |
+| **NATS Topics** *         | `list_nats_topics`                     | Discover which topics exist, merged from analytics, DeviceHub tags and digital twin instances. |
+|                           | `get_current_value_from_topic`         | Subscribe to a NATS topic and return the next published message. |
 |                           | `get_multiple_values_from_topic`       | Collect multiple sequential values from a NATS topic for trend analysis. |
 | **InfluxDB / Time Series** ** | `get_historical_data_from_influxdb` | Query historical time-series data from InfluxDB by measurement and time range. |
 |                           | `list_influxdb_measurements`           | List all measurement names in the `tsdata` database, discovery for downstream queries. |
@@ -459,7 +460,7 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 ### Tool Use Notes
 
 **\* NATS Topic Tools Requirements:**
-To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you must configure access control on Litmus Edge:
+To use `get_current_value_from_topic` and `get_multiple_values_from_topic`, you must configure access control on Litmus Edge (`list_nats_topics` needs no broker access, since it reads topic names from the REST/GraphQL APIs rather than subscribing):
 1. Navigate to: **Litmus Edge → System → Access Control → Tokens**
 2. Create or configure an access token with appropriate permissions
 3. Provide the token in your MCP client configuration headers

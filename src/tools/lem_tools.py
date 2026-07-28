@@ -524,7 +524,11 @@ _BRIDGE_PROJECT_ID_SCHEMA = {
 
 _BRIDGE_DEVICE_ID_SCHEMA = {
     "type": "string",
-    "description": "LEM device id of the target edge device.",
+    "description": (
+        "LEM device id of the target edge device, as returned by "
+        "lem_list_devices. This is NOT the DeviceHub device id returned by "
+        "get_devicehub_devices."
+    ),
 }
 
 
@@ -573,7 +577,11 @@ TOOLS = [
             "properties": {
                 "device_id": {
                     "type": "string",
-                    "description": "LEM device id to fetch.",
+                    "description": (
+                        "LEM device id to fetch, as returned by lem_list_devices. "
+                        "This is NOT the DeviceHub device id returned by "
+                        "get_devicehub_devices."
+                    ),
                 },
                 "project_id": _PROJECT_ID_SCHEMA,
             },

@@ -104,6 +104,46 @@ DOCUMENTATION_RESOURCES = {
         "uri": f"{LITMUS_API_BASE}/agents.md",
         "mimeType": "text/markdown",
     },
+    # The routers the entry above links to, exposed directly so a client can
+    # fetch the one product or layer it needs without walking the tree. All
+    # are a few KB of markdown; the collection they describe is ~30 MB, which
+    # is why none of these resources point at it.
+    "litmus://docs/cli": {
+        "name": "litmus-cli Guide",
+        "description": (
+            "Using the standalone litmus-cli binary that backs the SDK / CLI "
+            "fallback tools: installation, discovery and run syntax"
+        ),
+        "uri": f"{LITMUS_API_BASE}/cli.md",
+        "mimeType": "text/markdown",
+    },
+    "litmus://docs/api/edge": {
+        "name": "Litmus Edge API Router",
+        "description": "Endpoint router for the Litmus Edge REST and GraphQL APIs",
+        "uri": f"{LITMUS_API_BASE}/le/agents.md",
+        "mimeType": "text/markdown",
+    },
+    "litmus://docs/api/edgemanager": {
+        "name": "Litmus Edge Manager API Router",
+        "description": "Endpoint router for the Litmus Edge Manager API",
+        "uri": f"{LITMUS_API_BASE}/lem/agents.md",
+        "mimeType": "text/markdown",
+    },
+    "litmus://docs/api/unify": {
+        "name": "Litmus Unify API Router",
+        "description": "Endpoint router for the Litmus Unify (UNS) API",
+        "uri": f"{LITMUS_API_BASE}/luns/agents.md",
+        "mimeType": "text/markdown",
+    },
+    "litmus://docs/workflows": {
+        "name": "Litmus Workflow Chains",
+        "description": (
+            "Multi-step task recipes, e.g. creating a device with tags or "
+            "browsing for tags in bulk"
+        ),
+        "uri": f"{LITMUS_API_BASE}/workflows/agents.md",
+        "mimeType": "text/markdown",
+    },
 }
 
 

@@ -66,7 +66,9 @@ def test_with_bridge_args_adds_optional_ids_without_mutating_original():
     original = {"type": "object", "properties": {}, "required": []}
     injected = _with_bridge_args(original)
     assert "project_id" in injected["properties"]
-    assert "device_id" in injected["properties"]
+    assert "lem_device_id" in injected["properties"]
+    # The old ambiguous name is accepted at call time but never advertised.
+    assert "device_id" not in injected["properties"]
     assert "project_id" not in original["properties"]
     # bridge ids are never required
     assert "project_id" not in injected.get("required", [])
@@ -144,9 +146,9 @@ def test_missing_everything_still_reports_edge_url_required():
 # ── call-time argument stripping ─────────────────────────────────────────────
 
 
-def test_handle_call_tool_strips_bridge_args_and_overlays_request():
-    """project_id/device_id are consumed by the dispatcher, not passed to the
-    tool handler, and the handler sees an overlaid request."""
+def _call_with_bridge_args(extra_args: dict) -> dict:
+    """Dispatch get_devicehub_devices with a stub handler, returning what the
+    handler saw: its arguments plus the overlaid bridge headers."""
     import asyncio
 
     seen = {}
@@ -168,14 +170,41 @@ def test_handle_call_tool_strips_bridge_args_and_overlays_request():
         tool["handler"] = fake_handler
         asyncio.run(
             server.handle_call_tool(
-                tool_name,
-                {"filter_by_driver": "ModbusTCP", "project_id": "p1", "device_id": "d1"},
+                tool_name, {"filter_by_driver": "ModbusTCP", **extra_args}
             )
         )
     finally:
         tool["handler"] = original_handler
         server.current_request.reset(token)
 
+    return seen
+
+
+def test_handle_call_tool_strips_bridge_args_and_overlays_request():
+    """project_id/lem_device_id are consumed by the dispatcher, not passed to
+    the tool handler, and the handler sees an overlaid request."""
+    seen = _call_with_bridge_args({"project_id": "p1", "lem_device_id": "d1"})
     assert seen["arguments"] == {"filter_by_driver": "ModbusTCP"}
     assert seen["project"] == "p1"
     assert seen["device"] == "d1"
+
+
+def test_legacy_device_id_still_routes():
+    """The pre-rename argument name keeps working for existing clients.
+
+    'device_id' meant the LEM device id here while meaning the DeviceHub
+    device id in tool payloads; lem_device_id removes that clash, but dropping
+    the old name outright would break saved prompts and configured clients.
+    """
+    seen = _call_with_bridge_args({"project_id": "p1", "device_id": "d1"})
+    assert seen["arguments"] == {"filter_by_driver": "ModbusTCP"}
+    assert seen["device"] == "d1"
+
+
+def test_new_name_wins_when_both_are_sent():
+    seen = _call_with_bridge_args(
+        {"project_id": "p1", "lem_device_id": "new", "device_id": "old"}
+    )
+    # Both are consumed either way, so neither reaches the handler.
+    assert seen["arguments"] == {"filter_by_driver": "ModbusTCP"}
+    assert seen["device"] == "new"
