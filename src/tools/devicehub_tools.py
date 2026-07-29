@@ -983,14 +983,16 @@ async def _cli_device_tag_statuses(
 ) -> tuple[dict, list]:
     """Return ({tag_id: tag_name}, [{'ID', 'State'}...]) for one device via
     litmus-cli."""
-    cli_tags = (
-        await run_cli_function(
-            request,
-            "le.devicehub.ListDeviceTags",
-            {"deviceID": device_id, "limit": _TAG_LIMIT},
-        )
-        or []
+    page = await run_cli_function(
+        request,
+        "le.devicehub.ListDeviceTags",
+        {"deviceID": device_id, "limit": _TAG_LIMIT},
     )
+    # ListDeviceTags answers with TagPage{Registers, TotalCount, Last}, not a
+    # bare array. Iterating the response itself walks those three keys as
+    # strings, so no tag was ever found and both status tools reported nothing
+    # while still succeeding.
+    cli_tags = page.get("Registers") or [] if isinstance(page, dict) else []
     tag_map = {
         t.get("ID"): t.get("TagName") or t.get("Name")
         for t in cli_tags

@@ -212,14 +212,47 @@ def test_attributes_cli_failure_returns_error_response():
 
 # ── tag status ───────────────────────────────────────────────────────────────
 
-DEVICE_TAGS = [
+DEVICE_TAG_ROWS = [
     {"ID": "tag-1", "TagName": "Temperature"},
     {"ID": "tag-2", "TagName": "Pressure"},
 ]
+# ListDeviceTags answers with TagPage{Registers, TotalCount, Last}, not a bare
+# array. This fixture WAS a bare array, which is why both status tools shipped
+# reading zero tags while still reporting success: the tests were validating a
+# shape the CLI never returns. Keep this the real shape.
+DEVICE_TAGS = {"Registers": DEVICE_TAG_ROWS, "TotalCount": 2, "Last": True}
 TAG_STATES = [
     {"ID": "tag-1", "State": "OK"},
     {"ID": "tag-2", "State": "ERROR"},
 ]
+
+
+@patch("tools.devicehub_tools.get_litmus_connection")
+@patch("tools.devicehub_tools._find_device_by_name")
+def test_tag_status_reads_the_paginated_response_shape(mock_find, mock_conn):
+    """Regression: the response is TagPage{Registers, ...}, not a bare array.
+
+    Reading it as an array found no tags and reported an empty status list with
+    success true, i.e. 'no tags are broken' for a device whose tags were never
+    looked at.
+    """
+    mock_conn.return_value = MagicMock()
+    device = MagicMock()
+    device.id = "dev-1"
+    mock_find.return_value = device
+
+    async def fake_cli(request, function, args):
+        if function == "le.devicehub.ListDeviceTags":
+            return DEVICE_TAGS
+        return [{"ID": "tag-1", "State": "Failed"}]
+
+    with patch.object(dh_tools, "run_cli_function", side_effect=fake_cli):
+        data = _parse(
+            _run(get_tag_status(_make_request(), {"device_name": "TestDevice"}))
+        )
+
+    assert data["count"] == 1
+    assert data["statuses"][0]["tag_name"] == "Temperature"
 
 
 @patch("tools.devicehub_tools.get_litmus_connection")
@@ -287,7 +320,11 @@ def test_get_all_tags_status_covers_every_device_and_surfaces_errors():
         if device_id == "dev-3":
             raise CLIFunctionError(function, "unreachable")
         if function == "le.devicehub.ListDeviceTags":
-            return [{"ID": f"{device_id}-t", "TagName": f"{device_id}-tag"}]
+            return {
+                "Registers": [{"ID": f"{device_id}-t", "TagName": f"{device_id}-tag"}],
+                "TotalCount": 1,
+                "Last": True,
+            }
         return [{"ID": f"{device_id}-t", "State": "OK" if device_id == "dev-1" else "ERROR"}]
 
     with patch.object(dh_tools, "run_cli_function", side_effect=fake_cli):
