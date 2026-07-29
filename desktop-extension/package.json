@@ -1,6 +1,6 @@
 {
   "name": "litmus-mcp-desktop-extension",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Claude Desktop extension bridging stdio to a Litmus MCP Server over streamable HTTP",
   "license": "MIT",
   "private": true,
