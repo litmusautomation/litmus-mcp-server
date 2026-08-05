@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Flitmusautomation%2Flitmus-mcp-server.svg)](https://mcptoplist.com/server/glama%2Flitmusautomation%2Flitmus-mcp-server)
+
 <p align="center">
   <a href="https://litmus.io">
     <picture>
