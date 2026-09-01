@@ -6,11 +6,18 @@
  * launcher only validates the configuration and assembles its arguments so
  * that unset optional settings produce no header at all.
  *
+ * mcp-remote is loaded into this process rather than spawned. Claude Desktop
+ * runs extensions on its embedded Node, so process.execPath is the Claude
+ * Desktop executable and not a node binary, and that executable ships with
+ * Electron's runAsNode fuse disabled: exec'ing it with a script path starts a
+ * second copy of the desktop app instead of the bridge, which then never
+ * answers initialize.
+ *
  * Credentials are forwarded as plaintext headers, so plain HTTP is only
  * permitted to loopback addresses unless the user explicitly opts in.
  */
-const { spawn } = require("child_process");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 const HEADER_VARS = [
   "EDGE_URL",
@@ -207,7 +214,7 @@ function resolveMcpRemote() {
   return path.join(path.dirname(manifestPath), bin);
 }
 
-function main() {
+async function main() {
   let plan;
   try {
     plan = buildLaunch(process.env);
@@ -224,11 +231,9 @@ function main() {
     console.error(`Litmus MCP: WARNING: ${warning}`);
   }
 
-  let child;
+  let entry;
   try {
-    child = spawn(process.execPath, [resolveMcpRemote(), plan.url, ...plan.args], {
-      stdio: "inherit",
-    });
+    entry = resolveMcpRemote();
   } catch (err) {
     console.error(
       `Litmus MCP: failed to start the bridge: ${err.message}. Reinstall the ` +
@@ -237,15 +242,24 @@ function main() {
     process.exit(1);
   }
 
-  child.on("exit", (code) => process.exit(code ?? 1));
-  child.on("error", (err) => {
+  // mcp-remote reads its configuration from process.argv and starts on import,
+  // so argv has to look like the bin invocation it expects: argv[2] onward.
+  process.argv = [process.argv[0], entry, plan.url, ...plan.args];
+  try {
+    // ESM package, so a dynamic import from this CommonJS launcher. The file
+    // URL matters on Windows, where import() rejects a bare drive path.
+    await import(pathToFileURL(entry).href);
+  } catch (err) {
     console.error(`Litmus MCP: failed to start the bridge: ${err.message}`);
     process.exit(1);
-  });
+  }
 }
 
 if (require.main === module) {
-  main();
+  main().catch((err) => {
+    console.error(`Litmus MCP: failed to start the bridge: ${err.message}`);
+    process.exit(1);
+  });
 }
 
 module.exports = { buildLaunch, resolveMcpRemote, ConfigError, HEADER_VARS };

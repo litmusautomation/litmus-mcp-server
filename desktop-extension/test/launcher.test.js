@@ -226,3 +226,18 @@ test("unsubstituted Unify placeholders count as unset, not as partial config", (
   );
   assert.equal("UNS_URL" in headers(args), false);
 });
+
+// Claude Desktop runs extensions on its embedded Node, so process.execPath is
+// the Claude Desktop executable, and that executable ships with Electron's
+// runAsNode fuse disabled. Exec'ing it with a script path launched a second
+// copy of the desktop app instead of the bridge, so initialize went
+// unanswered and no mcp-remote output ever reached the log. mcp-remote has to
+// stay in this process.
+test("the launcher starts no child process", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "server", "index.js"),
+    "utf8"
+  );
+  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  assert.equal(/child_process|\bspawn\s*\(|\bfork\s*\(|execPath/.test(code), false);
+});
