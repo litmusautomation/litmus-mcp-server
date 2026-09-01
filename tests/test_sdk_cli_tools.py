@@ -81,10 +81,17 @@ def test_env_omits_bridge_flag_when_bridge_headers_incomplete():
     assert "USE_LEM_BRIDGE" not in env
 
 
-def test_env_defaults_validate_certificate_to_false():
-    """Regression: without the header, the CLI must not inherit litmussdk's
-    env default of True, which fails against self-signed edge certs."""
+def test_env_defaults_validate_certificate_to_true():
+    """Without the header the CLI verifies, matching the in-process
+    connections. A self-signed edge is handled by run_cli_function's retry,
+    which reports the downgrade, rather than by never verifying at all."""
     headers = {k: v for k, v in EDGE_HEADERS.items() if k != "VALIDATE_CERTIFICATE"}
+    env = _build_cli_env(FakeRequest(headers))
+    assert env["VALIDATE_CERTIFICATE"] == "true"
+
+
+def test_env_honours_an_explicit_opt_out():
+    headers = {**EDGE_HEADERS, "VALIDATE_CERTIFICATE": "false"}
     env = _build_cli_env(FakeRequest(headers))
     assert env["VALIDATE_CERTIFICATE"] == "false"
 

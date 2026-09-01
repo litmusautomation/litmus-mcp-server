@@ -6,11 +6,18 @@
  * launcher only validates the configuration and assembles its arguments so
  * that unset optional settings produce no header at all.
  *
+ * mcp-remote is loaded into this process rather than spawned. Claude Desktop
+ * runs extensions on its embedded Node, so process.execPath is the Claude
+ * Desktop executable and not a node binary, and that executable ships with
+ * Electron's runAsNode fuse disabled: exec'ing it with a script path starts a
+ * second copy of the desktop app instead of the bridge, which then never
+ * answers initialize.
+ *
  * Credentials are forwarded as plaintext headers, so plain HTTP is only
  * permitted to loopback addresses unless the user explicitly opts in.
  */
-const { spawn } = require("child_process");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 const HEADER_VARS = [
   "EDGE_URL",
@@ -32,6 +39,19 @@ const HEADER_VARS = [
   "UNS_PASSWORD",
   "VALIDATE_CERTIFICATE",
 ];
+
+// Values that must never reach stderr. mcp-remote logs the whole header set
+// verbatim at startup, and Claude Desktop persists an extension's stderr to a
+// per-server log file that users routinely copy into bug reports, so the
+// secrets would otherwise sit on disk in plaintext.
+const SECRET_VARS = [
+  "EDGE_API_CLIENT_SECRET",
+  "NATS_PASSWORD",
+  "INFLUX_PASSWORD",
+  "UNS_PASSWORD",
+];
+
+const REDACTED = "[redacted]";
 
 // Settings that are only meaningful together: configuring one without the
 // others yields a connection error from the SDK naming internal option names
@@ -196,6 +216,64 @@ function buildLaunch(env) {
   return { url, args, warnings };
 }
 
+/**
+ * Masks every configured secret in anything written to stderr, for the whole
+ * life of the process. Only stderr is filtered: stdout carries the JSON-RPC
+ * stream, which never contains these values and must not be rewritten.
+ *
+ * Both the raw value and its JSON-escaped form are matched, since the header
+ * dump that prompted this goes through JSON.stringify. Any non-empty secret is
+ * masked regardless of length; over-masking a diagnostic line is harmless,
+ * missing one is not.
+ *
+ * @returns {() => void} restores the original stderr, for tests.
+ */
+function redactSecrets(env, stream = process.stderr) {
+  const needles = [];
+  for (const name of SECRET_VARS) {
+    const value = readVar(env, name);
+    if (!value) {
+      continue;
+    }
+    needles.push(value);
+    const escaped = JSON.stringify(value).slice(1, -1);
+    if (escaped !== value) {
+      needles.push(escaped);
+    }
+  }
+  if (!needles.length) {
+    return () => {};
+  }
+  // Longest first, so a secret that contains a shorter one is masked whole
+  // rather than being left with a readable tail.
+  needles.sort((a, b) => b.length - a.length);
+
+  const original = stream.write.bind(stream);
+  stream.write = (chunk, encoding, callback) => {
+    if (typeof encoding === "function") {
+      callback = encoding;
+      encoding = undefined;
+    }
+    const text =
+      typeof chunk === "string"
+        ? chunk
+        : Buffer.isBuffer(chunk)
+          ? chunk.toString("utf8")
+          : null;
+    if (text === null || !needles.some((needle) => text.includes(needle))) {
+      return original(chunk, encoding, callback);
+    }
+    let masked = text;
+    for (const needle of needles) {
+      masked = masked.split(needle).join(REDACTED);
+    }
+    return original(masked, encoding, callback);
+  };
+  return () => {
+    stream.write = original;
+  };
+}
+
 /** Locates the mcp-remote entry point bundled alongside this launcher. */
 function resolveMcpRemote() {
   const manifestPath = require.resolve("mcp-remote/package.json");
@@ -207,7 +285,7 @@ function resolveMcpRemote() {
   return path.join(path.dirname(manifestPath), bin);
 }
 
-function main() {
+async function main() {
   let plan;
   try {
     plan = buildLaunch(process.env);
@@ -224,11 +302,9 @@ function main() {
     console.error(`Litmus MCP: WARNING: ${warning}`);
   }
 
-  let child;
+  let entry;
   try {
-    child = spawn(process.execPath, [resolveMcpRemote(), plan.url, ...plan.args], {
-      stdio: "inherit",
-    });
+    entry = resolveMcpRemote();
   } catch (err) {
     console.error(
       `Litmus MCP: failed to start the bridge: ${err.message}. Reinstall the ` +
@@ -237,15 +313,35 @@ function main() {
     process.exit(1);
   }
 
-  child.on("exit", (code) => process.exit(code ?? 1));
-  child.on("error", (err) => {
+  // Installed before the bridge loads, so its startup header dump is masked.
+  redactSecrets(process.env);
+
+  // mcp-remote reads its configuration from process.argv and starts on import,
+  // so argv has to look like the bin invocation it expects: argv[2] onward.
+  process.argv = [process.argv[0], entry, plan.url, ...plan.args];
+  try {
+    // ESM package, so a dynamic import from this CommonJS launcher. The file
+    // URL matters on Windows, where import() rejects a bare drive path.
+    await import(pathToFileURL(entry).href);
+  } catch (err) {
+    console.error(`Litmus MCP: failed to start the bridge: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main().catch((err) => {
     console.error(`Litmus MCP: failed to start the bridge: ${err.message}`);
     process.exit(1);
   });
 }
 
-if (require.main === module) {
-  main();
-}
-
-module.exports = { buildLaunch, resolveMcpRemote, ConfigError, HEADER_VARS };
+module.exports = {
+  buildLaunch,
+  resolveMcpRemote,
+  redactSecrets,
+  ConfigError,
+  HEADER_VARS,
+  SECRET_VARS,
+  REDACTED,
+};

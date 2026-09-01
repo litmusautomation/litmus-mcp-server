@@ -136,8 +136,8 @@
     "validate_certificate": {
       "type": "boolean",
       "title": "Validate TLS Certificates",
-      "description": "Verify the Litmus Edge HTTPS certificate. Leave off for edges with self-signed certificates (the default).",
-      "default": false
+      "description": "Verify the Litmus Edge HTTPS certificate. Turn this off only for edges with self-signed certificates, which disables verification for the Litmus Edge connection.",
+      "default": true
     },
     "allow_insecure_http": {
       "type": "boolean",

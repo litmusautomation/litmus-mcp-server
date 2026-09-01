@@ -40,6 +40,13 @@ from tools.resource_tools import (
 )
 from tools.sdk_cli_tools import TOOLS as _SDK_CLI_TOOLS
 from tools.system_tools import TOOLS as _SYS_TOOLS
+from utils.tls import (
+    begin_unverified_retry,
+    is_certificate_error,
+    is_certificate_error_text,
+    note_downgrade,
+    reset_tls_state,
+)
 
 ALL_TOOLS = (
     _DH_TOOLS
@@ -298,6 +305,58 @@ def _resolve_request():
     return current_request.get()
 
 
+
+def _tls_target(request) -> str:
+    """Best name for the host whose certificate was rejected."""
+    for header in ("EDGE_URL", "EDGE_MANAGER_URL"):
+        value = request.headers.get(header, "")
+        if value:
+            return value
+    return "the Litmus host"
+
+
+def _certificate_failure(result) -> str | None:
+    """A tool's certificate complaint, whether it raised or returned an error.
+
+    Most tools report failures as a formatted error payload rather than an
+    exception, so the returned content has to be inspected too or the retry
+    would only ever fire for the handful that raise.
+    """
+    for item in result or []:
+        text = getattr(item, "text", "")
+        if '"success": false' in text.lower() and is_certificate_error_text(text):
+            return text
+    return None
+
+
+async def _call_with_tls_fallback(tool, request, arguments):
+    """Run a tool, and if it fails only because a certificate was rejected,
+    run it again with verification off and record the downgrade.
+
+    Retrying the whole call is safe for the case this exists to handle: a
+    rejected certificate aborts the TLS handshake, so no request reached the
+    host and nothing was applied. A tool that talks to two hosts and clears the
+    first could repeat that first host's work, which is why only certificate
+    rejections qualify and every other failure is left alone.
+    """
+    try:
+        result = await tool["handler"](request, arguments)
+        failure = _certificate_failure(result)
+        if failure is None:
+            return result
+    except Exception as exc:
+        if not is_certificate_error(exc):
+            raise
+        failure = str(exc)
+
+    # Recorded before the retry runs, not after: the handler formats its own
+    # response, so the warning has to already be in the context by then or it
+    # never reaches the payload.
+    note_downgrade(_tls_target(request), failure.strip()[:400])
+    begin_unverified_retry()
+    return await tool["handler"](request, arguments)
+
+
 @mcp.call_tool()
 async def handle_call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     """Dispatch a tool call by looking up the handler in TOOL_BY_NAME."""
@@ -328,8 +387,9 @@ async def handle_call_tool(name: str, arguments: dict | None) -> list[TextConten
         if project_id or device_id:
             request = BridgeOverlayRequest(request, project_id, device_id)
 
+    reset_tls_state()
     try:
-        return await tool["handler"](request, arguments)
+        return await _call_with_tls_fallback(tool, request, arguments)
     except McpError:
         raise
     except Exception as e:
@@ -445,7 +505,9 @@ class StdioRequestContext:
                 "EDGE_API_CLIENT_ID": os.getenv("EDGE_API_CLIENT_ID", ""),
                 "EDGE_API_CLIENT_SECRET": os.getenv("EDGE_API_CLIENT_SECRET", ""),
                 "EDGE_URL": os.getenv("EDGE_URL", ""),
-                "VALIDATE_CERTIFICATE": os.getenv("VALIDATE_CERTIFICATE", "false"),
+                # Empty, not "false": an unset variable must fall through to the
+                # verify-by-default policy, not pin verification off.
+                "VALIDATE_CERTIFICATE": os.getenv("VALIDATE_CERTIFICATE", ""),
                 "EDGE_MANAGER_URL": os.getenv("EDGE_MANAGER_URL", ""),
                 "EDGE_API_TOKEN": os.getenv("EDGE_API_TOKEN", ""),
                 "EDGE_MANAGER_PROJECT_ID": os.getenv("EDGE_MANAGER_PROJECT_ID", ""),

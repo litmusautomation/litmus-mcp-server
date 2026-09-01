@@ -12,6 +12,7 @@ from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
 from starlette.requests import Request
 
 from config import DEFAULT_TIMEOUT, NATS_PORT
+from utils.tls import resolve_validate_certificate
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,7 @@ def get_litmus_connection(request: Request) -> Any:
     Raises:
         McpError: If authentication fails
     """
-    validate_certificate = (
-        request.headers.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
-    )
+    validate_certificate = resolve_validate_certificate(request.headers)
 
     manager_url = request.headers.get("EDGE_MANAGER_URL", "")
     api_token = request.headers.get("EDGE_API_TOKEN", "")
@@ -126,14 +125,12 @@ def get_lem_connection(request: Request) -> Any:
 
     Optional headers:
       - EDGE_MANAGER_ADMIN_URL: defaults to EDGE_MANAGER_URL host with port 8446
-      - VALIDATE_CERTIFICATE:   defaults to false
+      - VALIDATE_CERTIFICATE:   defaults to true
     """
     manager_url = request.headers.get("EDGE_MANAGER_URL", "")
     api_token = request.headers.get("EDGE_API_TOKEN", "")
     admin_url = request.headers.get("EDGE_MANAGER_ADMIN_URL", "")
-    validate_certificate = (
-        request.headers.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
-    )
+    validate_certificate = resolve_validate_certificate(request.headers)
 
     if not manager_url:
         raise McpError(

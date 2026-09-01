@@ -3,16 +3,29 @@ import re
 
 from mcp.types import TextContent
 
+from utils.tls import downgrade_warning
+
 
 def format_success_response(data: dict) -> list[TextContent]:
-    """Format a successful response."""
+    """Format a successful response.
+
+    Carries the certificate warning when this request reached a host without
+    verifying its certificate, so a downgrade cannot pass unnoticed just
+    because the call itself succeeded.
+    """
     result = {"success": True, **data}
+    warning = downgrade_warning()
+    if warning:
+        result["tls_warning"] = warning
     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
 
 def format_error_response(error_code: str, message: str) -> list[TextContent]:
     """Format an error response."""
     result = {"success": False, "error": error_code, "message": message}
+    warning = downgrade_warning()
+    if warning:
+        result["tls_warning"] = warning
     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
 

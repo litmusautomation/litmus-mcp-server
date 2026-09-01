@@ -68,7 +68,7 @@ def test_authentication_with_certificate_validation_true(mock_new_connection):
 
 @patch("utils.auth.new_le_connection")
 def test_authentication_with_certificate_validation_default(mock_new_connection):
-    """Test authentication without certificate validation header (defaults to false)"""
+    """Without the header, certificates are verified."""
     mock_new_connection.return_value = MagicMock()
 
     request = Mock(spec=Request)
@@ -81,9 +81,10 @@ def test_authentication_with_certificate_validation_default(mock_new_connection)
 
     _ = get_litmus_connection(request)
 
-    # Verify default is False (header defaults to "false")
+    # Verification is the default; a self-signed edge is handled by the
+    # retry in connect_with_tls_fallback, not by starting out unverified.
     call_kwargs = mock_new_connection.call_args[1]
-    assert call_kwargs["validate_certificate"] is False
+    assert call_kwargs["validate_certificate"] is True
 
 
 # ==================== Test: Missing Headers ====================

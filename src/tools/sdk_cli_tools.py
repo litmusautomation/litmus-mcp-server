@@ -48,6 +48,7 @@ from starlette.requests import Request
 
 from config import logger
 from utils.formatting import format_error_response, format_success_response
+from utils.tls import resolve_validate_certificate
 
 # Request headers forwarded verbatim to the CLI environment. The CLI resolves
 # config as profile < .env < environment < flags, so these always win over
@@ -338,10 +339,12 @@ def _build_cli_env(request: Request) -> dict:
         env.get(k) for k in _LEM_BRIDGE_HEADERS
     ):
         env["USE_LEM_BRIDGE"] = "true"
-    # Mirror get_litmus_connection's default of not validating certificates.
-    # Without this, litmussdk's env default (True) applies inside the CLI and
-    # requests to edges with self-signed certs fail.
-    env.setdefault("VALIDATE_CERTIFICATE", "false")
+    # Verification on unless the caller opted out, matching the in-process
+    # connections. A certificate rejection is retried unverified by the tool
+    # dispatcher, so this is not pinned off for every call.
+    env["VALIDATE_CERTIFICATE"] = (
+        "true" if resolve_validate_certificate(request.headers) else "false"
+    )
     return env
 
 
