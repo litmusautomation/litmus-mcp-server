@@ -385,6 +385,31 @@ See [claude_desktop_config_venv.example.json](claude_desktop_config_venv.example
 - `NATS_PASSWORD`: Access token from **System → Access Control → Tokens** (no username needed)
 - `INFLUX_HOST`: Litmus Edge IP (no http/https)
 - `INFLUX_USERNAME` / `INFLUX_PASSWORD`: DataHub user credentials
+- `VALIDATE_CERTIFICATE`: verify the Litmus Edge TLS certificate (default `true`; see below)
+
+### TLS certificate verification
+
+`VALIDATE_CERTIFICATE` defaults to `true`, so connections to Litmus Edge and Litmus Edge Manager verify the certificate unless you opt out. This applies to HTTP and STDIO modes alike, to the `litmus-cli`-backed tools, and to the Web UI, which reads the same setting from `.env` and shows it as the **Validate TLS Certificates** toggle on its configuration page.
+
+Self-signed certificates are common on edge hardware, so a rejected certificate does not break the call. The server runs the tool again with verification off and returns that result. **The downgrade is never silent.** The response carries a `tls_warning` naming the host, so the operator reading the output and the model acting on it both learn that the data crossed an unverified channel:
+
+```json
+{
+  "success": true,
+  "devices": [],
+  "tls_warning": "TLS certificate verification FAILED for https://192.168.1.50 and the call was retried without verification, so this data crossed an unverified channel and could have been intercepted. Treat it as untrusted until the certificate is fixed. ..."
+}
+```
+
+Notes:
+
+- The retry happens at the tool call, not at connection setup, because the SDK's connection helpers only build a configuration object: nothing reaches the network until the tool issues its first request, which is the earliest a bad certificate can surface.
+- Only a certificate rejection triggers the retry. A wrong password, a refused connection or a timeout fails as it always did, so credentials are never replayed over an unverified channel because of an unrelated error. A rejected certificate aborts the handshake before any request is delivered, so re-running the tool cannot repeat work the host already applied.
+- Setting `VALIDATE_CERTIFICATE=false` is an explicit decision to skip verification. It is honoured without any retry and reports no warning, which is the way to silence the warning for an edge you knowingly run with a self-signed certificate.
+- An unrecognised value (a typo like `flase`) verifies rather than being read as consent to skip verification.
+- The retry is not cached, so an edge whose certificate is later fixed goes back to verifying on the next call. While it stays self-signed, each call pays one rejected handshake first.
+- The Web UI's connection tests and health checks follow the same policy: they retry unverified on a rejected certificate and return the same `tls_warning` alongside the result.
+- The clean fix is to install a certificate your clients trust. See [HTTPS Deployment](#https-deployment) for the MCP server's own TLS, which is a separate setting from this one.
 
 ---
 
@@ -486,7 +511,7 @@ LEM tools talk to a Litmus Edge Manager (cloud) tenant rather than a single edge
 - `litmus_sdk_write` can invoke destructive SDK functions (create/update/delete/restart). Every call requires explicit user approval via the `user_approved` argument, which the assistant may only set after you approve the exact function and arguments.
 - Prefer the dedicated tools above when one covers the operation.
 - The catalog's `unify.*` functions target Litmus Unify, which authenticates separately from Litmus Edge. Send `UNS_URL`, `UNS_USERNAME` and `UNS_PASSWORD` (plus `UNS_VALIDATE_CERTIFICATE: false` for a self-signed certificate) to use them. Without `UNS_URL` the namespace is hidden from `litmus_sdk_discover`, since every call would otherwise fail on missing credentials; no other namespace needs these headers.
-- `VALIDATE_CERTIFICATE` (optional): `true` to verify TLS certs on the LEM bridge (default `false`)
+- `VALIDATE_CERTIFICATE` (optional): verify TLS certificates on the LEM bridge (default `true`; see [TLS certificate verification](#tls-certificate-verification))
 
 `lem_bridge_*` tools additionally tunnel through LEM to a specific edge and require both `project_id` and `device_id` (the LEM device id, as with `lem_device_id` below) as call arguments. The Web UI's **Config -> Litmus Edge Manager** page manages multiple LEM connections and writes these headers automatically.
 

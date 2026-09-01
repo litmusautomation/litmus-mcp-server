@@ -64,6 +64,13 @@ from env_config import (
 )
 from server import ALL_TOOLS
 from tools.resource_tools import DOCUMENTATION_RESOURCES
+from utils.tls import (
+    call_with_certificate_fallback,
+    certificate_complaint,
+    downgrade_warning,
+    reset_tls_state,
+    resolve_validate_certificate_env,
+)
 
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(
@@ -369,7 +376,7 @@ async def update_env_form(request: Request):
         "anthropic_key": os.environ.get("ANTHROPIC_API_KEY", ""),
         "openai_key": os.environ.get("OPENAI_API_KEY", ""),
         "gemini_key": os.environ.get("GEMINI_API_KEY", ""),
-        "validate_cert": os.environ.get("VALIDATE_CERTIFICATE", "false"),
+        "validate_cert": "true" if resolve_validate_certificate_env() else "false",
     }
 
     current_client_timeout = (
@@ -454,7 +461,7 @@ async def api_add_edge_instance(
     device_id: str = Form(default=""),
 ):
     mcp_env_loader()
-    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    validate_cert = resolve_validate_certificate_env()
     is_lem = bool(manager_url.strip())
 
     if is_lem:
@@ -469,7 +476,7 @@ async def api_add_edge_instance(
             )
         bridge_base = f"{manager_url}/api/v1/edge/{project_id}/{device_id}"
 
-        def _fetch_name_lem():
+        def _fetch_name_lem(verify=validate_cert):
             import json as _json
 
             from litmussdk.utils.api import direct_request
@@ -480,7 +487,7 @@ async def api_add_edge_instance(
                 edge_api_token=api_token,
                 project_id=project_id,
                 device_id=device_id,
-                validate_certificate=validate_cert,
+                validate_certificate=verify,
                 timeout_seconds=10,
             )
             code, raw = direct_request(
@@ -500,8 +507,14 @@ async def api_add_edge_instance(
                 )
             return ""
 
+        reset_tls_state()
         try:
-            name = await asyncio.to_thread(_fetch_name_lem)
+            name, _ = await asyncio.to_thread(
+                call_with_certificate_fallback,
+                _fetch_name_lem,
+                validate_cert,
+                manager_url,
+            )
         except Exception as exc:
             logger.exception(f"add-edge-instance (LEM): connection failed: {exc}")
             return JSONResponse(
@@ -536,7 +549,7 @@ async def api_add_edge_instance(
         )
     url = url.strip().rstrip("/")
 
-    def _fetch_name():
+    def _fetch_name(verify=validate_cert):
         import json as _json
 
         from litmussdk.utils.api import direct_request
@@ -546,7 +559,7 @@ async def api_add_edge_instance(
             edge_url=url,
             client_id=client_id,
             client_secret=client_secret,
-            validate_certificate=validate_cert,
+            validate_certificate=verify,
             timeout_seconds=10,
         )
         code, raw = direct_request(
@@ -566,8 +579,11 @@ async def api_add_edge_instance(
             )
         return ""
 
+    reset_tls_state()
     try:
-        name = await asyncio.to_thread(_fetch_name)
+        name, _ = await asyncio.to_thread(
+            call_with_certificate_fallback, _fetch_name, validate_cert, url or manager_url
+        )
     except Exception as exc:
         logger.exception(f"add-edge-instance: connection failed: {exc}")
         return JSONResponse({"error": f"Could not connect: {exc}"}, status_code=400)
@@ -664,7 +680,7 @@ async def api_add_lem_connection(
     name: str = Form(default=""),
 ):
     mcp_env_loader()
-    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    validate_cert = resolve_validate_certificate_env()
     manager_url = manager_url.strip().rstrip("/")
     api_token = api_token.strip()
     name = name.strip()
@@ -673,14 +689,17 @@ async def api_add_lem_connection(
             {"error": "Manager URL and API token are required."}, status_code=400
         )
 
-    def _verify():
+    def _verify(verify=validate_cert):
         from litmussdk.lem.lifecycle.dashboard import deployment_info as _deploy
 
-        conn = _build_lem_connection(manager_url, api_token, validate_cert)
+        conn = _build_lem_connection(manager_url, api_token, verify)
         return _deploy(raw=True, connection=conn)
 
+    reset_tls_state()
     try:
-        deployment = await asyncio.to_thread(_verify)
+        deployment, _ = await asyncio.to_thread(
+            call_with_certificate_fallback, _verify, validate_cert, manager_url
+        )
     except Exception as exc:
         logger.exception(f"add-lem-connection: connection failed: {exc}")
         return JSONResponse(
@@ -763,9 +782,9 @@ async def api_lem_test():
     api_token = os.environ.get("EDGE_API_TOKEN", "")
     if not manager_url or not api_token:
         return JSONResponse({"status": "not_configured"})
-    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    validate_cert = resolve_validate_certificate_env()
 
-    def _probe():
+    def _probe(verify=validate_cert):
         from litmussdk.lem.companies import list_all_company_stats as _stats
         from litmussdk.lem.lifecycle.dashboard import (
             deployment_info as _deploy,
@@ -774,7 +793,7 @@ async def api_lem_test():
             get_system_time as _time,
         )
 
-        conn = _build_lem_connection(manager_url, api_token, validate_cert)
+        conn = _build_lem_connection(manager_url, api_token, verify)
         out = {"status": "ok"}
         try:
             out["deployment"] = _deploy(raw=True, connection=conn)
@@ -803,8 +822,20 @@ async def api_lem_test():
             out["companies_error"] = str(e)
         return out
 
+    reset_tls_state()
     try:
-        result = await asyncio.to_thread(_probe)
+        result, _ = await asyncio.to_thread(
+            call_with_certificate_fallback,
+            _probe,
+            validate_cert,
+            manager_url,
+            # _probe records per-section failures instead of raising, so the
+            # retry has to look inside the result to find a rejected cert.
+            lambda out: certificate_complaint(out.values()),
+        )
+        warning = downgrade_warning()
+        if warning:
+            result["tls_warning"] = warning
         return JSONResponse(result)
     except Exception as exc:
         logger.exception(f"lem/test failed: {exc}")
@@ -1238,7 +1269,7 @@ def _run_health_checks(connection, base_url: str) -> dict:
 @app.get("/api/edge-health", name="api_edge_health")
 async def api_edge_health(index: int = 0):
     mcp_env_loader()
-    validate_cert = os.environ.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
+    validate_cert = resolve_validate_certificate_env()
 
     # Determine connection type and parameters
     if index > 0:
@@ -1265,7 +1296,7 @@ async def api_edge_health(index: int = 0):
 
         bridge_base = f"{manager_url}/api/v1/edge/{proj_id}/{dev_id}"
 
-        def _check():
+        def _check(verify=validate_cert):
             from litmussdk.utils.conn import new_lem_bridge_connection
 
             connection = new_lem_bridge_connection(
@@ -1273,13 +1304,19 @@ async def api_edge_health(index: int = 0):
                 edge_api_token=api_token,
                 project_id=proj_id,
                 device_id=dev_id,
-                validate_certificate=validate_cert,
+                validate_certificate=verify,
                 timeout_seconds=10,
             )
             return _run_health_checks(connection, bridge_base)
 
+        reset_tls_state()
         try:
-            result = await asyncio.to_thread(_check)
+            result, _ = await asyncio.to_thread(
+                call_with_certificate_fallback, _check, validate_cert, manager_url
+            )
+            warning = downgrade_warning()
+            if warning:
+                result["tls_warning"] = warning
             return JSONResponse(result)
         except Exception:
             return JSONResponse({"status": "error"})
@@ -1297,20 +1334,26 @@ async def api_edge_health(index: int = 0):
     if not edge_url or not client_id or not client_secret:
         return JSONResponse({"status": "not_configured"})
 
-    def _check():
+    def _check(verify=validate_cert):
         from litmussdk.utils.conn import new_le_connection
 
         connection = new_le_connection(
             edge_url=edge_url,
             client_id=client_id,
             client_secret=client_secret,
-            validate_certificate=validate_cert,
+            validate_certificate=verify,
             timeout_seconds=10,
         )
         return _run_health_checks(connection, edge_url)
 
+    reset_tls_state()
     try:
-        result = await asyncio.to_thread(_check)
+        result, _ = await asyncio.to_thread(
+            call_with_certificate_fallback, _check, validate_cert, edge_url
+        )
+        warning = downgrade_warning()
+        if warning:
+            result["tls_warning"] = warning
         return JSONResponse(result)
     except Exception:
         return JSONResponse({"status": "error"})

@@ -32,6 +32,7 @@ from utils.formatting import (
     format_success_response,
     redact_secrets,
 )
+from utils.tls import resolve_validate_certificate
 
 
 async def lem_list_devices_tool(
@@ -368,9 +369,7 @@ def _build_bridge_connection(request: Request, project_id: str, device_id: str):
     """Build an LE bridge connection from LEM credentials in headers + supplied ids."""
     manager_url = request.headers.get("EDGE_MANAGER_URL", "")
     api_token = request.headers.get("EDGE_API_TOKEN", "")
-    validate_certificate = (
-        request.headers.get("VALIDATE_CERTIFICATE", "false").lower() == "true"
-    )
+    validate_certificate = resolve_validate_certificate(request.headers)
     if not manager_url:
         raise McpError(
             ErrorData(

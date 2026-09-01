@@ -85,7 +85,8 @@ def mcp_env_loader():
     EDGE_URL = os.environ.get("EDGE_URL", "")
     EDGE_API_CLIENT_ID = os.environ.get("EDGE_API_CLIENT_ID", "")
     EDGE_API_CLIENT_SECRET = os.environ.get("EDGE_API_CLIENT_SECRET", "")
-    VALIDATE_CERTIFICATE = os.environ.get("VALIDATE_CERTIFICATE", "false")
+    # Unset means verify; see utils.tls.resolve_validate_certificate_env.
+    VALIDATE_CERTIFICATE = os.environ.get("VALIDATE_CERTIFICATE", "true")
     ANTHROPIC_KEY = os.environ.get(key_of_anthropic_api_key, "")
 
     # One-time migration: lift legacy single-LEM EDGE_MANAGER_URL/EDGE_API_TOKEN
