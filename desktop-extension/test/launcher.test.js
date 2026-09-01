@@ -241,3 +241,81 @@ test("the launcher starts no child process", () => {
   const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   assert.equal(/child_process|\bspawn\s*\(|\bfork\s*\(|execPath/.test(code), false);
 });
+
+const { redactSecrets, SECRET_VARS, REDACTED } = require("../server/index.js");
+
+/** Captures what a redacted stream actually emits. */
+function capture(overrides) {
+  const written = [];
+  const stream = { write: (chunk) => written.push(String(chunk)) };
+  const restore = redactSecrets(env(overrides), stream);
+  return { stream, written, restore };
+}
+
+test("masks the startup header dump that mcp-remote writes to stderr", () => {
+  const { stream, written } = capture({
+    NATS_PASSWORD: "nats-pw",
+    INFLUX_PASSWORD: "influx-pw",
+  });
+  stream.write(
+    `Using custom headers: ${JSON.stringify({
+      EDGE_API_CLIENT_ID: "client-id",
+      EDGE_API_CLIENT_SECRET: "client-secret",
+      NATS_PASSWORD: "nats-pw",
+      INFLUX_PASSWORD: "influx-pw",
+    })}\n`
+  );
+  const out = written.join("");
+  for (const secret of ["client-secret", "nats-pw", "influx-pw"]) {
+    assert.equal(out.includes(secret), false, `${secret} reached stderr`);
+  }
+  // Non-secret context stays readable, or the logs stop being useful.
+  assert.match(out, /Using custom headers/);
+  assert.match(out, /client-id/);
+  assert.match(out, new RegExp(REDACTED.replace(/[[\]]/g, "\\$&")));
+});
+
+test("masks every declared secret, not just the Edge client secret", () => {
+  for (const name of SECRET_VARS) {
+    const { stream, written } = capture({ [name]: `value-of-${name}` });
+    stream.write(`leaked ${`value-of-${name}`}\n`);
+    assert.equal(written.join("").includes(`value-of-${name}`), false, name);
+  }
+});
+
+test("masks a secret that arrives JSON-escaped", () => {
+  const secret = 'quote"and\\slash';
+  const { stream, written } = capture({ EDGE_API_CLIENT_SECRET: secret });
+  stream.write(`${JSON.stringify({ EDGE_API_CLIENT_SECRET: secret })}\n`);
+  const out = written.join("");
+  assert.equal(out.includes(JSON.stringify(secret).slice(1, -1)), false);
+  assert.equal(out.includes(secret), false);
+});
+
+test("masks a secret split across a Buffer write", () => {
+  const { stream, written } = capture({ EDGE_API_CLIENT_SECRET: "client-secret" });
+  stream.write(Buffer.from("token=client-secret\n", "utf8"));
+  assert.equal(written.join("").includes("client-secret"), false);
+});
+
+test("leaves output alone when no secret is configured", () => {
+  const { stream, written, restore } = capture({});
+  stream.write("Connecting to remote server\n");
+  assert.equal(written.join(""), "Connecting to remote server\n");
+  restore();
+});
+
+test("masks the longer secret whole when one contains another", () => {
+  const { stream, written } = capture({
+    EDGE_API_CLIENT_SECRET: "abcd1234",
+    NATS_PASSWORD: "abcd",
+  });
+  const out = (stream.write("secret=abcd1234\n"), written.join(""));
+  assert.equal(out.includes("abcd1234"), false);
+  assert.equal(out.includes("1234"), false, "left a readable tail");
+});
+
+test("TLS verification is on out of the box", () => {
+  const manifest = require("../manifest.json");
+  assert.equal(manifest.user_config.validate_certificate.default, true);
+});
