@@ -3,10 +3,13 @@ LABEL authors="Litmus Automation, Inc."
 LABEL description="Litmus MCP Server - SSE-based Model Context Protocol server for Litmus Edge"
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     build-essential \
+    ca-certificates \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade "pip>=26.2.2"
 
 # Install uv for fast package management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
